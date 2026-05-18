@@ -5,7 +5,7 @@
  * no-op in-memory adapter when running in a plain browser context (vitest,
  * `vite preview` outside Tauri) so the UI shell still boots for development.
  */
-import { MIGRATIONS } from './migrations';
+import { createMemoryAdapter } from './memoryAdapter';
 
 export interface DbAdapter {
   execute(sql: string, params?: unknown[]): Promise<void>;
@@ -34,48 +34,24 @@ async function createTauriAdapter(): Promise<DbAdapter> {
   };
 }
 
-function createMemoryAdapter(): DbAdapter {
+function createBrowserAdapter(): DbAdapter {
   console.info(
-    '[db] Tauri not detected — using in-memory stub. Data will not persist.',
+    '[db] Tauri not detected — using in-memory adapter (localStorage-backed).',
   );
-  return {
-    execute: () => Promise.resolve(),
-    select: () => Promise.resolve([]),
-    close: () => Promise.resolve(),
-  };
-}
-
-async function runMigrations(adapter: DbAdapter): Promise<void> {
-  await adapter.execute(`
-    CREATE TABLE IF NOT EXISTS _migrations (
-      version INTEGER PRIMARY KEY,
-      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
-  const applied = await adapter.select<{ version: number }>(
-    'SELECT version FROM _migrations ORDER BY version ASC',
-  );
-  const appliedVersions = new Set(applied.map((r) => r.version));
-  for (const migration of MIGRATIONS) {
-    if (appliedVersions.has(migration.version)) continue;
-    for (const stmt of migration.statements) {
-      await adapter.execute(stmt);
-    }
-    await adapter.execute('INSERT INTO _migrations (version) VALUES (?)', [
-      migration.version,
-    ]);
-  }
+  return createMemoryAdapter();
 }
 
 export function initDb(): Promise<DbAdapter> {
   adapterPromise ??= (async () => {
-    const adapter = isTauri()
-      ? await createTauriAdapter()
-      : createMemoryAdapter();
     if (isTauri()) {
-      await runMigrations(adapter);
+      const adapter = await createTauriAdapter();
+      // Tauri-side plugin-sql runs its own migrations (see src-tauri/src/lib.rs);
+      // nothing to do here.
+      return adapter;
     }
-    return adapter;
+    // Memory adapter is schema-less — it creates tables lazily as rows
+    // arrive, so no migrations to run.
+    return createBrowserAdapter();
   })();
   return adapterPromise;
 }

@@ -34,6 +34,7 @@ export function NewRigWizard({
   const [customD, setCustomD] = useState('');
   const [customStyle, setCustomStyle] = useState<BoardStyle>('plain');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const createRig = useRigsStore((s) => s.createRig);
 
@@ -60,6 +61,7 @@ export function NewRigWizard({
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
+    setError(null);
     try {
       let widthIn: number;
       let depthIn: number;
@@ -84,6 +86,7 @@ export function NewRigWizard({
       onCreated(rig);
     } catch (err) {
       console.error('Failed to create rig', err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
     }
@@ -159,6 +162,11 @@ export function NewRigWizard({
         onCustomD={setCustomD}
         onCustomStyle={setCustomStyle}
       />
+      {error ? (
+        <div className={styles.errorBox} role="alert">
+          <i className="ti ti-alert-triangle" aria-hidden /> {error}
+        </div>
+      ) : null}
     </WizardShell>
   );
 }
