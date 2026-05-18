@@ -26,6 +26,7 @@ interface ChainOverlayProps {
   armedPort: { placedId: string; portId: string } | null;
   onPortTap?: (placedId: string, portId: string) => void;
   onCableTap?: (connectionId: string) => void;
+  onEndpointTap?: (endpointId: string) => void;
 }
 
 interface ResolvedPort {
@@ -64,6 +65,7 @@ export function ChainOverlay({
   armedPort,
   onPortTap,
   onCableTap,
+  onEndpointTap,
 }: ChainOverlayProps) {
   // Build a {placedId -> {portId -> ResolvedPort}} map for fast lookups.
   const portIndex = new Map<string, Map<string, ResolvedPort>>();
@@ -185,8 +187,67 @@ export function ChainOverlay({
           });
         })}
       </div>
+      <div className={styles.endpointsLayer}>
+        {endpoints.map((ep) => {
+          const anchor = endpointAnchor(ep, rig);
+          if (!anchor) return null;
+          // Convert inches to px relative to the wrap (which itself is sized
+          // to the rig). Anchors are slightly off the edge — translate to
+          // keep the chip readable.
+          const left = anchor.xIn * pxPerInch;
+          const top = anchor.yIn * pxPerInch;
+          const isSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
+          return (
+            <button
+              key={ep.id}
+              type="button"
+              className={`${styles.endpointChip} ${
+                isSource ? styles.endpointSource : styles.endpointSink
+              }`}
+              style={{
+                left,
+                top,
+                transform:
+                  ep.kind === 'guitar' || ep.kind === 'amp_fx_send'
+                    ? 'translate(0, -50%)'
+                    : 'translate(-100%, -50%)',
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEndpointTap?.(ep.id);
+              }}
+              title={isSource ? `From ${ep.label}` : `To ${ep.label}`}
+            >
+              <span className={styles.endpointDot} aria-hidden />
+              <span className={styles.endpointLabel}>
+                {isSource ? `From ${ep.label}` : `To ${ep.label}`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </>
   );
+}
+
+/** Visual anchor (inches, board coords) for an endpoint chip. */
+function endpointAnchor(
+  ep: ExternalEndpoint,
+  rig: Rig,
+): { xIn: number; yIn: number } | null {
+  const off = 0.5;
+  switch (ep.kind) {
+    case 'guitar':
+      return { xIn: rig.widthIn + off, yIn: rig.depthIn / 2 };
+    case 'amp_in':
+      return { xIn: -off, yIn: rig.depthIn / 2 };
+    case 'amp_fx_send':
+      return { xIn: -off, yIn: rig.depthIn / 4 };
+    case 'amp_fx_return':
+      return { xIn: -off, yIn: (rig.depthIn * 3) / 4 };
+    default:
+      return { xIn: rig.widthIn + off, yIn: rig.depthIn / 2 };
+  }
 }
 
 interface ConnectionEnd {

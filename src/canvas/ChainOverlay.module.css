@@ -42,3 +42,58 @@
     0 0 0 5px var(--primary);
   transform: translate(-50%, -50%) scale(1.25);
 }
+
+.endpointsLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.endpointChip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.94);
+  border: 0.5px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fg);
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.endpointChip:hover {
+  background: var(--surface);
+}
+
+.endpointDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.endpointSource .endpointDot {
+  background: var(--success);
+}
+
+.endpointSink .endpointDot {
+  background: var(--primary);
+}
+
+.endpointSource {
+  color: var(--success-fg);
+}
+
+.endpointSink {
+  color: var(--primary-fg);
+}
+
+.endpointLabel {
+  line-height: 1;
+}

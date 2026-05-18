@@ -169,6 +169,40 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     void removeConnection(rig.id, connectionId);
   };
 
+  const handleEndpointTap = (endpointId: string) => {
+    if (!armedPort) return;
+    const ep = endpoints.find((e) => e.id === endpointId);
+    if (!ep) return;
+    const armed = placed.find((p) => p.id === armedPort.placedId);
+    const armedPortDef = armed
+      ? pedalsById
+          .get(armed.pedalId)
+          ?.ports.find((p) => p.id === armedPort.portId)
+      : null;
+    if (!armedPortDef) {
+      setArmedPort(null);
+      return;
+    }
+    const armedIsOutput = isOutputRole(armedPortDef.role);
+    const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
+    // Endpoint is "from" if it's a source; otherwise the pedal port is the source.
+    const fromIsEndpoint = endpointIsSource;
+    void addConnection({
+      rigId: rig.id,
+      fromNodeKind: fromIsEndpoint ? 'external' : 'pedal',
+      fromNodeId: fromIsEndpoint ? ep.id : armedPort.placedId,
+      fromPortId: fromIsEndpoint ? null : armedPort.portId,
+      toNodeKind: fromIsEndpoint ? 'pedal' : 'external',
+      toNodeId: fromIsEndpoint ? armedPort.placedId : ep.id,
+      toPortId: fromIsEndpoint ? armedPort.portId : null,
+    });
+    // Avoid the "unused" warning when armedIsOutput is later relevant. The
+    // direction is currently determined by endpoint kind alone, so we
+    // intentionally ignore the port role here.
+    void armedIsOutput;
+    setArmedPort(null);
+  };
+
   const targetPlaced = useMemo(
     () => placed.find((p) => p.id === actionsFor) ?? null,
     [placed, actionsFor],
@@ -226,6 +260,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         armedPort={armedPort}
         onPortTap={handlePortTap}
         onCableTap={handleCableTap}
+        onEndpointTap={handleEndpointTap}
         onBackgroundTap={handleCanvasBackgroundClick}
       >
         <div className={styles.fabBackWrap}>
@@ -338,6 +373,7 @@ interface CanvasAreaProps {
   armedPort: { placedId: string; portId: string } | null;
   onPortTap: (placedId: string, portId: string) => void;
   onCableTap: (connectionId: string) => void;
+  onEndpointTap: (endpointId: string) => void;
   onBackgroundTap: () => void;
   /** Overlay elements (mobile floating buttons, etc.) painted above the board. */
   children?: ReactNode;
@@ -356,6 +392,7 @@ function CanvasArea({
   armedPort,
   onPortTap,
   onCableTap,
+  onEndpointTap,
   onBackgroundTap,
   children,
 }: CanvasAreaProps) {
@@ -422,6 +459,7 @@ function CanvasArea({
           armedPort={armedPort}
           onPortTap={onPortTap}
           onCableTap={onCableTap}
+          onEndpointTap={onEndpointTap}
         />
       </div>
       {viewport.scale !== 1 || viewport.panX !== 0 || viewport.panY !== 0 ? (

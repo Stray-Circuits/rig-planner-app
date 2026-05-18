@@ -212,9 +212,30 @@ describe('RigScreen', () => {
       const conns = useSignalChainStore.getState().connectionsByRig[rig.id];
       expect(conns).toHaveLength(1);
     });
+    const conn = useSignalChainStore.getState().connectionsByRig[rig.id]?.[0];
+    expect(conn?.fromNodeKind).toBe('pedal');
+    expect(conn?.toNodeKind).toBe('pedal');
+  });
+
+  it('endpoint chip: arm an input → tap From Guitar creates external→pedal connection', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
+    fireEvent.click(await screen.findByText('DS-1'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
+    });
+    fireEvent.click(screen.getByLabelText('Show signal chain'));
+    fireEvent.click(await screen.findByLabelText('DS-1 In'));
+    fireEvent.click(await screen.findByText('From Guitar'));
+
+    await waitFor(() => {
+      const conns = useSignalChainStore.getState().connectionsByRig[rig.id];
+      expect(conns).toHaveLength(1);
+    });
     const conn =
       useSignalChainStore.getState().connectionsByRig[rig.id]?.[0];
-    expect(conn?.fromNodeKind).toBe('pedal');
+    expect(conn?.fromNodeKind).toBe('external');
     expect(conn?.toNodeKind).toBe('pedal');
   });
 
