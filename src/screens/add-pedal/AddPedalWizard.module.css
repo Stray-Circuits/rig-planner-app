@@ -34,6 +34,72 @@
   text-align: center;
 }
 
+.imageStep {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pedalPreview {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+  background: var(--surface-alt);
+  border-radius: var(--radius-md);
+}
+
+.pedalPreviewBox {
+  width: 90px;
+  height: 90px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pedalPreviewLabel {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  max-width: 90%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.swatchGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.swatch {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch:hover {
+  border-color: var(--border-strong);
+}
+
+.swatchSelected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-bg);
+}
+
+.helpMuted {
+  font-size: 11px;
+  color: var(--muted-soft);
+  text-align: center;
+}
+
 .review {
   display: flex;
   flex-direction: column;

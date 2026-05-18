@@ -95,4 +95,33 @@ describe('AddPedalWizard', () => {
     fireEvent.click(screen.getByLabelText('Close'));
     expect(onCancel).toHaveBeenCalledOnce();
   });
+
+  it('picking a swatch updates the color used at submit', async () => {
+    const onCreated = vi.fn();
+    render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Color #1565C0'));
+    fireEvent.click(screen.getByText('Continue'));
+    fillNameSize();
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Add to library'));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const all = await listPedals();
+    expect(all[0]?.imagePath).toBe('color:#1565C0');
+  });
+
+  it('custom hex input invalid → Continue stays disabled', () => {
+    render(
+      <AddPedalWizard onCreated={() => undefined} onCancel={() => undefined} />,
+    );
+    fireEvent.change(screen.getByPlaceholderText('#RRGGBB'), {
+      target: { value: 'nope' },
+    });
+    expect(screen.getByText('Continue')).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText('#RRGGBB'), {
+      target: { value: '#00FF00' },
+    });
+    expect(screen.getByText('Continue')).not.toBeDisabled();
+  });
 });

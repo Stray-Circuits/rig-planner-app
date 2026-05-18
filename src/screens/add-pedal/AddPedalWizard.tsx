@@ -94,9 +94,10 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
   const trimmedName = draft.name.trim();
   const trimmedBrand = draft.brand.trim();
 
-  // Step 1 (Name & Size) is the only gated step in 4a. Other steps accept
-  // their defaults and can be advanced without input.
   const canAdvanceFromCurrent = (() => {
+    if (step === 0) {
+      if (!isValidHex(draft.color)) return false;
+    }
     if (step === 1) {
       if (!trimmedBrand) return false;
       if (!trimmedName) return false;
@@ -236,10 +237,73 @@ interface StepProps {
   ) => void;
 }
 
-function ImageStep(_: StepProps) {
+const SWATCHES = [
+  '#C62828', // red
+  '#E65100', // orange
+  '#F9A825', // amber
+  '#2E7D32', // green
+  '#1565C0', // blue
+  '#4A148C', // purple
+  '#D4537E', // pink
+  '#37474F', // slate
+  '#212121', // black
+  '#9E9E9E', // grey
+];
+
+function isValidHex(s: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(s.trim());
+}
+
+function ImageStep({ draft, setDraft }: StepProps) {
+  const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
+  const customValid = isValidHex(draft.color);
+
   return (
-    <div className={styles.stub}>
-      <p>Color picker lands in phase 4b. Default placeholder color used.</p>
+    <div className={styles.imageStep}>
+      <div className={styles.pedalPreview}>
+        <div
+          className={styles.pedalPreviewBox}
+          style={{ background: draft.color }}
+          aria-label="Pedal color preview"
+        >
+          <span className={styles.pedalPreviewLabel}>
+            {draft.name.trim() || 'Pedal'}
+          </span>
+        </div>
+      </div>
+      <div className={styles.swatchGrid} role="radiogroup" aria-label="Color">
+        {SWATCHES.map((s) => {
+          const selected = draft.color.toLowerCase() === s.toLowerCase();
+          return (
+            <button
+              key={s}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              aria-label={`Color ${s}`}
+              className={
+                styles.swatch + (selected ? ' ' + styles.swatchSelected : '')
+              }
+              style={{ background: s }}
+              onClick={() => setColor(s)}
+            />
+          );
+        })}
+      </div>
+      <label className={styles.field}>
+        <span className={styles.label}>Custom hex</span>
+        <TextField
+          inputSize="md"
+          placeholder="#RRGGBB"
+          maxLength={7}
+          value={draft.color}
+          invalid={!customValid}
+          onChange={(e) => setColor(e.target.value)}
+        />
+      </label>
+      <p className={styles.helpMuted}>
+        Real photo upload + background removal lands in phase 5.
+      </p>
     </div>
   );
 }
