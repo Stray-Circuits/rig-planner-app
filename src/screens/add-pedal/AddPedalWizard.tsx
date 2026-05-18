@@ -75,7 +75,7 @@ function initialDraft(): WizardDraft {
     widthIn: '',
     depthIn: '',
     jackSides: { ...DEFAULT_JACKS },
-    powerSide: 'bottom',
+    powerSide: 'top',
     ports: DEFAULT_PORTS.map((p) => ({ ...p })),
   };
 }

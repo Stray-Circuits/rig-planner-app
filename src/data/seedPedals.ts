@@ -163,7 +163,7 @@ function specToInput(spec: SeedSpec): CreatePedalInput {
       midi_left: false,
       midi_right: false,
     },
-    powerSide: 'bottom',
+    powerSide: 'top',
     ports,
   };
 }

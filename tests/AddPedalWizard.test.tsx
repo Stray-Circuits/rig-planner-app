@@ -71,7 +71,7 @@ describe('AddPedalWizard', () => {
     expect(created.depthIn).toBe(4.75);
     // Defaults — phase 4 b/c/d will let users override these.
     expect(created.jackSides.top).toBe(true);
-    expect(created.powerSide).toBe('bottom');
+    expect(created.powerSide).toBe('top');
     expect(created.ports.map((p) => p.role).sort()).toEqual([
       'input',
       'output',
@@ -207,8 +207,9 @@ describe('AddPedalWizard', () => {
     fireEvent.click(rightButtons[0]!); // Right audio on
     fireEvent.click(rightButtons[1]!); // Right MIDI on
 
-    fireEvent.change(screen.getByDisplayValue('Bottom'), {
-      target: { value: 'top' },
+    // Default is 'top'; move power to 'bottom' to verify the control persists.
+    fireEvent.change(screen.getByDisplayValue('Top'), {
+      target: { value: 'bottom' },
     });
 
     fireEvent.click(screen.getByText('Continue'));
@@ -220,6 +221,6 @@ describe('AddPedalWizard', () => {
     expect(created.jackSides.top).toBe(false);
     expect(created.jackSides.right).toBe(true);
     expect(created.jackSides.midi_right).toBe(true);
-    expect(created.powerSide).toBe('top');
+    expect(created.powerSide).toBe('bottom');
   });
 });
