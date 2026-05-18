@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pedalboard Planner — New Rig Wizard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F5F5F5; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+
+.wizard { display: flex; flex-direction: column; height: 620px; width: 390px; background: #fff; border: 0.5px solid #E0E0E0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.1); }
+
+.wiz-header { padding: 16px 20px 0; flex-shrink: 0; }
+.wiz-back { font-size: 12px; color: #AAA; cursor: pointer; display: flex; align-items: center; gap: 4px; margin-bottom: 16px; }
+.wiz-back:hover { color: #666; }
+.wiz-progress { display: flex; gap: 6px; margin-bottom: 20px; }
+.wiz-pip { height: 3px; flex: 1; border-radius: 2px; background: #E0E0E0; }
+.wiz-pip.done, .wiz-pip.active { background: #378ADD; }
+.wiz-step-label { font-size: 11px; color: #AAA; margin-bottom: 4px; }
+.wiz-title { font-size: 20px; font-weight: 500; color: #111; margin-bottom: 4px; }
+.wiz-sub { font-size: 13px; color: #666; margin-bottom: 20px; }
+
+.wiz-body { flex: 1; overflow-y: auto; padding: 0 20px; }
+
+.wiz-footer { padding: 16px 20px; flex-shrink: 0; border-top: 0.5px solid #E0E0E0; }
+.wiz-btn { width: 100%; padding: 14px; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; border: none; }
+.wiz-btn.primary { background: #378ADD; color: #fff; }
+.wiz-btn.primary:disabled { background: #E0E0E0; color: #AAA; cursor: not-allowed; }
+.wiz-btn.primary:not(:disabled):hover { background: #2a6fb5; }
+
+.name-input { width: 100%; font-size: 18px; padding: 14px 16px; border-radius: 8px; border: 1.5px solid #E0E0E0; background: #F5F5F5; color: #111; margin-bottom: 12px; }
+.name-input:focus { outline: none; border-color: #378ADD; }
+.name-suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
+.name-chip { font-size: 12px; padding: 6px 12px; border-radius: 999px; border: 0.5px solid #E0E0E0; background: transparent; color: #666; cursor: pointer; }
+.name-chip:hover { background: #F5F5F5; }
+
+.brand-section { margin-bottom: 20px; }
+.brand-label { font-size: 11px; font-weight: 600; color: #AAA; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+.preset-grid { display: flex; flex-direction: column; gap: 8px; }
+.preset-card { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 8px; border: 1.5px solid #E0E0E0; background: #fff; cursor: pointer; }
+.preset-card:hover { border-color: #CCC; }
+.preset-card.selected { border-color: #378ADD; background: #E6F1FB; }
+.preset-thumb { width: 52px; height: 30px; border-radius: 3px; flex-shrink: 0; }
+.preset-info { flex: 1; min-width: 0; }
+.preset-name { font-size: 13px; font-weight: 500; color: #111; }
+.preset-card.selected .preset-name { color: #185FA5; }
+.preset-dims { font-size: 11px; color: #AAA; margin-top: 1px; }
+.preset-style-tag { font-size: 10px; padding: 2px 7px; border-radius: 999px; background: #F5F5F5; color: #AAA; border: 0.5px solid #E0E0E0; }
+.preset-card.selected .preset-style-tag { background: #D0E8F8; color: #185FA5; border-color: #A8CFF0; }
+
+.custom-card { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 8px; border: 1.5px dashed #E0E0E0; background: transparent; cursor: pointer; }
+.custom-card:hover { border-color: #CCC; }
+.custom-card.selected { border-color: #378ADD; border-style: solid; background: #E6F1FB; }
+.custom-icon { width: 52px; height: 30px; border-radius: 3px; background: #F5F5F5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.custom-dims-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.custom-dims-row input { width: 64px; font-size: 14px; padding: 8px 10px; border-radius: 6px; border: 1px solid #E0E0E0; background: #F5F5F5; color: #111; text-align: center; }
+.custom-dims-row label { font-size: 12px; color: #AAA; }
+.style-row { display: flex; gap: 8px; margin-top: 10px; }
+.style-chip { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; border-radius: 6px; border: 1px solid #E0E0E0; cursor: pointer; }
+.style-chip:hover { background: #F5F5F5; }
+.style-chip.selected { border-color: #378ADD; background: #E6F1FB; }
+.style-chip-label { font-size: 9px; color: #666; }
+.style-chip.selected .style-chip-label { color: #185FA5; }
+
+.confirm-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; gap: 14px; }
+.confirm-check { width: 56px; height: 56px; border-radius: 50%; background: #E1F5EE; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+
+<div class="wizard" id="wizard">
+  <div class="wiz-header">
+    <div class="wiz-back" id="backBtn" onclick="goBack()" style="visibility:hidden">
+      <i class="ti ti-chevron-left" style="font-size:14px"></i> Back
+    </div>
+    <div class="wiz-progress">
+      <div class="wiz-pip active" id="pip0"></div>
+      <div class="wiz-pip" id="pip1"></div>
+    </div>
+    <div class="wiz-step-label" id="stepLabel">Step 1 of 2</div>
+    <div class="wiz-title" id="stepTitle">Name your rig</div>
+    <div class="wiz-sub" id="stepSub">Give this board a name you'll recognize.</div>
+  </div>
+  <div class="wiz-body" id="wizBody"></div>
+  <div class="wiz-footer">
+    <button class="wiz-btn primary" id="nextBtn" onclick="goNext()" disabled>Continue</button>
+  </div>
+</div>
+
+<script>
+let step = 0;
+let rigName = '';
+let selectedPreset = null;
+let customW = '', customH = '';
+let customStyle = 'plain';
+
+const PRESETS = [
+  { id:'nano',    brand:'Pedaltrain',    name:'Nano+',       w:18,   d:5,    style:'rail',  label:'Rail'  },
+  { id:'metro',   brand:'Pedaltrain',    name:'Metro 24',    w:24,   d:8,    style:'rail',  label:'Rail'  },
+  { id:'classic', brand:'Pedaltrain',    name:'Classic Pro', w:32,   d:16,   style:'rail',  label:'Rail'  },
+  { id:'solo',    brand:'Temple Audio',  name:'Solo 18',     w:16.7, d:8.5,  style:'holes', label:'Holes' },
+  { id:'duo',     brand:'Temple Audio',  name:'Duo 24',      w:23.2, d:12.5, style:'holes', label:'Holes' },
+  { id:'trio',    brand:'Temple Audio',  name:'Trio 21',     w:19.7, d:16.5, style:'holes', label:'Holes' },
+];
+
+function drawRailThumb(canvas) {
+  const ctx = canvas.getContext('2d', {alpha:true});
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const w=canvas.width,h=canvas.height;
+  const NUM=4,rh=Math.max(2,Math.round(h*0.12)),gap=(h-NUM*rh)/(NUM+1);
+  const fy=Math.round(gap),ly=Math.round(gap+(NUM-1)*(rh+gap)),fh=ly+rh-fy;
+  for(let i=0;i<NUM;i++){ctx.fillStyle='#1C1C1C';ctx.fillRect(0,Math.round(gap+i*(rh+gap)),w,rh);}
+  ctx.fillStyle='#1C1C1C';ctx.fillRect(0,fy,rh,fh);ctx.fillRect(w-rh,fy,rh,fh);
+}
+function drawHolesThumb(canvas) {
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width,h=canvas.height;
+  ctx.fillStyle='#1A1A1A';ctx.fillRect(0,0,w,h);
+  const sp=6,r=2,cols=Math.floor((w-sp)/sp),rows=Math.floor((h-sp)/sp);
+  const ox=(w-cols*sp)/2+sp/2,oy=(h-rows*sp)/2+sp/2;
+  for(let row=0;row<rows;row++) for(let col=0;col<cols;col++){
+    const x=ox+col*sp,y=oy+row*sp;
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle='#000';ctx.fill();
+  }
+}
+function drawPlainThumb(canvas) {
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#1A1A1A';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='#999';ctx.lineWidth=2;ctx.strokeRect(1,1,canvas.width-2,canvas.height-2);
+  ctx.strokeStyle='#C8C8C8';ctx.lineWidth=0.75;ctx.strokeRect(3,3,canvas.width-6,canvas.height-6);
+}
+function drawWoodThumb(canvas) {
+  const ctx=canvas.getContext('2d');
+  const c=['#8B6535','#7A5828','#966E3A'],ph=5,gh=1;let r=0;
+  for(let y=0;y<canvas.height;y+=ph+gh){ctx.fillStyle=c[r%c.length];ctx.fillRect(0,y,canvas.width,ph);if(y+ph<canvas.height){ctx.fillStyle='#1A0C04';ctx.fillRect(0,y+ph,canvas.width,gh);}r++;}
+}
+
+function thumbFor(style, canvas) {
+  if(style==='rail') drawRailThumb(canvas);
+  else if(style==='holes') drawHolesThumb(canvas);
+  else if(style==='wood') drawWoodThumb(canvas);
+  else drawPlainThumb(canvas);
+}
+
+function renderStep() {
+  const body = document.getElementById('wizBody');
+  const nextBtn = document.getElementById('nextBtn');
+  const backBtn = document.getElementById('backBtn');
+
+  document.getElementById('pip0').className = 'wiz-pip ' + (step===0?'active':'done');
+  document.getElementById('pip1').className = 'wiz-pip ' + (step===1?'active':'');
+  document.getElementById('stepLabel').textContent = `Step ${step+1} of 2`;
+  backBtn.style.visibility = step===0 ? 'hidden' : 'visible';
+
+  if(step===0) {
+    document.getElementById('stepTitle').textContent = 'Name your rig';
+    document.getElementById('stepSub').textContent = "Give this board a name you'll recognize.";
+    nextBtn.textContent = 'Continue';
+    body.innerHTML = `
+      <input class="name-input" id="nameInput" type="text" placeholder="e.g. Main board" maxlength="40" value="${rigName}" />
+      <div class="name-suggestions">
+        <button class="name-chip" onclick="setName('Main board')">Main board</button>
+        <button class="name-chip" onclick="setName('Fly rig')">Fly rig</button>
+        <button class="name-chip" onclick="setName('Studio board')">Studio board</button>
+        <button class="name-chip" onclick="setName('Mini rig')">Mini rig</button>
+      </div>
+    `;
+    const inp = document.getElementById('nameInput');
+    inp.addEventListener('input', e => { rigName = e.target.value.trim(); nextBtn.disabled = !rigName; });
+    nextBtn.disabled = !rigName;
+    setTimeout(() => inp.focus(), 50);
+
+  } else {
+    document.getElementById('stepTitle').textContent = 'Choose your board';
+    document.getElementById('stepSub').textContent = 'Pick a preset or enter custom dimensions.';
+    nextBtn.textContent = 'Create rig';
+    nextBtn.disabled = !selectedPreset;
+
+    const pedaltrainPresets = PRESETS.filter(p=>p.brand==='Pedaltrain');
+    const templePresets = PRESETS.filter(p=>p.brand==='Temple Audio');
+
+    body.innerHTML = `
+      <div class="brand-section">
+        <div class="brand-label">Pedaltrain</div>
+        <div class="preset-grid" id="grid-pedaltrain"></div>
+      </div>
+      <div class="brand-section">
+        <div class="brand-label">Temple Audio</div>
+        <div class="preset-grid" id="grid-temple"></div>
+      </div>
+      <div class="brand-section">
+        <div class="brand-label">Custom</div>
+        <div id="custom-area"></div>
+      </div>
+    `;
+
+    function renderCard(preset, containerId) {
+      const container = document.getElementById(containerId);
+      const card = document.createElement('div');
+      card.className = 'preset-card' + (selectedPreset===preset.id?' selected':'');
+      card.onclick = () => selectPreset(preset.id);
+      const canvas = document.createElement('canvas');
+      canvas.className = 'preset-thumb';
+      canvas.width = 52; canvas.height = 30;
+      canvas.style.background = preset.style==='rail' ? '#888' : 'transparent';
+      thumbFor(preset.style, canvas);
+      const info = document.createElement('div');
+      info.className = 'preset-info';
+      info.innerHTML = `<div class="preset-name">${preset.name}</div><div class="preset-dims">${preset.w}" × ${preset.d}"</div>`;
+      const tag = document.createElement('span');
+      tag.className = 'preset-style-tag'; tag.textContent = preset.label;
+      card.appendChild(canvas); card.appendChild(info); card.appendChild(tag);
+      container.appendChild(card);
+    }
+
+    pedaltrainPresets.forEach(p=>renderCard(p,'grid-pedaltrain'));
+    templePresets.forEach(p=>renderCard(p,'grid-temple'));
+
+    const customArea = document.getElementById('custom-area');
+    const customCard = document.createElement('div');
+    customCard.className = 'custom-card' + (selectedPreset==='custom'?' selected':'');
+    customCard.onclick = () => selectPreset('custom');
+    customCard.innerHTML = `
+      <div class="custom-icon"><i class="ti ti-ruler-measure" style="font-size:18px;color:#AAA"></i></div>
+      <div class="preset-info"><div class="preset-name">Custom size</div><div class="preset-dims">Enter your board's dimensions</div></div>
+    `;
+    customArea.appendChild(customCard);
+
+    if(selectedPreset==='custom') {
+      const extras = document.createElement('div');
+      extras.style.marginTop = '10px';
+      extras.innerHTML = `
+        <div class="custom-dims-row">
+          <label>Width</label>
+          <input id="cwInput" type="number" placeholder="24" value="${customW}" min="1" max="72" />
+          <label>Depth</label>
+          <input id="cdInput" type="number" placeholder="12" value="${customH}" min="1" max="48" />
+          <label style="flex:0">in</label>
+        </div>
+        <div style="font-size:11px;color:#AAA;margin-top:8px;margin-bottom:6px;">Board style</div>
+        <div class="style-row" id="styleRow"></div>
+      `;
+      customArea.appendChild(extras);
+      ['rail','plain','wood','holes'].forEach(s=>{
+        const chip = document.createElement('div');
+        chip.className = 'style-chip' + (customStyle===s?' selected':'');
+        chip.onclick = e => { e.stopPropagation(); customStyle=s; renderStep(); };
+        const c = document.createElement('canvas');
+        c.width=36; c.height=20;
+        c.style.background = s==='rail'?'#888':'transparent';
+        thumbFor(s,c);
+        const lbl = document.createElement('div'); lbl.className='style-chip-label'; lbl.textContent=s.charAt(0).toUpperCase()+s.slice(1);
+        chip.appendChild(c); chip.appendChild(lbl);
+        document.getElementById('styleRow').appendChild(chip);
+      });
+      document.getElementById('cwInput').addEventListener('input',e=>{ customW=e.target.value; nextBtn.disabled=!customW||!customH; });
+      document.getElementById('cdInput').addEventListener('input',e=>{ customH=e.target.value; nextBtn.disabled=!customW||!customH; });
+      nextBtn.disabled = !customW||!customH;
+    }
+  }
+}
+
+function setName(name) { rigName=name; document.getElementById('nameInput').value=name; document.getElementById('nextBtn').disabled=false; }
+function selectPreset(id) { selectedPreset=id; document.getElementById('nextBtn').disabled=(id==='custom'&&(!customW||!customH)); renderStep(); }
+
+function goNext() {
+  if(step===0 && rigName) { step=1; renderStep(); }
+  else if(step===1 && selectedPreset) {
+    const preset = PRESETS.find(p=>p.id===selectedPreset);
+    const dims = selectedPreset==='custom' ? `${customW}" × ${customH}"` : `${preset.w}" × ${preset.d}"`;
+    const style = selectedPreset==='custom' ? customStyle : preset.style;
+    document.getElementById('wizard').innerHTML = `
+      <div class="confirm-screen">
+        <div class="confirm-check"><i class="ti ti-check" style="font-size:28px;color:#1D9E75"></i></div>
+        <div style="font-size:20px;font-weight:500;color:#111;">${rigName}</div>
+        <div style="font-size:13px;color:#666;">${selectedPreset==='custom'?'Custom board':preset.name} &nbsp;·&nbsp; ${dims}</div>
+        <div style="font-size:12px;color:#AAA;">Style: ${style.charAt(0).toUpperCase()+style.slice(1)}</div>
+        <div style="margin-top:20px;font-size:12px;color:#AAA;">(Would open the canvas)</div>
+      </div>
+    `;
+  }
+}
+
+function goBack() { if(step>0){ step--; renderStep(); } }
+
+renderStep();
+</script>
+</body>
+</html>
