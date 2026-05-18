@@ -185,7 +185,7 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
       {step === 0 && <ImageStep draft={draft} setDraft={setDraft} />}
       {step === 1 && <NameSizeStep draft={draft} setDraft={setDraft} />}
       {step === 2 && <JacksStep draft={draft} setDraft={setDraft} />}
-      {step === 3 && <ConnectionsStep />}
+      {step === 3 && <ConnectionsStep draft={draft} setDraft={setDraft} />}
       {step === 4 && <ReviewStep draft={draft} />}
       {error ? (
         <div className={styles.errorBox} role="alert">
@@ -519,11 +519,226 @@ function JackPreview({ draft }: { draft: WizardDraft }) {
   );
 }
 
-function ConnectionsStep() {
+interface ConnectionPreset {
+  id: string;
+  label: string;
+  /** Replaces the current port list (true) or appends to it (false). */
+  replaces: boolean;
+  build: () => DraftPort[];
+}
+
+function mkPort(spec: DraftPort): DraftPort {
+  return { ...spec };
+}
+
+const CONNECTION_PRESETS: ConnectionPreset[] = [
+  {
+    id: 'mono',
+    label: 'Mono in/out',
+    replaces: true,
+    build: () => [
+      mkPort({
+        label: 'In',
+        role: 'input',
+        signalType: 'instrument',
+        connector: 'ts',
+        side: 'top',
+        sideOrder: 1,
+        optional: false,
+      }),
+      mkPort({
+        label: 'Out',
+        role: 'output',
+        signalType: 'instrument',
+        connector: 'ts',
+        side: 'top',
+        sideOrder: 0,
+        optional: false,
+      }),
+    ],
+  },
+  {
+    id: 'dual-mono-stereo',
+    label: 'Dual mono stereo',
+    replaces: true,
+    build: () => [
+      mkPort({
+        label: 'In',
+        role: 'input',
+        signalType: 'instrument',
+        connector: 'ts',
+        side: 'top',
+        sideOrder: 2,
+        optional: false,
+      }),
+      mkPort({
+        label: 'Out L',
+        role: 'output_l',
+        signalType: 'instrument',
+        connector: 'ts',
+        side: 'top',
+        sideOrder: 0,
+        optional: false,
+      }),
+      mkPort({
+        label: 'Out R',
+        role: 'output_r',
+        signalType: 'instrument',
+        connector: 'ts',
+        side: 'top',
+        sideOrder: 1,
+        optional: true,
+      }),
+    ],
+  },
+  {
+    id: 'trs-stereo',
+    label: 'TRS stereo',
+    replaces: true,
+    build: () => [
+      mkPort({
+        label: 'Stereo In',
+        role: 'stereo_input',
+        signalType: 'stereo',
+        connector: 'trs',
+        side: 'top',
+        sideOrder: 1,
+        optional: false,
+      }),
+      mkPort({
+        label: 'Stereo Out',
+        role: 'stereo_output',
+        signalType: 'stereo',
+        connector: 'trs',
+        side: 'top',
+        sideOrder: 0,
+        optional: false,
+      }),
+    ],
+  },
+  {
+    id: 'fx-loop',
+    label: '+ FX loop',
+    replaces: false,
+    build: () => [
+      mkPort({
+        label: 'FX Send',
+        role: 'fx_send',
+        signalType: 'instrument',
+        connector: 'ts',
+        side: 'right',
+        sideOrder: 0,
+        optional: true,
+      }),
+      mkPort({
+        label: 'FX Return',
+        role: 'fx_return',
+        signalType: 'instrument',
+        connector: 'ts',
+        side: 'right',
+        sideOrder: 1,
+        optional: true,
+      }),
+    ],
+  },
+  {
+    id: 'midi',
+    label: '+ MIDI',
+    replaces: false,
+    build: () => [
+      mkPort({
+        label: 'MIDI In',
+        role: 'midi_in',
+        signalType: 'midi',
+        connector: 'midi_trs',
+        side: 'bottom',
+        sideOrder: 0,
+        optional: true,
+      }),
+      mkPort({
+        label: 'MIDI Out',
+        role: 'midi_out',
+        signalType: 'midi',
+        connector: 'midi_trs',
+        side: 'bottom',
+        sideOrder: 1,
+        optional: true,
+      }),
+    ],
+  },
+];
+
+function ConnectionsStep({ draft, setDraft }: StepProps) {
+  const applyPreset = (preset: ConnectionPreset) => {
+    const built = preset.build();
+    setDraft((d) => ({
+      ...d,
+      ports: preset.replaces
+        ? built
+        : [
+            ...d.ports.filter((p) => !built.some((b) => b.role === p.role)),
+            ...built,
+          ],
+    }));
+  };
+
+  const removePort = (idx: number) =>
+    setDraft((d) => ({
+      ...d,
+      ports: d.ports.filter((_, i) => i !== idx),
+    }));
+
   return (
-    <div className={styles.stub}>
-      <p>Preset connection chips land in phase 4d.</p>
-      <p>Default: mono input + mono output.</p>
+    <div className={styles.connectionsStep}>
+      <div className={styles.jackSectionLabel}>Quick presets</div>
+      <div className={styles.presetChips}>
+        {CONNECTION_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={styles.presetChip}
+            onClick={() => applyPreset(p)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.jackSectionLabel}>
+        Ports ({draft.ports.length})
+      </div>
+      {draft.ports.length === 0 ? (
+        <p className={styles.helpMuted}>
+          No ports yet. Pick a preset above to start.
+        </p>
+      ) : (
+        <ul className={styles.portList}>
+          {draft.ports.map((p, idx) => (
+            <li key={`${p.role}-${p.label}-${idx}`} className={styles.portRow}>
+              <span
+                className={
+                  p.signalType === 'midi'
+                    ? styles.jackDotMidi
+                    : styles.jackDotAudio
+                }
+                aria-hidden
+              />
+              <span className={styles.portName}>{p.label}</span>
+              <span className={styles.portMeta}>
+                {p.side} · {p.connector.toUpperCase()}
+              </span>
+              <button
+                type="button"
+                className={styles.portRemoveBtn}
+                aria-label={`Remove ${p.label}`}
+                onClick={() => removePort(idx)}
+              >
+                <i className="ti ti-x" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

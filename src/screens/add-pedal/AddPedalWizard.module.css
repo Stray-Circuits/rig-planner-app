@@ -199,6 +199,85 @@
   border-color: var(--primary);
 }
 
+.connectionsStep {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.presetChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.presetChip {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 0.5px solid var(--border-strong);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.presetChip:hover {
+  background: var(--primary-bg);
+  border-color: var(--primary);
+  color: var(--primary-fg);
+}
+
+.portList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.portRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-alt);
+  border-radius: var(--radius-md);
+}
+
+.portName {
+  flex: 1;
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.portMeta {
+  font-size: 11px;
+  color: var(--muted-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.portRemoveBtn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+
+.portRemoveBtn:hover {
+  background: var(--surface);
+  color: var(--danger);
+}
+
+.portRemoveBtn i {
+  font-size: 14px;
+}
+
 .review {
   display: flex;
   flex-direction: column;

@@ -125,6 +125,45 @@ describe('AddPedalWizard', () => {
     expect(screen.getByText('Continue')).not.toBeDisabled();
   });
 
+  it('connections preset chips compose: Dual mono stereo + MIDI', async () => {
+    const onCreated = vi.fn();
+    render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
+    fireEvent.click(screen.getByText('Continue'));
+    fillNameSize();
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Continue'));
+
+    fireEvent.click(screen.getByText('Dual mono stereo'));
+    fireEvent.click(screen.getByText('+ MIDI'));
+    expect(screen.getByText(/Ports \(5\)/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Add to library'));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const created = (await listPedals())[0]!;
+    expect(created.ports.map((p) => p.role).sort()).toEqual([
+      'input',
+      'midi_in',
+      'midi_out',
+      'output_l',
+      'output_r',
+    ]);
+  });
+
+  it('removing a port from the list updates the count', () => {
+    render(
+      <AddPedalWizard onCreated={() => undefined} onCancel={() => undefined} />,
+    );
+    fireEvent.click(screen.getByText('Continue'));
+    fillNameSize();
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Continue'));
+    // Default 2 ports (In + Out) are pre-seeded.
+    expect(screen.getByText(/Ports \(2\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Remove In'));
+    expect(screen.getByText(/Ports \(1\)/)).toBeInTheDocument();
+  });
+
   it('jack step toggles audio/MIDI per side and persists power side', async () => {
     const onCreated = vi.fn();
     render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
