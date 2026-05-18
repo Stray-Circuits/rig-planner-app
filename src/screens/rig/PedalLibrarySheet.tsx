@@ -9,6 +9,8 @@ interface PedalLibrarySheetProps {
   pedals: Pedal[];
   onClose: () => void;
   onAddPedal: (pedal: Pedal) => void;
+  /** Opens the New Pedal wizard. The library sheet closes itself first. */
+  onStartNewPedal: () => void;
   onSeed: () => Promise<void>;
 }
 
@@ -17,6 +19,7 @@ export function PedalLibrarySheet({
   pedals,
   onClose,
   onAddPedal,
+  onStartNewPedal,
   onSeed,
 }: PedalLibrarySheetProps) {
   const [seeding, setSeeding] = useState(false);
@@ -39,47 +42,62 @@ export function PedalLibrarySheet({
   return (
     <Sheet open={open} onClose={onClose} title="Add a pedal">
       <div className={styles.body}>
+        <ul className={styles.list}>
+          <li>
+            <button
+              type="button"
+              className={`${styles.entry} ${styles.newEntry}`}
+              onClick={onStartNewPedal}
+            >
+              <span className={styles.newThumb} aria-hidden>
+                <i className="ti ti-plus" />
+              </span>
+              <div className={styles.info}>
+                <div className={styles.name}>Add new pedal</div>
+                <div className={styles.brand}>5-step wizard</div>
+              </div>
+            </button>
+          </li>
+          {pedals.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className={styles.entry}
+                onClick={() => onAddPedal(p)}
+              >
+                <span
+                  className={styles.thumb}
+                  style={{
+                    background: colorFromImagePath(p.imagePath) ?? '#444',
+                  }}
+                  aria-hidden
+                />
+                <div className={styles.info}>
+                  <div className={styles.name}>{p.name}</div>
+                  <div className={styles.brand}>{p.brand}</div>
+                </div>
+                <i className={`ti ti-plus ${styles.plusIcon}`} aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
         {pedals.length === 0 ? (
           <div className={styles.empty}>
-            <p>Your library is empty.</p>
-            <Button onClick={handleSeed} disabled={seeding}>
-              {seeding ? 'Seeding…' : 'Seed sample pedals'}
+            <p className={styles.muted}>
+              Your library is empty — tap <strong>Add new pedal</strong> above
+              to create one.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSeed}
+              disabled={seeding}
+            >
+              {seeding ? 'Seeding…' : 'Or seed 6 sample pedals'}
             </Button>
-            {seedError ? (
-              <p className={styles.error}>{seedError}</p>
-            ) : (
-              <p className={styles.muted}>
-                Adds 6 common pedals. The real Add Pedal wizard lands in phase
-                4.
-              </p>
-            )}
+            {seedError ? <p className={styles.error}>{seedError}</p> : null}
           </div>
-        ) : (
-          <ul className={styles.list}>
-            {pedals.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  className={styles.entry}
-                  onClick={() => onAddPedal(p)}
-                >
-                  <span
-                    className={styles.thumb}
-                    style={{
-                      background: colorFromImagePath(p.imagePath) ?? '#444',
-                    }}
-                    aria-hidden
-                  />
-                  <div className={styles.info}>
-                    <div className={styles.name}>{p.name}</div>
-                    <div className={styles.brand}>{p.brand}</div>
-                  </div>
-                  <i className={`ti ti-plus ${styles.plusIcon}`} aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        ) : null}
       </div>
     </Sheet>
   );

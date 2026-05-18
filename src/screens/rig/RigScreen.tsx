@@ -14,6 +14,7 @@ import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
 import { useRigsStore } from '../../stores/rigsStore';
 import { Sheet, SheetItem } from '../../ui';
+import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from './PedalLibrarySheet';
 import { SettingsSheet } from './SettingsSheet';
 import styles from './RigScreen.module.css';
@@ -48,6 +49,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -184,6 +186,10 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         pedals={pedals}
         onClose={() => setLibraryOpen(false)}
         onAddPedal={handleAddPedal}
+        onStartNewPedal={() => {
+          setLibraryOpen(false);
+          setWizardOpen(true);
+        }}
         onSeed={handleSeed}
       />
 
@@ -194,6 +200,18 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         onRename={(name) => renameRig(rig.id, name)}
         onChangeBoard={(w, d, style) => updateBoard(rig.id, w, d, style)}
       />
+
+      {wizardOpen ? (
+        <AddPedalWizard
+          onCancel={() => setWizardOpen(false)}
+          onCreated={(pedal) => {
+            // New pedal lands on the board immediately so the user sees what
+            // they just made; they can drag it from there.
+            handleAddPedal(pedal);
+            setWizardOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

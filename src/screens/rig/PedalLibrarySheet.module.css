@@ -41,6 +41,39 @@
   text-align: left;
 }
 
+.newEntry {
+  border-bottom: 0.5px solid var(--border);
+  background: var(--primary-bg);
+}
+
+.newEntry:hover {
+  background: #d5e8f7;
+}
+
+.newEntry .name {
+  color: var(--primary-fg);
+}
+
+.newEntry .brand {
+  color: var(--primary);
+}
+
+.newThumb {
+  width: 24px;
+  height: 34px;
+  border-radius: 3px;
+  background: var(--primary);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.newThumb i {
+  font-size: 16px;
+}
+
 .entry:hover {
   background: var(--surface-alt);
 }

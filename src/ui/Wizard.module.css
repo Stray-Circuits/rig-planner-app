@@ -1,22 +1,14 @@
+/* Full-screen overlay so the wizard covers any underlying screen. */
 .shell {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: flex;
   flex-direction: column;
   height: 100dvh;
   width: 100%;
   background: var(--surface);
   color: var(--fg);
-}
-
-@media (min-width: 720px) {
-  .shell {
-    max-width: 460px;
-    height: min(720px, 96dvh);
-    margin: max(20px, env(safe-area-inset-top)) auto;
-    border-radius: var(--radius-lg);
-    border: 0.5px solid var(--border);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-  }
 }
 
 .header {
