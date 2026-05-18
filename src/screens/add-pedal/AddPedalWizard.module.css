@@ -1,0 +1,95 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.dimsRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stub {
+  padding: 24px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-alt);
+  border-radius: var(--radius-md);
+  padding: 4px 14px;
+}
+
+.reviewRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.reviewRow + .reviewRow {
+  border-top: 0.5px solid var(--border);
+}
+
+.reviewKey {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.reviewVal {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: right;
+}
+
+.colorSwatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 0.5px solid var(--border);
+}
+
+.errorBox {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--danger-bg);
+  border: 0.5px solid var(--danger);
+  color: var(--danger-fg);
+  font-size: 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.errorBox i {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
