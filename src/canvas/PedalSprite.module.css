@@ -18,6 +18,17 @@
   pointer-events: auto;
 }
 
+/* Real (background-removed) photos already have their own silhouette, so we
+   drop the chrome chassis treatment to let the alpha channel breathe. */
+.bodyImage {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.bodyImage .label {
+  display: none;
+}
+
 .label {
   font-size: 9px;
   color: rgba(255, 255, 255, 0.85);

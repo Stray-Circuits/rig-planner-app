@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Pedal } from '../../data/schema';
-import { colorFromImagePath } from '../../data/seedPedals';
+import { pedalImageStyle } from '../../lib/pedalImage';
 import { Button, Sheet } from '../../ui';
 import styles from './PedalLibrarySheet.module.css';
 
@@ -67,9 +67,7 @@ export function PedalLibrarySheet({
               >
                 <span
                   className={styles.thumb}
-                  style={{
-                    background: colorFromImagePath(p.imagePath) ?? '#444',
-                  }}
+                  style={pedalImageStyle(p.imagePath)}
                   aria-hidden
                 />
                 <div className={styles.info}>

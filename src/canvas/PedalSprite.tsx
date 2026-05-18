@@ -1,5 +1,5 @@
 import type { Pedal } from '../data/schema';
-import { colorFromImagePath } from '../data/seedPedals';
+import { pedalImageStyle } from '../lib/pedalImage';
 import styles from './PedalSprite.module.css';
 
 interface PedalSpriteProps {
@@ -25,12 +25,13 @@ export function PedalSprite({
 }: PedalSpriteProps) {
   const widthPx = pedal.widthIn * pxPerInch;
   const depthPx = pedal.depthIn * pxPerInch;
-  const color = colorFromImagePath(pedal.imagePath);
   // For 90/270 rotation the bounding box swaps width/depth so the sprite
   // continues to occupy the right footprint on the board.
   const rotated = rotation === 90 || rotation === 270;
   const outerW = rotated ? depthPx : widthPx;
   const outerH = rotated ? widthPx : depthPx;
+  const bgStyle = pedalImageStyle(pedal.imagePath);
+  const hasImage = !!bgStyle.backgroundImage;
 
   return (
     <div
@@ -42,15 +43,12 @@ export function PedalSprite({
       }}
     >
       <div
-        className={styles.body}
+        className={`${styles.body} ${hasImage ? styles.bodyImage : ''}`}
         style={{
           width: `${widthPx}px`,
           height: `${depthPx}px`,
-          background:
-            color ??
-            pedal.imagePath ??
-            'linear-gradient(135deg, #444 0%, #222 100%)',
           transform: `rotate(${rotation}deg)`,
+          ...bgStyle,
         }}
       >
         <span className={styles.label}>{pedal.name}</span>
