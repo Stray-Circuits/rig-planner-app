@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
 import { initDb } from '../data/db';
+import { useRigsStore } from '../stores/rigsStore';
+import { useUiStore } from '../stores/uiStore';
+import { NewRigWizard } from '../screens/new-rig/NewRigWizard';
+import { RigList } from '../screens/rigs/RigList';
+import { RigScreenPlaceholder } from '../screens/rig/RigScreenPlaceholder';
+import type { Rig } from '../data/schema';
 import styles from './App.module.css';
 
 type BootState =
@@ -7,12 +13,25 @@ type BootState =
   | { status: 'ready' }
   | { status: 'error'; message: string };
 
+type Route =
+  | { kind: 'rigs' }
+  | { kind: 'new-rig' }
+  | { kind: 'rig'; rigId: string };
+
 export function App() {
   const [boot, setBoot] = useState<BootState>({ status: 'loading' });
+  const [route, setRoute] = useState<Route | null>(null);
+
+  const rigs = useRigsStore((s) => s.rigs);
+  const rigsStatus = useRigsStore((s) => s.status);
+  const loadRigs = useRigsStore((s) => s.loadRigs);
+  const openRig = useRigsStore((s) => s.openRig);
+  const lastRigId = useUiStore((s) => s.lastRigId);
 
   useEffect(() => {
     let cancelled = false;
     initDb()
+      .then(() => loadRigs())
       .then(() => {
         if (!cancelled) setBoot({ status: 'ready' });
       })
@@ -24,33 +43,79 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadRigs]);
 
-  return (
-    <div className={styles.shell}>
-      <header className={styles.titlebar}>
-        <i className="ti ti-circuit-board" aria-hidden />
-        <span className={styles.title}>Rig Planner</span>
-      </header>
-      <main className={styles.main}>
-        {boot.status === 'loading' && (
+  // Decide the initial route once rigs are ready and no route has been
+  // chosen yet. No rigs → wizard; otherwise last-opened (or list).
+  useEffect(() => {
+    if (rigsStatus !== 'ready' || route !== null) return;
+    if (rigs.length === 0) {
+      setRoute({ kind: 'new-rig' });
+    } else if (lastRigId && rigs.some((r) => r.id === lastRigId)) {
+      setRoute({ kind: 'rig', rigId: lastRigId });
+    } else {
+      setRoute({ kind: 'rigs' });
+    }
+  }, [rigsStatus, rigs, lastRigId, route]);
+
+  if (boot.status === 'loading' || !route) {
+    return (
+      <div className={styles.shell}>
+        <main className={styles.main}>
           <p className={styles.muted}>Starting up…</p>
-        )}
-        {boot.status === 'ready' && (
-          <div className={styles.hero}>
-            <h1 className={styles.heroTitle}>Welcome</h1>
-            <p className={styles.muted}>
-              Phase 1 scaffold is live. The New Rig wizard lands in phase 2.
-            </p>
-          </div>
-        )}
-        {boot.status === 'error' && (
+        </main>
+      </div>
+    );
+  }
+
+  if (boot.status === 'error') {
+    return (
+      <div className={styles.shell}>
+        <main className={styles.main}>
           <div className={styles.errorBox} role="alert">
             <strong>Could not start the app.</strong>
             <pre>{boot.message}</pre>
           </div>
-        )}
-      </main>
-    </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (route.kind === 'new-rig') {
+    return (
+      <NewRigWizard
+        rigCount={rigs.length}
+        onCreated={(rig: Rig) => {
+          void openRig(rig.id);
+          setRoute({ kind: 'rig', rigId: rig.id });
+        }}
+        {...(rigs.length > 0
+          ? { onCancel: () => setRoute({ kind: 'rigs' }) }
+          : {})}
+      />
+    );
+  }
+
+  if (route.kind === 'rigs') {
+    return (
+      <RigList
+        onCreateRig={() => setRoute({ kind: 'new-rig' })}
+        onOpenRig={(rig) => {
+          void openRig(rig.id);
+          setRoute({ kind: 'rig', rigId: rig.id });
+        }}
+      />
+    );
+  }
+
+  const rig = rigs.find((r) => r.id === route.rigId);
+  if (!rig) {
+    // Rig was deleted out from under us; bounce to the list.
+    setRoute({ kind: 'rigs' });
+    return null;
+  }
+
+  return (
+    <RigScreenPlaceholder rig={rig} onBack={() => setRoute({ kind: 'rigs' })} />
   );
 }
