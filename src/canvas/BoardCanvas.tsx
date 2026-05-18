@@ -19,6 +19,8 @@ import { PedalSprite } from './PedalSprite';
 import { ChainOverlay } from './ChainOverlay';
 import styles from './BoardCanvas.module.css';
 
+const EMPTY_WARNING_SET = new Set<string>();
+
 interface BoardCanvasProps {
   rig: Rig;
   placed: PlacedPedal[];
@@ -45,6 +47,8 @@ interface BoardCanvasProps {
   onEndpointTap?: (endpointId: string) => void;
   /** Currently-armed port (highlighted), if any. */
   armedPort?: { placedId: string; portId: string } | null;
+  /** Set of "${placedId}:${portId}" keys to render as warnings. */
+  unconnectedRequired?: Set<string>;
 }
 
 interface DragState {
@@ -85,7 +89,9 @@ export function BoardCanvas({
   onCableTap,
   onEndpointTap,
   armedPort = null,
+  unconnectedRequired,
 }: BoardCanvasProps) {
+  const warnings = unconnectedRequired ?? EMPTY_WARNING_SET;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -283,6 +289,7 @@ export function BoardCanvas({
           endpoints={endpoints}
           pxPerInch={pxPerInch}
           armedPort={armedPort}
+          unconnectedRequired={warnings}
           {...(onPortTap ? { onPortTap } : {})}
           {...(onCableTap ? { onCableTap } : {})}
           {...(onEndpointTap ? { onEndpointTap } : {})}

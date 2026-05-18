@@ -205,8 +205,8 @@ describe('RigScreen', () => {
 
     // Turn on chain mode and tap DS-1 Out then Phase 90 In.
     fireEvent.click(screen.getByLabelText('Show signal chain'));
-    fireEvent.click(await screen.findByLabelText('DS-1 Out'));
-    fireEvent.click(screen.getByLabelText('Phase 90 In'));
+    fireEvent.click(await screen.findByLabelText(/^DS-1 Out/));
+    fireEvent.click(screen.getByLabelText(/^Phase 90 In/));
 
     await waitFor(() => {
       const conns = useSignalChainStore.getState().connectionsByRig[rig.id];
@@ -226,15 +226,14 @@ describe('RigScreen', () => {
       expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
     });
     fireEvent.click(screen.getByLabelText('Show signal chain'));
-    fireEvent.click(await screen.findByLabelText('DS-1 In'));
+    fireEvent.click(await screen.findByLabelText(/^DS-1 In/));
     fireEvent.click(await screen.findByText('From Guitar'));
 
     await waitFor(() => {
       const conns = useSignalChainStore.getState().connectionsByRig[rig.id];
       expect(conns).toHaveLength(1);
     });
-    const conn =
-      useSignalChainStore.getState().connectionsByRig[rig.id]?.[0];
+    const conn = useSignalChainStore.getState().connectionsByRig[rig.id]?.[0];
     expect(conn?.fromNodeKind).toBe('external');
     expect(conn?.toNodeKind).toBe('pedal');
   });
@@ -255,8 +254,8 @@ describe('RigScreen', () => {
     // Toggle chain mode on.
     fireEvent.click(screen.getByLabelText('Show signal chain'));
     // Dots are buttons with label "<pedal name> <port label>"
-    expect(await screen.findByLabelText('DS-1 In')).toBeInTheDocument();
-    expect(screen.getByLabelText('DS-1 Out')).toBeInTheDocument();
+    expect(await screen.findByLabelText(/^DS-1 In/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^DS-1 Out/)).toBeInTheDocument();
   });
 
   it('zoom controls appear and reset works after a Cmd+wheel zoom', async () => {

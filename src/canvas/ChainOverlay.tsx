@@ -24,6 +24,8 @@ interface ChainOverlayProps {
   endpoints: ExternalEndpoint[];
   pxPerInch: number;
   armedPort: { placedId: string; portId: string } | null;
+  /** Set of "${placedId}:${portId}" keys to render as warnings. */
+  unconnectedRequired: Set<string>;
   onPortTap?: (placedId: string, portId: string) => void;
   onCableTap?: (connectionId: string) => void;
   onEndpointTap?: (endpointId: string) => void;
@@ -63,6 +65,7 @@ export function ChainOverlay({
   endpoints,
   pxPerInch,
   armedPort,
+  unconnectedRequired,
   onPortTap,
   onCableTap,
   onEndpointTap,
@@ -165,19 +168,30 @@ export function ChainOverlay({
             if (!resolved) return null;
             const isArmed =
               armedPort?.placedId === p.id && armedPort.portId === port.id;
+            const isWarning = unconnectedRequired.has(`${p.id}:${port.id}`);
             return (
               <button
                 key={`${p.id}-${port.id}`}
                 type="button"
-                className={`${styles.portDot} ${isArmed ? styles.portDotArmed : ''}`}
+                className={`${styles.portDot} ${isArmed ? styles.portDotArmed : ''} ${isWarning ? styles.portDotWarning : ''}`}
                 style={{
                   left: resolved.xIn * pxPerInch,
                   top: resolved.yIn * pxPerInch,
-                  background: colorForSignal(port.signalType),
+                  background: isWarning
+                    ? 'var(--warning)'
+                    : colorForSignal(port.signalType),
                   touchAction: 'none',
                 }}
-                aria-label={`${def.name} ${port.label}`}
-                title={`${port.label} (${port.signalType})`}
+                aria-label={
+                  isWarning
+                    ? `${def.name} ${port.label} (unconnected)`
+                    : `${def.name} ${port.label}`
+                }
+                title={
+                  isWarning
+                    ? `${port.label} — required, no cable connected`
+                    : `${port.label} (${port.signalType})`
+                }
                 onClick={(e) => {
                   e.stopPropagation();
                   onPortTap?.(p.id, port.id);

@@ -10,6 +10,7 @@ import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
 import { useViewport } from '../../canvas/useViewport';
 import { centeredOnRig, clampToBoard } from '../../lib/geometry';
+import { computeUnconnectedRequiredPorts } from '../../lib/signalChainWarnings';
 import type { Connection, ExternalEndpoint } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
@@ -85,6 +86,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     for (const p of pedals) m.set(p.id, p);
     return m;
   }, [pedals]);
+
+  const unconnectedRequired = useMemo(
+    () => computeUnconnectedRequiredPorts(placed, pedalsById, connections),
+    [placed, pedalsById, connections],
+  );
 
   const handleAddPedal = (pedal: Pedal) => {
     const { xIn, yIn } = centeredOnRig(pedal, rig);
@@ -258,6 +264,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         connections={connections}
         endpoints={endpoints}
         armedPort={armedPort}
+        unconnectedRequired={unconnectedRequired}
         onPortTap={handlePortTap}
         onCableTap={handleCableTap}
         onEndpointTap={handleEndpointTap}
@@ -301,6 +308,14 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           </button>
         </div>
       </CanvasArea>
+
+      {chainMode && unconnectedRequired.size > 0 ? (
+        <div className={styles.chainStatusPill} role="status">
+          <i className="ti ti-alert-triangle" aria-hidden />
+          {unconnectedRequired.size} routing issue
+          {unconnectedRequired.size === 1 ? '' : 's'}
+        </div>
+      ) : null}
 
       <Sheet
         open={actionsFor !== null}
@@ -371,6 +386,7 @@ interface CanvasAreaProps {
   connections: Connection[];
   endpoints: ExternalEndpoint[];
   armedPort: { placedId: string; portId: string } | null;
+  unconnectedRequired: Set<string>;
   onPortTap: (placedId: string, portId: string) => void;
   onCableTap: (connectionId: string) => void;
   onEndpointTap: (endpointId: string) => void;
@@ -390,6 +406,7 @@ function CanvasArea({
   connections,
   endpoints,
   armedPort,
+  unconnectedRequired,
   onPortTap,
   onCableTap,
   onEndpointTap,
@@ -457,6 +474,7 @@ function CanvasArea({
           connections={connections}
           endpoints={endpoints}
           armedPort={armedPort}
+          unconnectedRequired={unconnectedRequired}
           onPortTap={onPortTap}
           onCableTap={onCableTap}
           onEndpointTap={onEndpointTap}

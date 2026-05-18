@@ -130,3 +130,28 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+.chainStatusPill {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  border: 0.5px solid var(--warning);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  z-index: 6;
+  pointer-events: none;
+}
+
+.chainStatusPill i {
+  font-size: 14px;
+  color: var(--warning);
+}

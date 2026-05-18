@@ -43,6 +43,24 @@
   transform: translate(-50%, -50%) scale(1.25);
 }
 
+.portDotWarning {
+  animation: portWarn 1.4s ease-in-out infinite;
+}
+
+@keyframes portWarn {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.9),
+      0 0 0 4px var(--warning);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.9),
+      0 0 0 6px var(--warning);
+  }
+}
+
 .endpointsLayer {
   position: absolute;
   inset: 0;

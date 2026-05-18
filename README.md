@@ -58,5 +58,5 @@ mockups/          # Original HTML mockups (reference)
 - [x] Phase 3 — Canvas: board styles, drag, gestures, rotate
 - [x] Phase 4 — Add-pedal wizard
 - [ ] Phase 5 — Background removal (rembg-webgpu)
-- [ ] Phase 6 — Signal-chain overlay
+- [x] Phase 6 — Signal-chain overlay
 - [ ] Phase 7 — Mobile polish + native builds
