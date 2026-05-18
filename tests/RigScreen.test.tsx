@@ -13,6 +13,7 @@ import { RigScreen } from '../src/screens/rig/RigScreen';
 import { usePedalsStore } from '../src/stores/pedalsStore';
 import { usePlacedPedalsStore } from '../src/stores/placedPedalsStore';
 import { useRigsStore } from '../src/stores/rigsStore';
+import { useSignalChainStore } from '../src/stores/signalChainStore';
 import type { Rig } from '../src/data/schema';
 
 let rig: Rig;
@@ -29,6 +30,11 @@ beforeEach(async () => {
     style: 'rail',
   });
   useRigsStore.setState({ rigs: [rig], status: 'ready', error: null });
+  useSignalChainStore.setState({
+    connectionsByRig: {},
+    endpointsByRig: {},
+    loading: null,
+  });
 });
 
 describe('RigScreen', () => {
@@ -180,6 +186,36 @@ describe('RigScreen', () => {
     });
     // Wizard closed.
     expect(screen.queryByText('Pedal image')).not.toBeInTheDocument();
+  });
+
+  it('tap-to-connect: arm an output, tap an input → connection created', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
+    // Add two pedals to the rig.
+    fireEvent.click(await screen.findByText('DS-1'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
+    });
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Phase 90'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(2);
+    });
+
+    // Turn on chain mode and tap DS-1 Out then Phase 90 In.
+    fireEvent.click(screen.getByLabelText('Show signal chain'));
+    fireEvent.click(await screen.findByLabelText('DS-1 Out'));
+    fireEvent.click(screen.getByLabelText('Phase 90 In'));
+
+    await waitFor(() => {
+      const conns = useSignalChainStore.getState().connectionsByRig[rig.id];
+      expect(conns).toHaveLength(1);
+    });
+    const conn =
+      useSignalChainStore.getState().connectionsByRig[rig.id]?.[0];
+    expect(conn?.fromNodeKind).toBe('pedal');
+    expect(conn?.toNodeKind).toBe('pedal');
   });
 
   it('signal-chain FAB toggles chain mode + port dots', async () => {

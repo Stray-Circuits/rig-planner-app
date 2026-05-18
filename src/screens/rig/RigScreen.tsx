@@ -58,12 +58,18 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     (s) => s.endpointsByRig[rig.id] ?? EMPTY_ENDPOINTS,
   );
   const loadSignalChain = useSignalChainStore((s) => s.loadForRig);
+  const addConnection = useSignalChainStore((s) => s.addConnection);
+  const removeConnection = useSignalChainStore((s) => s.removeConnection);
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chainMode, setChainMode] = useState(false);
+  const [armedPort, setArmedPort] = useState<{
+    placedId: string;
+    portId: string;
+  } | null>(null);
 
   useEffect(() => {
     if (pedalsStatus === 'idle') void loadPedals();
@@ -88,6 +94,79 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
   const handleSeed = async (): Promise<void> => {
     await seedSamples();
+  };
+
+  // Reset armed port when leaving chain mode.
+  useEffect(() => {
+    if (!chainMode) setArmedPort(null);
+  }, [chainMode]);
+
+  const isOutputRole = (role: string) =>
+    role === 'output' ||
+    role === 'output_l' ||
+    role === 'output_r' ||
+    role === 'stereo_output' ||
+    role === 'fx_send' ||
+    role === 'midi_out';
+
+  const handlePortTap = (placedId: string, portId: string) => {
+    if (!armedPort) {
+      setArmedPort({ placedId, portId });
+      return;
+    }
+    if (armedPort.placedId === placedId && armedPort.portId === portId) {
+      setArmedPort(null);
+      return;
+    }
+    // Determine flow direction by role: outputs become "from", inputs become
+    // "to". If the user tapped input-then-output, swap them so cables point
+    // the right way for the chain view.
+    const armed = placed
+      .map((p) => ({
+        placed: p,
+        pedal: pedalsById.get(p.pedalId),
+      }))
+      .find((x) => x.placed.id === armedPort.placedId);
+    const target = placed
+      .map((p) => ({
+        placed: p,
+        pedal: pedalsById.get(p.pedalId),
+      }))
+      .find((x) => x.placed.id === placedId);
+    const armedPortDef = armed?.pedal?.ports.find(
+      (p) => p.id === armedPort.portId,
+    );
+    const targetPortDef = target?.pedal?.ports.find((p) => p.id === portId);
+    if (!armedPortDef || !targetPortDef) {
+      setArmedPort(null);
+      return;
+    }
+    const armedIsOutput = isOutputRole(armedPortDef.role);
+    const targetIsOutput = isOutputRole(targetPortDef.role);
+    const swap = !armedIsOutput && targetIsOutput;
+    const fromPlacedId = swap ? placedId : armedPort.placedId;
+    const fromPortId = swap ? portId : armedPort.portId;
+    const toPlacedId = swap ? armedPort.placedId : placedId;
+    const toPortId = swap ? armedPort.portId : portId;
+
+    void addConnection({
+      rigId: rig.id,
+      fromNodeKind: 'pedal',
+      fromNodeId: fromPlacedId,
+      fromPortId: fromPortId,
+      toNodeKind: 'pedal',
+      toNodeId: toPlacedId,
+      toPortId: toPortId,
+    });
+    setArmedPort(null);
+  };
+
+  const handleCanvasBackgroundClick = () => {
+    if (chainMode && armedPort) setArmedPort(null);
+  };
+
+  const handleCableTap = (connectionId: string) => {
+    void removeConnection(rig.id, connectionId);
   };
 
   const targetPlaced = useMemo(
@@ -144,6 +223,10 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         chainMode={chainMode}
         connections={connections}
         endpoints={endpoints}
+        armedPort={armedPort}
+        onPortTap={handlePortTap}
+        onCableTap={handleCableTap}
+        onBackgroundTap={handleCanvasBackgroundClick}
       >
         <div className={styles.fabBackWrap}>
           <button
@@ -252,6 +335,10 @@ interface CanvasAreaProps {
   chainMode: boolean;
   connections: Connection[];
   endpoints: ExternalEndpoint[];
+  armedPort: { placedId: string; portId: string } | null;
+  onPortTap: (placedId: string, portId: string) => void;
+  onCableTap: (connectionId: string) => void;
+  onBackgroundTap: () => void;
   /** Overlay elements (mobile floating buttons, etc.) painted above the board. */
   children?: ReactNode;
 }
@@ -266,6 +353,10 @@ function CanvasArea({
   chainMode,
   connections,
   endpoints,
+  armedPort,
+  onPortTap,
+  onCableTap,
+  onBackgroundTap,
   children,
 }: CanvasAreaProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -306,6 +397,10 @@ function CanvasArea({
       onPointerMove={pointerHandlers.onPointerMove}
       onPointerUp={pointerHandlers.onPointerUp}
       onPointerCancel={pointerHandlers.onPointerCancel}
+      onClick={(e) => {
+        // Background click cancels an armed port in chain mode.
+        if (e.target === e.currentTarget) onBackgroundTap();
+      }}
     >
       <div
         className={styles.canvasTransform}
@@ -324,6 +419,9 @@ function CanvasArea({
           chainMode={chainMode}
           connections={connections}
           endpoints={endpoints}
+          armedPort={armedPort}
+          onPortTap={onPortTap}
+          onCableTap={onCableTap}
         />
       </div>
       {viewport.scale !== 1 || viewport.panX !== 0 || viewport.panY !== 0 ? (

@@ -25,6 +25,7 @@ interface ChainOverlayProps {
   pxPerInch: number;
   armedPort: { placedId: string; portId: string } | null;
   onPortTap?: (placedId: string, portId: string) => void;
+  onCableTap?: (connectionId: string) => void;
 }
 
 interface ResolvedPort {
@@ -62,6 +63,7 @@ export function ChainOverlay({
   pxPerInch,
   armedPort,
   onPortTap,
+  onCableTap,
 }: ChainOverlayProps) {
   // Build a {placedId -> {portId -> ResolvedPort}} map for fast lookups.
   const portIndex = new Map<string, Map<string, ResolvedPort>>();
@@ -123,16 +125,32 @@ export function ChainOverlay({
             )
             .join(' ');
           return (
-            <path
-              key={c.id}
-              d={d}
-              fill="none"
-              stroke={color}
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={isExternal ? '5 3' : undefined}
-            />
+            <g key={c.id}>
+              {onCableTap ? (
+                <path
+                  d={d}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={14}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={styles.cableHit}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCableTap(c.id);
+                  }}
+                />
+              ) : null}
+              <path
+                d={d}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={isExternal ? '5 3' : undefined}
+              />
+            </g>
           );
         })}
       </svg>

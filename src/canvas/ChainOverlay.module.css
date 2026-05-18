@@ -5,6 +5,11 @@
   overflow: visible;
 }
 
+.cableHit {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
 .portsLayer {
   position: absolute;
   inset: 0;

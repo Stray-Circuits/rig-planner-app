@@ -39,6 +39,8 @@ interface BoardCanvasProps {
   endpoints?: ExternalEndpoint[];
   /** Fired when the user taps a port in chain mode. */
   onPortTap?: (placedId: string, portId: string) => void;
+  /** Fired when the user taps an existing cable in chain mode. */
+  onCableTap?: (connectionId: string) => void;
   /** Currently-armed port (highlighted), if any. */
   armedPort?: { placedId: string; portId: string } | null;
 }
@@ -78,6 +80,7 @@ export function BoardCanvas({
   connections = [],
   endpoints = [],
   onPortTap,
+  onCableTap,
   armedPort = null,
 }: BoardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -278,6 +281,7 @@ export function BoardCanvas({
           pxPerInch={pxPerInch}
           armedPort={armedPort}
           {...(onPortTap ? { onPortTap } : {})}
+          {...(onCableTap ? { onCableTap } : {})}
         />
       ) : null}
     </div>
