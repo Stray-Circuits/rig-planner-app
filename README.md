@@ -2,6 +2,8 @@
 
 Pedalboard planner with signal-path overlay. Desktop + mobile (iOS / Android) via Tauri 2.
 
+![CI](https://github.com/straycircuits/rig-planner-app/actions/workflows/ci.yml/badge.svg)
+
 ## Stack
 
 - Vite + React 19 + TypeScript (strict)
