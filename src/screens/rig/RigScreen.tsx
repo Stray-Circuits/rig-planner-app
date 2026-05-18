@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
 import { colorFromImagePath } from '../../data/seedPedals';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
-import { centeredOnRig } from '../../lib/geometry';
+import { centeredOnRig, clampToBoard } from '../../lib/geometry';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
-import { Button } from '../../ui';
+import { Button, Sheet, SheetItem } from '../../ui';
 import styles from './RigScreen.module.css';
 
 // Stable reference so the selector below doesn't return a fresh `[]` on
@@ -28,6 +28,12 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const addPedalToRig = usePlacedPedalsStore((s) => s.addPedalToRig);
   const dragMove = usePlacedPedalsStore((s) => s.dragMove);
   const commitMove = usePlacedPedalsStore((s) => s.commitMove);
+  const rotateAction = usePlacedPedalsStore((s) => s.rotate);
+  const moveAction = usePlacedPedalsStore((s) => s.move);
+  const duplicateAction = usePlacedPedalsStore((s) => s.duplicate);
+  const removeAction = usePlacedPedalsStore((s) => s.remove);
+
+  const [actionsFor, setActionsFor] = useState<string | null>(null);
 
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
@@ -49,6 +55,47 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const handleAddPedal = (pedal: Pedal) => {
     const { xIn, yIn } = centeredOnRig(pedal, rig);
     void addPedalToRig(rig.id, pedal.id, xIn, yIn);
+  };
+
+  const targetPlaced = useMemo(
+    () => placed.find((p) => p.id === actionsFor) ?? null,
+    [placed, actionsFor],
+  );
+  const targetPedal = targetPlaced
+    ? pedalsById.get(targetPlaced.pedalId)
+    : null;
+
+  const closeActions = () => setActionsFor(null);
+
+  const handleRotate = () => {
+    if (!targetPlaced || !targetPedal) return;
+    const nextRotation = ((targetPlaced.rotation + 90) %
+      360) as PlacedPedal['rotation'];
+    void rotateAction(targetPlaced.id, nextRotation);
+    // After rotating, the footprint may push the pedal off the board — clamp.
+    const clamped = clampToBoard(
+      targetPlaced.xIn,
+      targetPlaced.yIn,
+      targetPedal,
+      nextRotation,
+      rig,
+    );
+    if (clamped.xIn !== targetPlaced.xIn || clamped.yIn !== targetPlaced.yIn) {
+      void moveAction(targetPlaced.id, clamped.xIn, clamped.yIn);
+    }
+    closeActions();
+  };
+
+  const handleDuplicate = () => {
+    if (!actionsFor) return;
+    void duplicateAction(actionsFor);
+    closeActions();
+  };
+
+  const handleRemove = () => {
+    if (!actionsFor) return;
+    void removeAction(actionsFor);
+    closeActions();
   };
 
   const handleSeed = () => {
@@ -97,6 +144,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           onDragCommit={(id) => {
             void commitMove(id);
           }}
+          onRequestActions={setActionsFor}
         />
 
         <aside className={styles.sidebar} aria-label="Pedal library">
@@ -115,6 +163,29 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         </span>
         <span className={styles.bottomHint}>Tap a pedal to add</span>
       </footer>
+
+      <Sheet
+        open={actionsFor !== null}
+        onClose={closeActions}
+        title={targetPedal ? targetPedal.name : 'Pedal'}
+      >
+        <SheetItem
+          icon={<i className="ti ti-rotate-clockwise" aria-hidden />}
+          label="Rotate 90°"
+          onClick={handleRotate}
+        />
+        <SheetItem
+          icon={<i className="ti ti-copy" aria-hidden />}
+          label="Duplicate"
+          onClick={handleDuplicate}
+        />
+        <SheetItem
+          icon={<i className="ti ti-trash" aria-hidden />}
+          label="Remove"
+          destructive
+          onClick={handleRemove}
+        />
+      </Sheet>
     </div>
   );
 }
@@ -129,6 +200,7 @@ interface CanvasAreaProps {
   seedError: string | null;
   onDragMove: (placedId: string, xIn: number, yIn: number) => void;
   onDragCommit: (placedId: string) => void;
+  onRequestActions: (placedId: string) => void;
 }
 
 function CanvasArea({
@@ -141,6 +213,7 @@ function CanvasArea({
   seedError,
   onDragMove,
   onDragCommit,
+  onRequestActions,
 }: CanvasAreaProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [pxPerInch, setPxPerInch] = useState(18);
@@ -172,6 +245,7 @@ function CanvasArea({
         pxPerInch={pxPerInch}
         onDragMove={onDragMove}
         onDragCommit={onDragCommit}
+        onRequestActions={onRequestActions}
       />
       {empty ? (
         <div className={styles.emptyOverlay}>

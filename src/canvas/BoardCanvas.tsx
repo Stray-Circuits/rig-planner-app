@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { Pedal, PlacedPedal, Rig } from '../data/schema';
@@ -20,6 +21,8 @@ interface BoardCanvasProps {
   onDragMove?: (placedId: string, xIn: number, yIn: number) => void;
   /** Called once when the user releases a dragged pedal. */
   onDragCommit?: (placedId: string) => void;
+  /** Called when the user long-presses (mobile) or right-clicks (desktop). */
+  onRequestActions?: (placedId: string) => void;
 }
 
 interface DragState {
@@ -36,9 +39,14 @@ interface DragState {
   /** Pointer position at drag start (CSS px). */
   startClientX: number;
   startClientY: number;
+  /** Pending long-press timer (cleared if drag starts or pointer lifts early). */
+  longPressTimer: ReturnType<typeof setTimeout> | null;
+  /** Has the long-press timer fired? When true, we suppress the drag for this gesture. */
+  longPressFired: boolean;
 }
 
 const DRAG_THRESHOLD_PX = 4;
+const LONG_PRESS_MS = 450;
 
 export function BoardCanvas({
   rig,
@@ -47,6 +55,7 @@ export function BoardCanvas({
   pxPerInch,
   onDragMove,
   onDragCommit,
+  onRequestActions,
 }: BoardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -101,12 +110,20 @@ export function BoardCanvas({
 
   const handlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>, p: PlacedPedal) => {
-      if (!onDragMove) return;
+      if (!onDragMove && !onRequestActions) return;
       const def = pedalsById.get(p.pedalId);
       if (!def) return;
       // Only respond to primary pointer (left mouse / first touch).
       if (e.button !== 0 && e.pointerType === 'mouse') return;
       const { xIn, yIn } = pointerToInches(e.clientX, e.clientY);
+      const longPressTimer = onRequestActions
+        ? setTimeout(() => {
+            const drag = dragRef.current;
+            if (!drag || drag.movedEnough) return;
+            drag.longPressFired = true;
+            onRequestActions(p.id);
+          }, LONG_PRESS_MS)
+        : null;
       dragRef.current = {
         placedId: p.id,
         pointerId: e.pointerId,
@@ -117,21 +134,28 @@ export function BoardCanvas({
         movedEnough: false,
         startClientX: e.clientX,
         startClientY: e.clientY,
+        longPressTimer,
+        longPressFired: false,
       };
       e.currentTarget.setPointerCapture(e.pointerId);
     },
-    [onDragMove, pedalsById, pointerToInches],
+    [onDragMove, onRequestActions, pedalsById, pointerToInches],
   );
 
   const handlePointerMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       const drag = dragRef.current;
       if (drag?.pointerId !== e.pointerId) return;
+      if (drag.longPressFired) return;
       if (!drag.movedEnough) {
         const dx = e.clientX - drag.startClientX;
         const dy = e.clientY - drag.startClientY;
         if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
         drag.movedEnough = true;
+        if (drag.longPressTimer) {
+          clearTimeout(drag.longPressTimer);
+          drag.longPressTimer = null;
+        }
       }
       const { xIn, yIn } = pointerToInches(e.clientX, e.clientY);
       const proposed = clampToBoard(
@@ -151,12 +175,28 @@ export function BoardCanvas({
       const drag = dragRef.current;
       if (drag?.pointerId !== e.pointerId) return;
       e.currentTarget.releasePointerCapture(e.pointerId);
-      if (drag.movedEnough) {
+      if (drag.longPressTimer) clearTimeout(drag.longPressTimer);
+      if (drag.movedEnough && !drag.longPressFired) {
         onDragCommit?.(drag.placedId);
       }
       dragRef.current = null;
     },
     [onDragCommit],
+  );
+
+  const handleContextMenu = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>, p: PlacedPedal) => {
+      if (!onRequestActions) return;
+      e.preventDefault();
+      // Cancel any in-flight drag so the gesture doesn't compete.
+      const drag = dragRef.current;
+      if (drag?.placedId === p.id && drag.longPressTimer) {
+        clearTimeout(drag.longPressTimer);
+        drag.longPressTimer = null;
+      }
+      onRequestActions(p.id);
+    },
+    [onRequestActions],
   );
 
   return (
@@ -189,6 +229,7 @@ export function BoardCanvas({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
+              onContextMenu={(e) => handleContextMenu(e, p)}
             >
               <PedalSprite
                 pedal={def}

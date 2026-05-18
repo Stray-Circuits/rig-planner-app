@@ -76,4 +76,69 @@ describe('RigScreen', () => {
     expect(placed?.xIn).toBeCloseTo((24 - 2.85) / 2, 1);
     expect(placed?.yIn).toBeCloseTo((8 - 4.75) / 2, 1);
   });
+
+  async function seedAndAdd() {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(await screen.findByText('Seed sample pedals'));
+    await screen.findByText('DS-1');
+    fireEvent.click(screen.getByTitle('Add DS-1 to rig'));
+    await waitFor(() => {
+      expect(
+        usePlacedPedalsStore.getState().byRig[rig.id]?.length,
+      ).toBeGreaterThan(0);
+    });
+  }
+
+  it('right-click on a placed pedal opens the action sheet', async () => {
+    await seedAndAdd();
+    const placedId =
+      usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.id ?? '';
+    const placedEl = document.querySelector(`[data-placed-id="${placedId}"]`);
+    expect(placedEl).not.toBeNull();
+    fireEvent.contextMenu(placedEl!);
+    expect(await screen.findByText('Rotate 90°')).toBeInTheDocument();
+    expect(screen.getByText('Duplicate')).toBeInTheDocument();
+    expect(screen.getByText('Remove')).toBeInTheDocument();
+  });
+
+  it('Rotate 90° cycles rotation and clamps the position', async () => {
+    await seedAndAdd();
+    const placedId =
+      usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.id ?? '';
+    fireEvent.contextMenu(
+      document.querySelector(`[data-placed-id="${placedId}"]`)!,
+    );
+    fireEvent.click(await screen.findByText('Rotate 90°'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.rotation).toBe(
+        90,
+      );
+    });
+  });
+
+  it('Remove deletes the placed pedal', async () => {
+    await seedAndAdd();
+    const placedId =
+      usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.id ?? '';
+    fireEvent.contextMenu(
+      document.querySelector(`[data-placed-id="${placedId}"]`)!,
+    );
+    fireEvent.click(await screen.findByText('Remove'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]).toEqual([]);
+    });
+  });
+
+  it('Duplicate adds a second placed pedal', async () => {
+    await seedAndAdd();
+    const placedId =
+      usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.id ?? '';
+    fireEvent.contextMenu(
+      document.querySelector(`[data-placed-id="${placedId}"]`)!,
+    );
+    fireEvent.click(await screen.findByText('Duplicate'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(2);
+    });
+  });
 });
