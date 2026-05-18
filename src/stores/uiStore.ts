@@ -24,8 +24,7 @@ export const useUiStore = create<UiState>()(
       chainVisible: false,
 
       setLastRigId: (id) => set({ lastRigId: id }),
-      setPxPerInch: (n) =>
-        set({ pxPerInch: Math.max(4, Math.min(96, n)) }),
+      setPxPerInch: (n) => set({ pxPerInch: Math.max(4, Math.min(96, n)) }),
       setChainVisible: (b) => set({ chainVisible: b }),
     }),
     {

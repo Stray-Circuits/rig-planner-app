@@ -24,10 +24,10 @@ async function createTauriAdapter(): Promise<DbAdapter> {
   const db = await Database.load('sqlite:rigplanner.db');
   return {
     execute: async (sql, params) => {
-      await db.execute(sql, params as unknown[] | undefined);
+      await db.execute(sql, params);
     },
-    select: async <T>(sql: string, params?: unknown[]) =>
-      db.select<T[]>(sql, params as unknown[] | undefined),
+    select: <T>(sql: string, params?: unknown[]): Promise<T[]> =>
+      db.select<T[]>(sql, params),
     close: async () => {
       await db.close();
     },
@@ -39,9 +39,9 @@ function createMemoryAdapter(): DbAdapter {
     '[db] Tauri not detected — using in-memory stub. Data will not persist.',
   );
   return {
-    execute: async () => {},
-    select: async () => [],
-    close: async () => {},
+    execute: () => Promise.resolve(),
+    select: () => Promise.resolve([]),
+    close: () => Promise.resolve(),
   };
 }
 
@@ -68,21 +68,19 @@ async function runMigrations(adapter: DbAdapter): Promise<void> {
 }
 
 export function initDb(): Promise<DbAdapter> {
-  if (!adapterPromise) {
-    adapterPromise = (async () => {
-      const adapter = isTauri()
-        ? await createTauriAdapter()
-        : createMemoryAdapter();
-      if (isTauri()) {
-        await runMigrations(adapter);
-      }
-      return adapter;
-    })();
-  }
+  adapterPromise ??= (async () => {
+    const adapter = isTauri()
+      ? await createTauriAdapter()
+      : createMemoryAdapter();
+    if (isTauri()) {
+      await runMigrations(adapter);
+    }
+    return adapter;
+  })();
   return adapterPromise;
 }
 
-export async function getDb(): Promise<DbAdapter> {
+export function getDb(): Promise<DbAdapter> {
   return initDb();
 }
 

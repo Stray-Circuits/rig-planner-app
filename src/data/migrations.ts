@@ -13,7 +13,8 @@ export interface Migration {
 export const MIGRATIONS: Migration[] = [
   {
     version: 1,
-    description: 'initial schema: pedals, ports, rigs, placed_pedals, connections, external_endpoints',
+    description:
+      'initial schema: pedals, ports, rigs, placed_pedals, connections, external_endpoints',
     statements: [
       `CREATE TABLE pedals (
         id TEXT PRIMARY KEY,
