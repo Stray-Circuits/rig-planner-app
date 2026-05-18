@@ -83,6 +83,32 @@ export async function renameRig(id: string, name: string): Promise<void> {
   );
 }
 
+export async function updateRigStyle(
+  id: string,
+  style: BoardStyle,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE rigs SET style = ?, updated_at = datetime('now') WHERE id = ?`,
+    [style, id],
+  );
+}
+
+export async function updateRigDimensions(
+  id: string,
+  widthIn: number,
+  depthIn: number,
+): Promise<void> {
+  if (widthIn <= 0 || depthIn <= 0) {
+    throw new Error('Rig dimensions must be positive');
+  }
+  const db = await getDb();
+  await db.execute(
+    `UPDATE rigs SET width_in = ?, depth_in = ?, updated_at = datetime('now') WHERE id = ?`,
+    [widthIn, depthIn, id],
+  );
+}
+
 export async function duplicateRig(id: string): Promise<Rig> {
   const source = await getRig(id);
   if (!source) throw new Error(`Rig ${id} not found`);

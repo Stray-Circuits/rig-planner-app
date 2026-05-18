@@ -55,7 +55,7 @@ mockups/          # Original HTML mockups (reference)
 
 - [x] Phase 1 — Scaffold: Tauri 2 + React + DB schema + tests + boot shell
 - [x] Phase 2 — Rigs: list, new-rig wizard, persistence
-- [ ] Phase 3 — Canvas: board styles, drag, gestures, rotate
+- [x] Phase 3 — Canvas: board styles, drag, gestures, rotate
 - [ ] Phase 4 — Add-pedal wizard
 - [ ] Phase 5 — Background removal (rembg-webgpu)
 - [ ] Phase 6 — Signal-chain overlay

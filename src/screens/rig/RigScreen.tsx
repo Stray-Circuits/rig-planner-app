@@ -6,7 +6,10 @@ import { useViewport } from '../../canvas/useViewport';
 import { centeredOnRig, clampToBoard } from '../../lib/geometry';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
-import { Button, Sheet, SheetItem } from '../../ui';
+import type { BoardStyle } from '../../data/schema';
+import { BoardThumb } from '../../canvas/BoardThumb';
+import { useRigsStore } from '../../stores/rigsStore';
+import { Button, Sheet, SheetItem, TextField } from '../../ui';
 import styles from './RigScreen.module.css';
 
 // Stable reference so the selector below doesn't return a fresh `[]` on
@@ -35,6 +38,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const removeAction = usePlacedPedalsStore((s) => s.remove);
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const updateStyle = useRigsStore((s) => s.updateStyle);
+  const updateDimensions = useRigsStore((s) => s.updateDimensions);
+  const renameRig = useRigsStore((s) => s.renameRig);
 
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
@@ -99,6 +107,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     closeActions();
   };
 
+  const handleStyleChange = (style: BoardStyle) => {
+    if (style === rig.style) return;
+    void updateStyle(rig.id, style);
+  };
+
   const handleSeed = () => {
     void (async () => {
       setSeeding(true);
@@ -130,6 +143,14 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             {rig.widthIn}&quot; × {rig.depthIn}&quot;
           </div>
         </div>
+        <button
+          type="button"
+          className={styles.iconBtn}
+          aria-label="Rig settings"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <i className="ti ti-settings" aria-hidden />
+        </button>
       </header>
 
       <div className={styles.body}>
@@ -159,10 +180,32 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
       </div>
 
       <footer className={styles.bottomBar}>
-        <span className={styles.bottomHint}>
-          {placed.length} placed · style: {rig.style}
+        <i className={`ti ti-palette ${styles.paletteIcon}`} aria-hidden />
+        <div className={styles.styleOpts}>
+          {(['rail', 'plain', 'wood', 'holes'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={`${styles.styleOpt} ${rig.style === s ? styles.styleOptSelected : ''}`}
+              onClick={() => handleStyleChange(s)}
+              aria-pressed={rig.style === s}
+            >
+              <BoardThumb
+                style={s}
+                width={28}
+                height={16}
+                scale={0.18}
+                title={`${s} style`}
+              />
+              <span className={styles.styleLabel}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </span>
+            </button>
+          ))}
+        </div>
+        <span className={styles.bottomMeta}>
+          {placed.length} placed · {rig.widthIn}&quot; × {rig.depthIn}&quot;
         </span>
-        <span className={styles.bottomHint}>Tap a pedal to add</span>
       </footer>
 
       <Sheet
@@ -187,7 +230,117 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           onClick={handleRemove}
         />
       </Sheet>
+
+      <SettingsSheet
+        open={settingsOpen}
+        rig={rig}
+        onClose={() => setSettingsOpen(false)}
+        onRename={(name) => renameRig(rig.id, name)}
+        onResize={(w, d) => updateDimensions(rig.id, w, d)}
+      />
     </div>
+  );
+}
+
+interface SettingsSheetProps {
+  open: boolean;
+  rig: Rig;
+  onClose: () => void;
+  onRename: (name: string) => Promise<void>;
+  onResize: (widthIn: number, depthIn: number) => Promise<void>;
+}
+
+function SettingsSheet({
+  open,
+  rig,
+  onClose,
+  onRename,
+  onResize,
+}: SettingsSheetProps) {
+  const [name, setName] = useState(rig.name);
+  const [width, setWidth] = useState(String(rig.widthIn));
+  const [depth, setDepth] = useState(String(rig.depthIn));
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Re-seed locally each time the sheet (re)opens or rig changes.
+  useEffect(() => {
+    if (!open) return;
+    setName(rig.name);
+    setWidth(String(rig.widthIn));
+    setDepth(String(rig.depthIn));
+    setError(null);
+  }, [open, rig.name, rig.widthIn, rig.depthIn]);
+
+  const handleApply = () => {
+    const trimmed = name.trim();
+    const w = Number(width);
+    const d = Number(depth);
+    if (!trimmed) return setError('Name cannot be empty');
+    if (!Number.isFinite(w) || w <= 0) return setError('Width must be > 0');
+    if (!Number.isFinite(d) || d <= 0) return setError('Depth must be > 0');
+    setError(null);
+    void (async () => {
+      setSaving(true);
+      try {
+        if (trimmed !== rig.name) await onRename(trimmed);
+        if (w !== rig.widthIn || d !== rig.depthIn) await onResize(w, d);
+        onClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSaving(false);
+      }
+    })();
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Rig settings">
+      <div className={styles.settingsBody}>
+        <label className={styles.settingsField}>
+          <span className={styles.settingsLabel}>Name</span>
+          <TextField
+            inputSize="md"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+        </label>
+        <div className={styles.settingsDims}>
+          <label className={styles.settingsField}>
+            <span className={styles.settingsLabel}>Width (in)</span>
+            <TextField
+              type="number"
+              min={1}
+              max={72}
+              inputSize="md"
+              value={width}
+              onChange={(e) => setWidth(e.target.value)}
+            />
+          </label>
+          <label className={styles.settingsField}>
+            <span className={styles.settingsLabel}>Depth (in)</span>
+            <TextField
+              type="number"
+              min={1}
+              max={48}
+              inputSize="md"
+              value={depth}
+              onChange={(e) => setDepth(e.target.value)}
+            />
+          </label>
+        </div>
+        {error ? <p className={styles.settingsError}>{error}</p> : null}
+        <div className={styles.settingsActions}>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleApply} disabled={saving}>
+            {saving ? 'Saving…' : 'Apply'}
+          </Button>
+        </div>
+      </div>
+    </Sheet>
   );
 }
 

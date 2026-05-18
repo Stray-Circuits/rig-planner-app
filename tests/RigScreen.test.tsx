@@ -2,10 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetDbForTests } from '../src/data/db';
 import { __clearMemoryAdapterStorage } from '../src/data/memoryAdapter';
-import { createRig } from '../src/data/rigsRepo';
+import { createRig, listRigs } from '../src/data/rigsRepo';
 import { RigScreen } from '../src/screens/rig/RigScreen';
 import { usePedalsStore } from '../src/stores/pedalsStore';
 import { usePlacedPedalsStore } from '../src/stores/placedPedalsStore';
+import { useRigsStore } from '../src/stores/rigsStore';
 import type { Rig } from '../src/data/schema';
 
 let rig: Rig;
@@ -21,13 +22,16 @@ beforeEach(async () => {
     depthIn: 8,
     style: 'rail',
   });
+  useRigsStore.setState({ rigs: [rig], status: 'ready', error: null });
 });
 
 describe('RigScreen', () => {
   it('renders the rig name, dims, and the board canvas', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     expect(screen.getByText('Test rig')).toBeInTheDocument();
-    expect(screen.getByText(/24" × 8"/)).toBeInTheDocument();
+    // Dims appear in both the top bar and bottom meta — that's fine, just
+    // assert one of them is present.
+    expect(screen.getAllByText(/24" × 8"/).length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(screen.getByTestId('board-canvas')).toBeInTheDocument();
     });
@@ -142,6 +146,38 @@ describe('RigScreen', () => {
     });
   });
 
+  it('style picker updates the rig style', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    // Find the bottom-bar Wood style chip via its label text.
+    const woodLabel = await screen.findByText('Wood');
+    fireEvent.click(woodLabel.closest('button')!);
+    await waitFor(async () => {
+      const rigs = await listRigs();
+      expect(rigs.find((r) => r.id === rig.id)?.style).toBe('wood');
+    });
+  });
+
+  it('settings sheet renames the rig and updates dimensions', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Rig settings'));
+    const nameInput = await screen.findByDisplayValue('Test rig');
+    fireEvent.change(nameInput, { target: { value: 'Renamed' } });
+    fireEvent.change(screen.getByDisplayValue('24'), {
+      target: { value: '30' },
+    });
+    fireEvent.change(screen.getByDisplayValue('8'), {
+      target: { value: '14' },
+    });
+    fireEvent.click(screen.getByText('Apply'));
+    await waitFor(async () => {
+      const rigs = await listRigs();
+      const updated = rigs.find((r) => r.id === rig.id);
+      expect(updated?.name).toBe('Renamed');
+      expect(updated?.widthIn).toBe(30);
+      expect(updated?.depthIn).toBe(14);
+    });
+  });
+
   it('zoom controls appear and reset works after a Cmd+wheel zoom', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     await screen.findByTestId('board-canvas');
@@ -155,8 +191,8 @@ describe('RigScreen', () => {
       bubbles: true,
       cancelable: true,
     });
-    const canvasArea = screen.getByTestId('board-canvas').parentElement
-      ?.parentElement;
+    const canvasArea =
+      screen.getByTestId('board-canvas').parentElement?.parentElement;
     canvasArea?.dispatchEvent(wheelEvent);
 
     const resetBtn = await screen.findByLabelText('Reset zoom');

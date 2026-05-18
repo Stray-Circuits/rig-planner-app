@@ -254,14 +254,94 @@
 .bottomBar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+  gap: 8px;
+  padding: 6px 10px max(6px, env(safe-area-inset-bottom));
   background: var(--surface);
   border-top: 0.5px solid var(--border);
   flex-shrink: 0;
+  overflow-x: auto;
 }
 
-.bottomHint {
+.paletteIcon {
+  font-size: 14px;
+  color: var(--muted-soft);
+  flex-shrink: 0;
+}
+
+.styleOpts {
+  display: flex;
+  gap: 4px;
+}
+
+.styleOpt {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border);
+  background: transparent;
+}
+
+.styleOpt:hover {
+  background: var(--surface-alt);
+}
+
+.styleOptSelected {
+  border-color: var(--primary);
+  background: var(--primary-bg);
+}
+
+.styleLabel {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.styleOptSelected .styleLabel {
+  color: var(--primary-fg);
+  font-weight: 500;
+}
+
+.bottomMeta {
+  margin-left: auto;
   font-size: 10px;
   color: var(--muted-soft);
+  white-space: nowrap;
+}
+
+.settingsBody {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settingsField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settingsLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.settingsDims {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.settingsError {
+  font-size: 12px;
+  color: var(--danger-fg);
+}
+
+.settingsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

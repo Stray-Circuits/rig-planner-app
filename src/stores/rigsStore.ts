@@ -7,6 +7,8 @@ import {
   listRigs,
   renameRig as repoRename,
   touchRig as repoTouch,
+  updateRigDimensions as repoUpdateDimensions,
+  updateRigStyle as repoUpdateStyle,
 } from '../data/rigsRepo';
 import { useUiStore } from './uiStore';
 
@@ -25,6 +27,12 @@ interface RigsState {
     style: Rig['style'];
   }) => Promise<Rig>;
   renameRig: (id: string, name: string) => Promise<void>;
+  updateStyle: (id: string, style: Rig['style']) => Promise<void>;
+  updateDimensions: (
+    id: string,
+    widthIn: number,
+    depthIn: number,
+  ) => Promise<void>;
   duplicateRig: (id: string) => Promise<Rig>;
   deleteRig: (id: string) => Promise<void>;
   openRig: (id: string) => Promise<void>;
@@ -61,6 +69,22 @@ export const useRigsStore = create<RigsState>((set, get) => ({
     set({
       rigs: get().rigs.map((r) =>
         r.id === id ? { ...r, name: name.trim() } : r,
+      ),
+    });
+  },
+
+  updateStyle: async (id, style) => {
+    await repoUpdateStyle(id, style);
+    set({
+      rigs: get().rigs.map((r) => (r.id === id ? { ...r, style } : r)),
+    });
+  },
+
+  updateDimensions: async (id, widthIn, depthIn) => {
+    await repoUpdateDimensions(id, widthIn, depthIn);
+    set({
+      rigs: get().rigs.map((r) =>
+        r.id === id ? { ...r, widthIn, depthIn } : r,
       ),
     });
   },

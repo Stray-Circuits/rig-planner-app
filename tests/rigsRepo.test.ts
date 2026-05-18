@@ -8,6 +8,8 @@ import {
   listRigs,
   renameRig,
   touchRig,
+  updateRigDimensions,
+  updateRigStyle,
 } from '../src/data/rigsRepo';
 import { createFakeDb, type FakeDb } from './fakeDb';
 
@@ -109,6 +111,29 @@ describe('rigsRepo.touchRig', () => {
       c.sql.includes('updated_at = datetime'),
     );
     expect(call?.params).toEqual(['abc']);
+  });
+});
+
+describe('rigsRepo.updateRigStyle', () => {
+  it('issues a style UPDATE', async () => {
+    await updateRigStyle('abc', 'wood');
+    const call = db.executes.find((c) => c.sql.includes('SET style'));
+    expect(call?.params).toEqual(['wood', 'abc']);
+  });
+});
+
+describe('rigsRepo.updateRigDimensions', () => {
+  it('updates width + depth in one query', async () => {
+    await updateRigDimensions('abc', 30, 14);
+    const call = db.executes.find((c) => c.sql.includes('SET width_in'));
+    expect(call?.params).toEqual([30, 14, 'abc']);
+  });
+
+  it('rejects non-positive dimensions', async () => {
+    await expect(updateRigDimensions('abc', 0, 10)).rejects.toThrow(/positive/);
+    await expect(updateRigDimensions('abc', 10, -1)).rejects.toThrow(
+      /positive/,
+    );
   });
 });
 
