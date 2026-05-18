@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
 import { useViewport } from '../../canvas/useViewport';
 import { centeredOnRig, clampToBoard } from '../../lib/geometry';
+import { useMediaQuery } from '../../lib/useMediaQuery';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
 import { useRigsStore } from '../../stores/rigsStore';
@@ -42,6 +50,10 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Match the CSS breakpoint exactly so only one of (top bar / floating FABs)
+  // is in the DOM at a time. Prevents duplicate accessible labels.
+  const isDesktop = useMediaQuery('(min-width: 720px)');
 
   useEffect(() => {
     if (pedalsStatus === 'idle') void loadPedals();
@@ -109,39 +121,41 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
   return (
     <div className={styles.screen}>
-      <header className={styles.topBar}>
-        <button
-          type="button"
-          className={styles.iconBtn}
-          aria-label="Back to rigs"
-          onClick={onBack}
-        >
-          <i className="ti ti-chevron-left" aria-hidden />
-        </button>
-        <div className={styles.titleGroup}>
-          <div className={styles.title}>{rig.name}</div>
-          <div className={styles.dims}>
-            {placed.length} pedal{placed.length === 1 ? '' : 's'} ·{' '}
-            {rig.widthIn}&quot; × {rig.depthIn}&quot;
+      {isDesktop ? (
+        <header className={styles.topBar}>
+          <button
+            type="button"
+            className={styles.iconBtn}
+            aria-label="Back to rigs"
+            onClick={onBack}
+          >
+            <i className="ti ti-chevron-left" aria-hidden />
+          </button>
+          <div className={styles.titleGroup}>
+            <div className={styles.title}>{rig.name}</div>
+            <div className={styles.dims}>
+              {placed.length} pedal{placed.length === 1 ? '' : 's'} ·{' '}
+              {rig.widthIn}&quot; × {rig.depthIn}&quot;
+            </div>
           </div>
-        </div>
-        <button
-          type="button"
-          className={styles.iconBtn}
-          aria-label="Add pedal"
-          onClick={() => setLibraryOpen(true)}
-        >
-          <i className="ti ti-plus" aria-hidden />
-        </button>
-        <button
-          type="button"
-          className={styles.iconBtn}
-          aria-label="Rig settings"
-          onClick={() => setSettingsOpen(true)}
-        >
-          <i className="ti ti-settings" aria-hidden />
-        </button>
-      </header>
+          <button
+            type="button"
+            className={styles.iconBtn}
+            aria-label="Add pedal"
+            onClick={() => setLibraryOpen(true)}
+          >
+            <i className="ti ti-plus" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={styles.iconBtn}
+            aria-label="Rig settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <i className="ti ti-settings" aria-hidden />
+          </button>
+        </header>
+      ) : null}
 
       <CanvasArea
         rig={rig}
@@ -152,7 +166,40 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           void commitMove(id);
         }}
         onRequestActions={setActionsFor}
-      />
+      >
+        {isDesktop ? null : (
+          <>
+            <div className={styles.fabBackWrap}>
+              <button
+                type="button"
+                className={styles.fab}
+                aria-label="Back to rigs"
+                onClick={onBack}
+              >
+                <i className="ti ti-chevron-left" aria-hidden />
+              </button>
+            </div>
+            <div className={styles.fabActions}>
+              <button
+                type="button"
+                className={styles.fab}
+                aria-label="Add pedal"
+                onClick={() => setLibraryOpen(true)}
+              >
+                <i className="ti ti-plus" aria-hidden />
+              </button>
+              <button
+                type="button"
+                className={styles.fab}
+                aria-label="Rig settings"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <i className="ti ti-settings" aria-hidden />
+              </button>
+            </div>
+          </>
+        )}
+      </CanvasArea>
 
       <Sheet
         open={actionsFor !== null}
@@ -203,6 +250,8 @@ interface CanvasAreaProps {
   onDragMove: (placedId: string, xIn: number, yIn: number) => void;
   onDragCommit: (placedId: string) => void;
   onRequestActions: (placedId: string) => void;
+  /** Overlay elements (mobile floating buttons, etc.) painted above the board. */
+  children?: ReactNode;
 }
 
 function CanvasArea({
@@ -212,6 +261,7 @@ function CanvasArea({
   onDragMove,
   onDragCommit,
   onRequestActions,
+  children,
 }: CanvasAreaProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [pxPerInch, setPxPerInch] = useState(18);
@@ -299,6 +349,7 @@ function CanvasArea({
           </button>
         </div>
       ) : null}
+      {children}
     </div>
   );
 }

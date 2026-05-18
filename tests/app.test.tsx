@@ -37,7 +37,9 @@ describe('App boot', () => {
     db.mockSelect(/FROM rigs ORDER BY/, () => [fakeRow('r1', 'Main board')]);
     useUiStore.setState({ lastRigId: 'r1' });
     render(<App />);
-    expect(await screen.findByText('Main board')).toBeInTheDocument();
+    // On mobile (jsdom default), the rig name doesn't appear in the chrome —
+    // we confirm the rig screen rendered by its canvas + floating Add pedal.
+    expect(await screen.findByTestId('board-canvas')).toBeInTheDocument();
     expect(screen.getByLabelText('Add pedal')).toBeInTheDocument();
   });
 

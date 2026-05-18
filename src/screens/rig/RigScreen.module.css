@@ -6,13 +6,19 @@
 }
 
 .topBar {
-  display: flex;
+  display: none; /* mobile: hide; floating FABs below take its place. */
   align-items: center;
   gap: 8px;
   padding: max(8px, env(safe-area-inset-top)) 8px 8px;
   background: var(--surface);
   border-bottom: 0.5px solid var(--border);
   flex-shrink: 0;
+}
+
+@media (min-width: 720px) {
+  .topBar {
+    display: flex;
+  }
 }
 
 .iconBtn {
@@ -86,8 +92,11 @@
 
 .zoomControls {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  /* On mobile, sit beneath the stack of floating action buttons (back / add /
+     settings). On desktop, hug the top-right since the topbar replaces the
+     FABs. */
+  top: calc(124px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
   display: flex;
   align-items: center;
   gap: 4px;
@@ -97,6 +106,13 @@
   padding: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   z-index: 5;
+}
+
+@media (min-width: 720px) {
+  .zoomControls {
+    top: 12px;
+    right: 12px;
+  }
 }
 
 .zoomBtn {
@@ -127,4 +143,60 @@
   min-width: 38px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Mobile floating action buttons ---------- */
+.fabBackWrap,
+.fabActions {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  z-index: 5;
+  pointer-events: none;
+}
+
+.fabBackWrap {
+  left: calc(12px + env(safe-area-inset-left));
+}
+
+.fabActions {
+  right: calc(12px + env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fab {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--fg);
+  border: 0.5px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.fab:hover {
+  background: var(--surface);
+}
+
+.fab:active {
+  background: var(--surface-alt);
+}
+
+.fab i {
+  font-size: 22px;
+}
+
+/* Hide the floating mobile controls at desktop widths — the persistent
+   top bar takes over there. */
+@media (min-width: 720px) {
+  .fabBackWrap,
+  .fabActions {
+    display: none;
+  }
 }

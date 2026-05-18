@@ -32,13 +32,14 @@ beforeEach(async () => {
 });
 
 describe('RigScreen', () => {
-  it('renders the rig name, meta, and the canvas', async () => {
+  it('renders the canvas and floating actions', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
-    expect(screen.getByText('Test rig')).toBeInTheDocument();
-    expect(screen.getByText(/0 pedals · 24" × 8"/)).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('board-canvas')).toBeInTheDocument();
     });
+    expect(screen.getByLabelText('Back to rigs')).toBeInTheDocument();
+    expect(screen.getByLabelText('Add pedal')).toBeInTheDocument();
+    expect(screen.getByLabelText('Rig settings')).toBeInTheDocument();
   });
 
   it('back button fires onBack', () => {
