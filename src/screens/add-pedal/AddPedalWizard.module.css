@@ -278,6 +278,107 @@
   font-size: 14px;
 }
 
+.addPortBtn {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.addPortBtn:hover {
+  background: var(--surface-alt);
+  color: var(--fg);
+  border-color: var(--primary);
+}
+
+.addPortBtn i {
+  font-size: 14px;
+}
+
+.portPicker {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border);
+  overflow: hidden;
+}
+
+.portPickerHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.portPickerBack {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+
+.portPickerBack:hover {
+  color: var(--fg);
+}
+
+.portPickerBack i {
+  font-size: 14px;
+}
+
+.portPickerTitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.portPickerSection {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 10px 14px 4px;
+  border-top: 0.5px solid var(--border);
+}
+
+.portPickerSection:first-of-type {
+  border-top: none;
+}
+
+.portPickerOpt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.portPickerOpt:hover {
+  background: var(--surface-alt);
+}
+
+.portPickerOptName {
+  font-size: 13px;
+  color: var(--fg);
+  flex: 1;
+}
+
 .review {
   display: flex;
   flex-direction: column;

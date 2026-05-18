@@ -150,6 +150,32 @@ describe('AddPedalWizard', () => {
     ]);
   });
 
+  it('custom port picker: add an Expression jack (role → connector)', async () => {
+    const onCreated = vi.fn();
+    render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
+    fireEvent.click(screen.getByText('Continue'));
+    fillNameSize();
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Continue'));
+
+    fireEvent.click(screen.getByText('Add port'));
+    // Role picker is visible. Click Expression.
+    fireEvent.click(screen.getByText('Expression'));
+    // Connector picker now visible — pick TRS.
+    fireEvent.click(screen.getByText(/TRS \(stereo \/ balanced\)/));
+
+    expect(screen.getByText(/Ports \(3\)/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Add to library'));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const created = (await listPedals())[0]!;
+    const expr = created.ports.find((p) => p.role === 'expression');
+    expect(expr).toBeDefined();
+    expect(expr?.connector).toBe('trs');
+    expect(expr?.signalType).toBe('expression');
+  });
+
   it('removing a port from the list updates the count', () => {
     render(
       <AddPedalWizard onCreated={() => undefined} onCancel={() => undefined} />,

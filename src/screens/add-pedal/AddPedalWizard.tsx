@@ -668,7 +668,145 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
   },
 ];
 
+interface RoleOption {
+  role: PortRole;
+  label: string;
+  signalType: SignalType;
+  /** Connectors offered for this role on the next picker step. */
+  connectors: Connector[];
+}
+
+const ROLE_GROUPS: { heading: string; options: RoleOption[] }[] = [
+  {
+    heading: 'Audio',
+    options: [
+      {
+        role: 'input',
+        label: 'In',
+        signalType: 'instrument',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'output',
+        label: 'Out',
+        signalType: 'instrument',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'input_l',
+        label: 'In L',
+        signalType: 'instrument',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'input_r',
+        label: 'In R',
+        signalType: 'instrument',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'stereo_input',
+        label: 'Stereo In',
+        signalType: 'stereo',
+        connectors: ['trs', 'ts'],
+      },
+      {
+        role: 'output_l',
+        label: 'Out L',
+        signalType: 'instrument',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'output_r',
+        label: 'Out R',
+        signalType: 'instrument',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'stereo_output',
+        label: 'Stereo Out',
+        signalType: 'stereo',
+        connectors: ['trs', 'ts'],
+      },
+      {
+        role: 'fx_send',
+        label: 'FX Send',
+        signalType: 'instrument',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'fx_return',
+        label: 'FX Return',
+        signalType: 'instrument',
+        connectors: ['ts', 'trs'],
+      },
+    ],
+  },
+  {
+    heading: 'MIDI',
+    options: [
+      {
+        role: 'midi_in',
+        label: 'MIDI In',
+        signalType: 'midi',
+        connectors: ['midi_trs', 'midi_din'],
+      },
+      {
+        role: 'midi_out',
+        label: 'MIDI Out',
+        signalType: 'midi',
+        connectors: ['midi_trs', 'midi_din'],
+      },
+    ],
+  },
+  {
+    heading: 'Control',
+    options: [
+      {
+        role: 'expression',
+        label: 'Expression',
+        signalType: 'expression',
+        connectors: ['trs', 'ts'],
+      },
+      {
+        role: 'remote',
+        label: 'Remote',
+        signalType: 'remote',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'cv',
+        label: 'CV',
+        signalType: 'cv',
+        connectors: ['ts', 'trs'],
+      },
+    ],
+  },
+];
+
+const CONNECTOR_LABELS: Record<Connector, string> = {
+  ts: '1/4" TS (mono)',
+  trs: '1/4" TRS (stereo / balanced)',
+  xlr: 'XLR',
+  midi_din: '5-pin DIN',
+  midi_trs: 'TRS MIDI',
+};
+
+function pickDefaultSide(draft: WizardDraft): Side {
+  // Land new ports on the first declared jack side, falling back to top.
+  const sides: Side[] = ['top', 'bottom', 'left', 'right'];
+  for (const s of sides) {
+    if (draft.jackSides[AUDIO_SIDE_KEY[s]]) return s;
+  }
+  return 'top';
+}
+
 function ConnectionsStep({ draft, setDraft }: StepProps) {
+  const [pickerStep, setPickerStep] = useState<'closed' | 'role' | 'connector'>(
+    'closed',
+  );
+  const [pickedRole, setPickedRole] = useState<RoleOption | null>(null);
+
   const applyPreset = (preset: ConnectionPreset) => {
     const built = preset.build();
     setDraft((d) => ({
@@ -687,6 +825,27 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
       ...d,
       ports: d.ports.filter((_, i) => i !== idx),
     }));
+
+  const addCustomPort = (role: RoleOption, connector: Connector) => {
+    setDraft((d) => {
+      const side = pickDefaultSide(d);
+      const maxOrderOnSide = d.ports
+        .filter((p) => p.side === side)
+        .reduce((m, p) => Math.max(m, p.sideOrder), -1);
+      const nextPort: DraftPort = {
+        label: role.label,
+        role: role.role,
+        signalType: role.signalType,
+        connector,
+        side,
+        sideOrder: maxOrderOnSide + 1,
+        optional: true,
+      };
+      return { ...d, ports: [...d.ports, nextPort] };
+    });
+    setPickerStep('closed');
+    setPickedRole(null);
+  };
 
   return (
     <div className={styles.connectionsStep}>
@@ -709,7 +868,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
       </div>
       {draft.ports.length === 0 ? (
         <p className={styles.helpMuted}>
-          No ports yet. Pick a preset above to start.
+          No ports yet. Pick a preset above or add one below.
         </p>
       ) : (
         <ul className={styles.portList}>
@@ -739,6 +898,108 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
           ))}
         </ul>
       )}
+
+      {pickerStep === 'closed' ? (
+        <button
+          type="button"
+          className={styles.addPortBtn}
+          onClick={() => setPickerStep('role')}
+        >
+          <i className="ti ti-plus" aria-hidden /> Add port
+        </button>
+      ) : (
+        <PortPicker
+          step={pickerStep}
+          pickedRole={pickedRole}
+          onPickRole={(role) => {
+            setPickedRole(role);
+            setPickerStep('connector');
+          }}
+          onPickConnector={(connector) => {
+            if (pickedRole) addCustomPort(pickedRole, connector);
+          }}
+          onBack={() => {
+            if (pickerStep === 'connector') {
+              setPickerStep('role');
+              setPickedRole(null);
+            } else {
+              setPickerStep('closed');
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface PortPickerProps {
+  step: 'role' | 'connector';
+  pickedRole: RoleOption | null;
+  onPickRole: (role: RoleOption) => void;
+  onPickConnector: (connector: Connector) => void;
+  onBack: () => void;
+}
+
+function PortPicker({
+  step,
+  pickedRole,
+  onPickRole,
+  onPickConnector,
+  onBack,
+}: PortPickerProps) {
+  return (
+    <div className={styles.portPicker}>
+      <div className={styles.portPickerHeader}>
+        <button
+          type="button"
+          className={styles.portPickerBack}
+          aria-label="Back"
+          onClick={onBack}
+        >
+          <i className="ti ti-chevron-left" aria-hidden /> Back
+        </button>
+        <span className={styles.portPickerTitle}>
+          {step === 'role'
+            ? 'Choose port type'
+            : `Choose connector · ${pickedRole?.label ?? ''}`}
+        </span>
+      </div>
+      {step === 'role'
+        ? ROLE_GROUPS.map((group) => (
+            <div key={group.heading}>
+              <div className={styles.portPickerSection}>{group.heading}</div>
+              {group.options.map((opt) => (
+                <button
+                  key={opt.role}
+                  type="button"
+                  className={styles.portPickerOpt}
+                  onClick={() => onPickRole(opt)}
+                >
+                  <span
+                    className={
+                      opt.signalType === 'midi'
+                        ? styles.jackDotMidi
+                        : styles.jackDotAudio
+                    }
+                    aria-hidden
+                  />
+                  <span className={styles.portPickerOptName}>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          ))
+        : pickedRole?.connectors.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={styles.portPickerOpt}
+              onClick={() => onPickConnector(c)}
+            >
+              <span className={styles.portPickerOptName}>
+                {CONNECTOR_LABELS[c]}
+              </span>
+            </button>
+          ))}
     </div>
   );
 }
