@@ -124,4 +124,37 @@ describe('AddPedalWizard', () => {
     });
     expect(screen.getByText('Continue')).not.toBeDisabled();
   });
+
+  it('jack step toggles audio/MIDI per side and persists power side', async () => {
+    const onCreated = vi.fn();
+    render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
+    fireEvent.click(screen.getByText('Continue'));
+    fillNameSize();
+    fireEvent.click(screen.getByText('Continue'));
+
+    // Default state: Top audio is on. Two "Top" buttons exist — audio and MIDI.
+    // The audio one starts pressed.
+    const topButtons = screen.getAllByRole('button', { name: 'Top' });
+    expect(topButtons[0]?.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(topButtons[0]!); // turn off Top audio
+
+    const rightButtons = screen.getAllByRole('button', { name: 'Right' });
+    fireEvent.click(rightButtons[0]!); // Right audio on
+    fireEvent.click(rightButtons[1]!); // Right MIDI on
+
+    fireEvent.change(screen.getByDisplayValue('Bottom'), {
+      target: { value: 'top' },
+    });
+
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Add to library'));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const created = (await listPedals())[0]!;
+    expect(created.jackSides.top).toBe(false);
+    expect(created.jackSides.right).toBe(true);
+    expect(created.jackSides.midi_right).toBe(true);
+    expect(created.powerSide).toBe('top');
+  });
 });

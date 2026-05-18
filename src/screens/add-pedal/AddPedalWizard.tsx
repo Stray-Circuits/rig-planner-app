@@ -184,7 +184,7 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
     >
       {step === 0 && <ImageStep draft={draft} setDraft={setDraft} />}
       {step === 1 && <NameSizeStep draft={draft} setDraft={setDraft} />}
-      {step === 2 && <JacksStep />}
+      {step === 2 && <JacksStep draft={draft} setDraft={setDraft} />}
       {step === 3 && <ConnectionsStep />}
       {step === 4 && <ReviewStep draft={draft} />}
       {error ? (
@@ -371,11 +371,150 @@ function NameSizeStep({ draft, setDraft }: StepProps) {
   );
 }
 
-function JacksStep() {
+const SIDES_IN_ORDER: { side: Side; label: string }[] = [
+  { side: 'top', label: 'Top' },
+  { side: 'bottom', label: 'Bottom' },
+  { side: 'left', label: 'Left' },
+  { side: 'right', label: 'Right' },
+];
+
+const AUDIO_SIDE_KEY: Record<Side, keyof JackSides> = {
+  top: 'top',
+  bottom: 'bottom',
+  left: 'left',
+  right: 'right',
+};
+
+const MIDI_SIDE_KEY: Record<Side, keyof JackSides> = {
+  top: 'midi_top',
+  bottom: 'midi_bottom',
+  left: 'midi_left',
+  right: 'midi_right',
+};
+
+function JacksStep({ draft, setDraft }: StepProps) {
+  const toggle = (key: keyof JackSides) =>
+    setDraft((d) => ({
+      ...d,
+      jackSides: { ...d.jackSides, [key]: !d.jackSides[key] },
+    }));
+
   return (
-    <div className={styles.stub}>
-      <p>Per-side audio + MIDI toggles land in phase 4c.</p>
-      <p>Default: audio jacks on top, power on the bottom.</p>
+    <div className={styles.jacksStep}>
+      <JackPreview draft={draft} />
+
+      <div className={styles.jackSectionLabel}>Audio jacks</div>
+      <div className={styles.jackGrid}>
+        {SIDES_IN_ORDER.map(({ side, label }) => {
+          const active = draft.jackSides[AUDIO_SIDE_KEY[side]];
+          return (
+            <button
+              key={`audio-${side}`}
+              type="button"
+              className={`${styles.jackChip} ${active ? styles.jackChipActive : ''}`}
+              aria-pressed={active}
+              onClick={() => toggle(AUDIO_SIDE_KEY[side])}
+            >
+              <span
+                className={styles.jackDotAudio}
+                aria-hidden
+                style={{ opacity: active ? 1 : 0.3 }}
+              />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={styles.jackSectionLabel}>MIDI jacks</div>
+      <div className={styles.jackGrid}>
+        {SIDES_IN_ORDER.map(({ side, label }) => {
+          const active = draft.jackSides[MIDI_SIDE_KEY[side]];
+          return (
+            <button
+              key={`midi-${side}`}
+              type="button"
+              className={`${styles.jackChip} ${active ? styles.jackChipActiveMidi : ''}`}
+              aria-pressed={active}
+              onClick={() => toggle(MIDI_SIDE_KEY[side])}
+            >
+              <span
+                className={styles.jackDotMidi}
+                aria-hidden
+                style={{ opacity: active ? 1 : 0.3 }}
+              />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <label className={styles.field}>
+        <span className={styles.label}>Power side</span>
+        <select
+          className={styles.select}
+          value={draft.powerSide ?? ''}
+          onChange={(e) =>
+            setDraft((d) => ({
+              ...d,
+              powerSide: (e.target.value || null) as Side | null,
+            }))
+          }
+        >
+          <option value="">No external power</option>
+          <option value="top">Top</option>
+          <option value="bottom">Bottom</option>
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function JackPreview({ draft }: { draft: WizardDraft }) {
+  const renderDot = (
+    side: Side,
+    position: 'audio' | 'midi',
+    offset: number,
+  ) => {
+    const className =
+      position === 'audio' ? styles.jackDotAudio : styles.jackDotMidi;
+    const style: Record<string, string> = { position: 'absolute' };
+    // 8px from the relevant edge, offset along the perpendicular axis.
+    if (side === 'top') {
+      style.top = '-4px';
+      style.left = position === 'audio' ? `${30 + offset}%` : `${60 + offset}%`;
+    } else if (side === 'bottom') {
+      style.bottom = '-4px';
+      style.left = position === 'audio' ? `${30 + offset}%` : `${60 + offset}%`;
+    } else if (side === 'left') {
+      style.left = '-4px';
+      style.top = position === 'audio' ? `${30 + offset}%` : `${60 + offset}%`;
+    } else {
+      style.right = '-4px';
+      style.top = position === 'audio' ? `${30 + offset}%` : `${60 + offset}%`;
+    }
+    return <span className={className} style={style} aria-hidden />;
+  };
+
+  return (
+    <div className={styles.jackPreviewWrap}>
+      <div
+        className={styles.jackPreviewBox}
+        style={{ background: draft.color }}
+      >
+        {SIDES_IN_ORDER.map(({ side }) => (
+          <span key={side}>
+            {draft.jackSides[AUDIO_SIDE_KEY[side]]
+              ? renderDot(side, 'audio', 0)
+              : null}
+            {draft.jackSides[MIDI_SIDE_KEY[side]]
+              ? renderDot(side, 'midi', 0)
+              : null}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
