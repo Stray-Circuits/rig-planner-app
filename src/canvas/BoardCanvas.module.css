@@ -1,0 +1,22 @@
+.wrap {
+  position: relative;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.5));
+  flex-shrink: 0;
+}
+
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+}
+
+.pedals {
+  position: absolute;
+  inset: 0;
+}
+
+.pedalPos {
+  position: absolute;
+  transform: translate3d(0, 0, 0);
+}

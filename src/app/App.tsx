@@ -4,7 +4,7 @@ import { useRigsStore } from '../stores/rigsStore';
 import { useUiStore } from '../stores/uiStore';
 import { NewRigWizard } from '../screens/new-rig/NewRigWizard';
 import { RigList } from '../screens/rigs/RigList';
-import { RigScreenPlaceholder } from '../screens/rig/RigScreenPlaceholder';
+import { RigScreen } from '../screens/rig/RigScreen';
 import type { Rig } from '../data/schema';
 import styles from './App.module.css';
 
@@ -115,7 +115,5 @@ export function App() {
     return null;
   }
 
-  return (
-    <RigScreenPlaceholder rig={rig} onBack={() => setRoute({ kind: 'rigs' })} />
-  );
+  return <RigScreen rig={rig} onBack={() => setRoute({ kind: 'rigs' })} />;
 }

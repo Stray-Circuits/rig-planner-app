@@ -9,6 +9,21 @@ if (typeof HTMLCanvasElement !== 'undefined') {
   HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
 }
 
+// jsdom also lacks ResizeObserver, which the canvas-area uses for fit-to-view.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class FakeResizeObserver {
+    observe(): void {
+      /* no-op */
+    }
+    unobserve(): void {
+      /* no-op */
+    }
+    disconnect(): void {
+      /* no-op */
+    }
+  };
+}
+
 afterEach(() => {
   cleanup();
 });

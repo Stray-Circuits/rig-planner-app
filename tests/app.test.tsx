@@ -38,7 +38,7 @@ describe('App boot', () => {
     useUiStore.setState({ lastRigId: 'r1' });
     render(<App />);
     expect(await screen.findByText('Main board')).toBeInTheDocument();
-    expect(screen.getByText(/Canvas lands in phase 3/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Pedal library')).toBeInTheDocument();
   });
 
   it('lands on the rig list when rigs exist but no last-opened is set', async () => {
@@ -58,7 +58,7 @@ describe('App boot', () => {
     await screen.findByText('Your rigs');
     fireEvent.click(screen.getByText('Main board'));
     await waitFor(() =>
-      expect(screen.getByText(/Canvas lands in phase 3/)).toBeInTheDocument(),
+      expect(screen.getByLabelText('Pedal library')).toBeInTheDocument(),
     );
   });
 });

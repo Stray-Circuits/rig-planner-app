@@ -1,0 +1,33 @@
+.outer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.body {
+  border-radius: 3px;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s ease;
+  pointer-events: auto;
+}
+
+.label {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+  text-align: center;
+}
