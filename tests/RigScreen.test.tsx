@@ -182,6 +182,26 @@ describe('RigScreen', () => {
     expect(screen.queryByText('Pedal image')).not.toBeInTheDocument();
   });
 
+  it('signal-chain FAB toggles chain mode + port dots', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
+    fireEvent.click(await screen.findByText('DS-1'));
+    await waitFor(() => {
+      expect(
+        usePlacedPedalsStore.getState().byRig[rig.id]?.length,
+      ).toBeGreaterThan(0);
+    });
+    // Default: no port dots visible.
+    expect(screen.queryByLabelText(/DS-1 In/)).not.toBeInTheDocument();
+
+    // Toggle chain mode on.
+    fireEvent.click(screen.getByLabelText('Show signal chain'));
+    // Dots are buttons with label "<pedal name> <port label>"
+    expect(await screen.findByLabelText('DS-1 In')).toBeInTheDocument();
+    expect(screen.getByLabelText('DS-1 Out')).toBeInTheDocument();
+  });
+
   it('zoom controls appear and reset works after a Cmd+wheel zoom', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     await screen.findByTestId('board-canvas');

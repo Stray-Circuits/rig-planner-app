@@ -10,9 +10,11 @@ import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
 import { useViewport } from '../../canvas/useViewport';
 import { centeredOnRig, clampToBoard } from '../../lib/geometry';
+import type { Connection, ExternalEndpoint } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
 import { useRigsStore } from '../../stores/rigsStore';
+import { useSignalChainStore } from '../../stores/signalChainStore';
 import { Sheet, SheetItem } from '../../ui';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from './PedalLibrarySheet';
@@ -22,6 +24,8 @@ import styles from './RigScreen.module.css';
 // Stable reference so the selector below doesn't return a fresh `[]` on
 // every render and re-trigger the component infinitely.
 const EMPTY_PLACED: PlacedPedal[] = [];
+const EMPTY_CONNECTIONS: Connection[] = [];
+const EMPTY_ENDPOINTS: ExternalEndpoint[] = [];
 
 interface RigScreenProps {
   rig: Rig;
@@ -47,10 +51,19 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const renameRig = useRigsStore((s) => s.renameRig);
   const updateBoard = useRigsStore((s) => s.updateBoard);
 
+  const connections = useSignalChainStore(
+    (s) => s.connectionsByRig[rig.id] ?? EMPTY_CONNECTIONS,
+  );
+  const endpoints = useSignalChainStore(
+    (s) => s.endpointsByRig[rig.id] ?? EMPTY_ENDPOINTS,
+  );
+  const loadSignalChain = useSignalChainStore((s) => s.loadForRig);
+
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chainMode, setChainMode] = useState(false);
 
   useEffect(() => {
     if (pedalsStatus === 'idle') void loadPedals();
@@ -58,7 +71,8 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
   useEffect(() => {
     void loadForRig(rig.id);
-  }, [rig.id, loadForRig]);
+    void loadSignalChain(rig.id);
+  }, [rig.id, loadForRig, loadSignalChain]);
 
   const pedalsById = useMemo(() => {
     const m = new Map<string, Pedal>();
@@ -127,6 +141,9 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           void commitMove(id);
         }}
         onRequestActions={setActionsFor}
+        chainMode={chainMode}
+        connections={connections}
+        endpoints={endpoints}
       >
         <div className={styles.fabBackWrap}>
           <button
@@ -139,6 +156,15 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           </button>
         </div>
         <div className={styles.fabActions}>
+          <button
+            type="button"
+            className={`${styles.fab} ${chainMode ? styles.fabActive : ''}`}
+            aria-label={chainMode ? 'Hide signal chain' : 'Show signal chain'}
+            aria-pressed={chainMode}
+            onClick={() => setChainMode((v) => !v)}
+          >
+            <i className="ti ti-route" aria-hidden />
+          </button>
           <button
             type="button"
             className={styles.fab}
@@ -223,6 +249,9 @@ interface CanvasAreaProps {
   onDragMove: (placedId: string, xIn: number, yIn: number) => void;
   onDragCommit: (placedId: string) => void;
   onRequestActions: (placedId: string) => void;
+  chainMode: boolean;
+  connections: Connection[];
+  endpoints: ExternalEndpoint[];
   /** Overlay elements (mobile floating buttons, etc.) painted above the board. */
   children?: ReactNode;
 }
@@ -234,6 +263,9 @@ function CanvasArea({
   onDragMove,
   onDragCommit,
   onRequestActions,
+  chainMode,
+  connections,
+  endpoints,
   children,
 }: CanvasAreaProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -289,6 +321,9 @@ function CanvasArea({
           onDragMove={onDragMove}
           onDragCommit={onDragCommit}
           onRequestActions={onRequestActions}
+          chainMode={chainMode}
+          connections={connections}
+          endpoints={endpoints}
         />
       </div>
       {viewport.scale !== 1 || viewport.panX !== 0 || viewport.panY !== 0 ? (

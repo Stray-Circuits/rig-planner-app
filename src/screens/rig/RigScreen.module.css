@@ -66,6 +66,16 @@
   background: var(--surface);
 }
 
+.fabActive {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.fabActive:hover {
+  background: var(--primary-strong);
+}
+
 .fab:active {
   background: var(--surface-alt);
 }
