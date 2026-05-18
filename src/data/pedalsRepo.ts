@@ -1,0 +1,247 @@
+import { getDb } from './db';
+import type {
+  Connector,
+  JackSides,
+  Pedal,
+  Port,
+  PortRole,
+  Side,
+  SignalType,
+} from './schema';
+import { newId } from '../lib/ids';
+
+interface PedalRow {
+  id: string;
+  brand: string;
+  name: string;
+  width_in: number;
+  depth_in: number;
+  image_path: string | null;
+  jack_top: number;
+  jack_bottom: number;
+  jack_left: number;
+  jack_right: number;
+  midi_top: number;
+  midi_bottom: number;
+  midi_left: number;
+  midi_right: number;
+  power_side: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PortRow {
+  id: string;
+  pedal_id: string;
+  label: string;
+  role: string;
+  signal_type: string;
+  connector: string;
+  side: string;
+  side_order: number;
+  optional: number;
+}
+
+const VALID_SIDES: readonly Side[] = ['top', 'bottom', 'left', 'right'];
+const VALID_ROLES: readonly PortRole[] = [
+  'input',
+  'output',
+  'input_l',
+  'input_r',
+  'stereo_input',
+  'output_l',
+  'output_r',
+  'stereo_output',
+  'fx_send',
+  'fx_return',
+  'midi_in',
+  'midi_out',
+  'expression',
+  'remote',
+  'cv',
+];
+const VALID_SIGNAL: readonly SignalType[] = [
+  'instrument',
+  'line',
+  'line_balanced',
+  'stereo',
+  'amp_level',
+  'midi',
+  'cv',
+  'expression',
+  'remote',
+];
+const VALID_CONN: readonly Connector[] = [
+  'ts',
+  'trs',
+  'xlr',
+  'midi_din',
+  'midi_trs',
+];
+
+function assertSide(s: string): Side {
+  if ((VALID_SIDES as readonly string[]).includes(s)) return s as Side;
+  throw new Error(`Unknown side "${s}"`);
+}
+function assertRole(s: string): PortRole {
+  if ((VALID_ROLES as readonly string[]).includes(s)) return s as PortRole;
+  throw new Error(`Unknown port role "${s}"`);
+}
+function assertSignal(s: string): SignalType {
+  if ((VALID_SIGNAL as readonly string[]).includes(s)) return s as SignalType;
+  throw new Error(`Unknown signal type "${s}"`);
+}
+function assertConn(s: string): Connector {
+  if ((VALID_CONN as readonly string[]).includes(s)) return s as Connector;
+  throw new Error(`Unknown connector "${s}"`);
+}
+
+function pedalFromRow(row: PedalRow, ports: Port[]): Pedal {
+  const jackSides: JackSides = {
+    top: !!row.jack_top,
+    bottom: !!row.jack_bottom,
+    left: !!row.jack_left,
+    right: !!row.jack_right,
+    midi_top: !!row.midi_top,
+    midi_bottom: !!row.midi_bottom,
+    midi_left: !!row.midi_left,
+    midi_right: !!row.midi_right,
+  };
+  return {
+    id: row.id,
+    brand: row.brand,
+    name: row.name,
+    widthIn: row.width_in,
+    depthIn: row.depth_in,
+    imagePath: row.image_path,
+    jackSides,
+    powerSide: row.power_side ? assertSide(row.power_side) : null,
+    ports,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function portFromRow(row: PortRow): Port {
+  return {
+    id: row.id,
+    pedalId: row.pedal_id,
+    label: row.label,
+    role: assertRole(row.role),
+    signalType: assertSignal(row.signal_type),
+    connector: assertConn(row.connector),
+    side: assertSide(row.side),
+    sideOrder: row.side_order,
+    optional: !!row.optional,
+  };
+}
+
+export interface CreatePedalInput {
+  id?: string;
+  brand: string;
+  name: string;
+  widthIn: number;
+  depthIn: number;
+  imagePath?: string | null;
+  jackSides: JackSides;
+  powerSide?: Side | null;
+  ports: Omit<Port, 'id' | 'pedalId'>[];
+}
+
+export async function listPedals(): Promise<Pedal[]> {
+  const db = await getDb();
+  const pedalRows = await db.select<PedalRow>(
+    'SELECT * FROM pedals ORDER BY brand ASC',
+  );
+  if (pedalRows.length === 0) return [];
+  const result: Pedal[] = [];
+  for (const row of pedalRows) {
+    const portRows = await db.select<PortRow>(
+      'SELECT * FROM ports WHERE pedal_id = ?',
+      [row.id],
+    );
+    const ports = portRows
+      .map(portFromRow)
+      .sort((a, b) => a.sideOrder - b.sideOrder);
+    result.push(pedalFromRow(row, ports));
+  }
+  // Stable secondary sort by name within brand
+  return result.sort((a, b) => {
+    if (a.brand !== b.brand) return a.brand < b.brand ? -1 : 1;
+    return a.name < b.name ? -1 : 1;
+  });
+}
+
+export async function getPedal(id: string): Promise<Pedal | null> {
+  const db = await getDb();
+  const rows = await db.select<PedalRow>('SELECT * FROM pedals WHERE id = ?', [
+    id,
+  ]);
+  const row = rows[0];
+  if (!row) return null;
+  const portRows = await db.select<PortRow>(
+    'SELECT * FROM ports WHERE pedal_id = ?',
+    [id],
+  );
+  const ports = portRows
+    .map(portFromRow)
+    .sort((a, b) => a.sideOrder - b.sideOrder);
+  return pedalFromRow(row, ports);
+}
+
+export async function createPedal(input: CreatePedalInput): Promise<Pedal> {
+  const id = input.id ?? newId();
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO pedals (
+      id, brand, name, width_in, depth_in, image_path,
+      jack_top, jack_bottom, jack_left, jack_right,
+      midi_top, midi_bottom, midi_left, midi_right,
+      power_side
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      input.brand,
+      input.name,
+      input.widthIn,
+      input.depthIn,
+      input.imagePath ?? null,
+      input.jackSides.top ? 1 : 0,
+      input.jackSides.bottom ? 1 : 0,
+      input.jackSides.left ? 1 : 0,
+      input.jackSides.right ? 1 : 0,
+      input.jackSides.midi_top ? 1 : 0,
+      input.jackSides.midi_bottom ? 1 : 0,
+      input.jackSides.midi_left ? 1 : 0,
+      input.jackSides.midi_right ? 1 : 0,
+      input.powerSide ?? null,
+    ],
+  );
+  for (const port of input.ports) {
+    await db.execute(
+      `INSERT INTO ports (
+        id, pedal_id, label, role, signal_type, connector, side, side_order, optional
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        newId(),
+        id,
+        port.label,
+        port.role,
+        port.signalType,
+        port.connector,
+        port.side,
+        port.sideOrder,
+        port.optional ? 1 : 0,
+      ],
+    );
+  }
+  const created = await getPedal(id);
+  if (!created) throw new Error('Pedal insert succeeded but row not found');
+  return created;
+}
+
+export async function deletePedal(id: string): Promise<void> {
+  const db = await getDb();
+  // CASCADE handles the ports table.
+  await db.execute('DELETE FROM pedals WHERE id = ?', [id]);
+}
