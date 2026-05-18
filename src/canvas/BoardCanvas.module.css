@@ -19,4 +19,9 @@
 .pedalPos {
   position: absolute;
   transform: translate3d(0, 0, 0);
+  cursor: grab;
+}
+
+.pedalPos:active {
+  cursor: grabbing;
 }

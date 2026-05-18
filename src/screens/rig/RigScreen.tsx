@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Pedal, Rig } from '../../data/schema';
+import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
 import { colorFromImagePath } from '../../data/seedPedals';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
+import { centeredOnRig } from '../../lib/geometry';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
-import type { PlacedPedal } from '../../data/schema';
 import { Button } from '../../ui';
 import styles from './RigScreen.module.css';
 
@@ -25,6 +25,9 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
   const placed = usePlacedPedalsStore((s) => s.byRig[rig.id] ?? EMPTY_PLACED);
   const loadForRig = usePlacedPedalsStore((s) => s.loadForRig);
+  const addPedalToRig = usePlacedPedalsStore((s) => s.addPedalToRig);
+  const dragMove = usePlacedPedalsStore((s) => s.dragMove);
+  const commitMove = usePlacedPedalsStore((s) => s.commitMove);
 
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
@@ -42,6 +45,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     for (const p of pedals) m.set(p.id, p);
     return m;
   }, [pedals]);
+
+  const handleAddPedal = (pedal: Pedal) => {
+    const { xIn, yIn } = centeredOnRig(pedal, rig);
+    void addPedalToRig(rig.id, pedal.id, xIn, yIn);
+  };
 
   const handleSeed = () => {
     void (async () => {
@@ -85,10 +93,19 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           onSeed={handleSeed}
           seeding={seeding}
           seedError={seedError}
+          onDragMove={dragMove}
+          onDragCommit={(id) => {
+            void commitMove(id);
+          }}
         />
 
         <aside className={styles.sidebar} aria-label="Pedal library">
-          <Sidebar pedals={pedals} seeding={seeding} onSeed={handleSeed} />
+          <Sidebar
+            pedals={pedals}
+            seeding={seeding}
+            onSeed={handleSeed}
+            onAddPedal={handleAddPedal}
+          />
         </aside>
       </div>
 
@@ -96,9 +113,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         <span className={styles.bottomHint}>
           {placed.length} placed · style: {rig.style}
         </span>
-        <span className={styles.bottomHint}>
-          Phase 3b — interactions land next
-        </span>
+        <span className={styles.bottomHint}>Tap a pedal to add</span>
       </footer>
     </div>
   );
@@ -106,12 +121,14 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
 interface CanvasAreaProps {
   rig: Rig;
-  placed: ReturnType<typeof usePlacedPedalsStore.getState>['byRig'][string];
+  placed: PlacedPedal[];
   pedalsById: Map<string, Pedal>;
   empty: boolean;
   onSeed: () => void;
   seeding: boolean;
   seedError: string | null;
+  onDragMove: (placedId: string, xIn: number, yIn: number) => void;
+  onDragCommit: (placedId: string) => void;
 }
 
 function CanvasArea({
@@ -122,6 +139,8 @@ function CanvasArea({
   onSeed,
   seeding,
   seedError,
+  onDragMove,
+  onDragCommit,
 }: CanvasAreaProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [pxPerInch, setPxPerInch] = useState(18);
@@ -148,9 +167,11 @@ function CanvasArea({
     <div className={styles.canvasArea} ref={wrapRef}>
       <BoardCanvas
         rig={rig}
-        placed={placed ?? []}
+        placed={placed}
         pedalsById={pedalsById}
         pxPerInch={pxPerInch}
+        onDragMove={onDragMove}
+        onDragCommit={onDragCommit}
       />
       {empty ? (
         <div className={styles.emptyOverlay}>
@@ -175,9 +196,10 @@ interface SidebarProps {
   pedals: Pedal[];
   seeding: boolean;
   onSeed: () => void;
+  onAddPedal: (pedal: Pedal) => void;
 }
 
-function Sidebar({ pedals, seeding, onSeed }: SidebarProps) {
+function Sidebar({ pedals, seeding, onSeed, onAddPedal }: SidebarProps) {
   return (
     <>
       <div className={styles.sidebarHeader}>
@@ -185,7 +207,13 @@ function Sidebar({ pedals, seeding, onSeed }: SidebarProps) {
       </div>
       <div className={styles.pedalList}>
         {pedals.map((p) => (
-          <div key={p.id} className={styles.pedalEntry} title={p.name}>
+          <button
+            key={p.id}
+            type="button"
+            className={styles.pedalEntry}
+            title={`Add ${p.name} to rig`}
+            onClick={() => onAddPedal(p)}
+          >
             <span
               className={styles.pedalThumb}
               style={{
@@ -197,7 +225,7 @@ function Sidebar({ pedals, seeding, onSeed }: SidebarProps) {
               <div className={styles.pedalName}>{p.name}</div>
               <div className={styles.pedalBrand}>{p.brand}</div>
             </div>
-          </div>
+          </button>
         ))}
         {pedals.length === 0 ? (
           <p className={styles.sidebarMuted}>No pedals yet.</p>

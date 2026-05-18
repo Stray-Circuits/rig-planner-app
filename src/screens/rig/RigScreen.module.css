@@ -145,10 +145,20 @@
   gap: 10px;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
+  background: transparent;
+  border: 0.5px solid transparent;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
 }
 
 .pedalEntry:hover {
   background: var(--surface-alt);
+  border-color: var(--border);
+}
+
+.pedalEntry:active {
+  background: var(--primary-bg);
 }
 
 .pedalThumb {

@@ -60,4 +60,20 @@ describe('RigScreen', () => {
     fireEvent.click(screen.getByLabelText('Back to rigs'));
     expect(onBack).toHaveBeenCalledOnce();
   });
+
+  it('tapping a sidebar pedal adds it to the rig at the center', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(await screen.findByText('Seed sample pedals'));
+    await screen.findByText('DS-1');
+
+    fireEvent.click(screen.getByTitle('Add DS-1 to rig'));
+    await waitFor(() => {
+      const byRig = usePlacedPedalsStore.getState().byRig[rig.id] ?? [];
+      expect(byRig).toHaveLength(1);
+    });
+    const placed = usePlacedPedalsStore.getState().byRig[rig.id]?.[0];
+    // 24" × 8" rig, DS-1 is 2.85 × 4.75. Center should be ~(10.575, 1.625).
+    expect(placed?.xIn).toBeCloseTo((24 - 2.85) / 2, 1);
+    expect(placed?.yIn).toBeCloseTo((8 - 4.75) / 2, 1);
+  });
 });

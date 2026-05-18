@@ -21,6 +21,11 @@ interface PlacedState {
     xIn: number,
     yIn: number,
   ) => Promise<PlacedPedal>;
+  /** In-memory move during a drag; does NOT touch the DB. */
+  dragMove: (placedId: string, xIn: number, yIn: number) => void;
+  /** Persist the current position of `placedId` to the DB. */
+  commitMove: (placedId: string) => Promise<void>;
+  /** One-shot move with persistence. Used outside of drag gestures. */
   move: (placedId: string, xIn: number, yIn: number) => Promise<void>;
   rotate: (
     placedId: string,
@@ -71,10 +76,25 @@ export const usePlacedPedalsStore = create<PlacedState>((set, get) => ({
     return placed;
   },
 
+  dragMove: (placedId, xIn, yIn) => {
+    const found = findRigOf(get().byRig, placedId);
+    if (!found) return;
+    set((s) => ({
+      byRig: updateRigList(s.byRig, found.rigId, (list) =>
+        list.map((p) => (p.id === placedId ? { ...p, xIn, yIn } : p)),
+      ),
+    }));
+  },
+
+  commitMove: async (placedId) => {
+    const found = findRigOf(get().byRig, placedId);
+    if (!found) return;
+    await movePlaced(placedId, found.placed.xIn, found.placed.yIn);
+  },
+
   move: async (placedId, xIn, yIn) => {
     const found = findRigOf(get().byRig, placedId);
     if (!found) return;
-    // Optimistic update first so the UI feels instant.
     set((s) => ({
       byRig: updateRigList(s.byRig, found.rigId, (list) =>
         list.map((p) => (p.id === placedId ? { ...p, xIn, yIn } : p)),
