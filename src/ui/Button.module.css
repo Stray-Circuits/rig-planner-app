@@ -1,0 +1,77 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  border: 0.5px solid transparent;
+  transition: background-color 0.12s ease;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.sm {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.md {
+  font-size: 14px;
+  padding: 10px 14px;
+}
+.lg {
+  font-size: 15px;
+  padding: 14px 18px;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.primary {
+  background: var(--primary);
+  color: #fff;
+}
+.primary:hover:not(:disabled) {
+  background: var(--primary-strong);
+}
+.primary:disabled {
+  background: var(--border);
+  color: var(--muted-soft);
+}
+
+.secondary {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.secondary:hover:not(:disabled) {
+  background: var(--surface-alt);
+}
+.secondary:disabled {
+  color: var(--muted-soft);
+  border-color: var(--border);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--muted);
+}
+.ghost:hover:not(:disabled) {
+  background: var(--surface-alt);
+  color: var(--fg);
+}
+
+.danger {
+  background: var(--danger);
+  color: #fff;
+}
+.danger:hover:not(:disabled) {
+  background: #a51f1f;
+}
