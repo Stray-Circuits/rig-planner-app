@@ -88,3 +88,8 @@ export function getDb(): Promise<DbAdapter> {
 export function __resetDbForTests(): void {
   adapterPromise = null;
 }
+
+/** Test-only: inject a fake adapter to bypass init. */
+export function __setDbForTests(adapter: DbAdapter): void {
+  adapterPromise = Promise.resolve(adapter);
+}
