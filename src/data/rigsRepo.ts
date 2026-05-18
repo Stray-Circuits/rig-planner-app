@@ -109,6 +109,23 @@ export async function updateRigDimensions(
   );
 }
 
+/** Atomically swap board dimensions + style. Used when "changing the board" via the picker. */
+export async function updateRigBoard(
+  id: string,
+  widthIn: number,
+  depthIn: number,
+  style: BoardStyle,
+): Promise<void> {
+  if (widthIn <= 0 || depthIn <= 0) {
+    throw new Error('Rig dimensions must be positive');
+  }
+  const db = await getDb();
+  await db.execute(
+    `UPDATE rigs SET width_in = ?, depth_in = ?, style = ?, updated_at = datetime('now') WHERE id = ?`,
+    [widthIn, depthIn, style, id],
+  );
+}
+
 export async function duplicateRig(id: string): Promise<Rig> {
   const source = await getRig(id);
   if (!source) throw new Error(`Rig ${id} not found`);

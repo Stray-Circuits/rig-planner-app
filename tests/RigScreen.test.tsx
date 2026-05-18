@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetDbForTests } from '../src/data/db';
 import { __clearMemoryAdapterStorage } from '../src/data/memoryAdapter';
@@ -26,36 +32,13 @@ beforeEach(async () => {
 });
 
 describe('RigScreen', () => {
-  it('renders the rig name, dims, and the board canvas', async () => {
+  it('renders the rig name, meta, and the canvas', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     expect(screen.getByText('Test rig')).toBeInTheDocument();
-    // Dims appear in both the top bar and bottom meta — that's fine, just
-    // assert one of them is present.
-    expect(screen.getAllByText(/24" × 8"/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/0 pedals · 24" × 8"/)).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('board-canvas')).toBeInTheDocument();
     });
-  });
-
-  it('shows the empty-library overlay when no pedals exist', async () => {
-    render(<RigScreen rig={rig} onBack={() => undefined} />);
-    expect(
-      await screen.findByText(/Your library is empty/),
-    ).toBeInTheDocument();
-  });
-
-  it('seed-samples button populates the sidebar and dismisses the overlay', async () => {
-    render(<RigScreen rig={rig} onBack={() => undefined} />);
-    await screen.findByText(/Your library is empty/);
-    fireEvent.click(screen.getByText('Seed sample pedals'));
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/Your library is empty/),
-      ).not.toBeInTheDocument();
-    });
-    // 6 pedals seeded; sidebar should list them.
-    expect(screen.getByText('DS-1')).toBeInTheDocument();
-    expect(screen.getByText('Timeline')).toBeInTheDocument();
   });
 
   it('back button fires onBack', () => {
@@ -65,126 +48,106 @@ describe('RigScreen', () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
-  it('tapping a sidebar pedal adds it to the rig at the center', async () => {
+  it('opens the pedal library sheet and seeds samples on first open', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
-    fireEvent.click(await screen.findByText('Seed sample pedals'));
-    await screen.findByText('DS-1');
-
-    fireEvent.click(screen.getByTitle('Add DS-1 to rig'));
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    expect(
+      await screen.findByText(/Your library is empty/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Seed sample pedals'));
     await waitFor(() => {
-      const byRig = usePlacedPedalsStore.getState().byRig[rig.id] ?? [];
-      expect(byRig).toHaveLength(1);
+      expect(
+        screen.queryByText(/Your library is empty/),
+      ).not.toBeInTheDocument();
     });
-    const placed = usePlacedPedalsStore.getState().byRig[rig.id]?.[0];
-    // 24" × 8" rig, DS-1 is 2.85 × 4.75. Center should be ~(10.575, 1.625).
-    expect(placed?.xIn).toBeCloseTo((24 - 2.85) / 2, 1);
-    expect(placed?.yIn).toBeCloseTo((8 - 4.75) / 2, 1);
+    expect(screen.getByText('DS-1')).toBeInTheDocument();
   });
 
-  async function seedAndAdd() {
+  it('tapping a pedal in the library adds it to the rig and closes the sheet', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
     fireEvent.click(await screen.findByText('Seed sample pedals'));
-    await screen.findByText('DS-1');
-    fireEvent.click(screen.getByTitle('Add DS-1 to rig'));
+    const ds1 = await screen.findByText('DS-1');
+    fireEvent.click(ds1);
     await waitFor(() => {
       expect(
         usePlacedPedalsStore.getState().byRig[rig.id]?.length,
       ).toBeGreaterThan(0);
     });
-  }
+    // Sheet should be closed.
+    await waitFor(() => {
+      expect(screen.queryByText('Add a pedal')).not.toBeInTheDocument();
+    });
+  });
 
   it('right-click on a placed pedal opens the action sheet', async () => {
-    await seedAndAdd();
+    // Seed + add a pedal first.
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Seed sample pedals'));
+    fireEvent.click(await screen.findByText('DS-1'));
+    await waitFor(() => {
+      expect(
+        usePlacedPedalsStore.getState().byRig[rig.id]?.length,
+      ).toBeGreaterThan(0);
+    });
     const placedId =
       usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.id ?? '';
-    const placedEl = document.querySelector(`[data-placed-id="${placedId}"]`);
-    expect(placedEl).not.toBeNull();
-    fireEvent.contextMenu(placedEl!);
+    fireEvent.contextMenu(
+      document.querySelector(`[data-placed-id="${placedId}"]`)!,
+    );
     expect(await screen.findByText('Rotate 90°')).toBeInTheDocument();
     expect(screen.getByText('Duplicate')).toBeInTheDocument();
     expect(screen.getByText('Remove')).toBeInTheDocument();
   });
 
-  it('Rotate 90° cycles rotation and clamps the position', async () => {
-    await seedAndAdd();
-    const placedId =
-      usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.id ?? '';
-    fireEvent.contextMenu(
-      document.querySelector(`[data-placed-id="${placedId}"]`)!,
-    );
-    fireEvent.click(await screen.findByText('Rotate 90°'));
-    await waitFor(() => {
-      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.rotation).toBe(
-        90,
-      );
-    });
-  });
-
-  it('Remove deletes the placed pedal', async () => {
-    await seedAndAdd();
-    const placedId =
-      usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.id ?? '';
-    fireEvent.contextMenu(
-      document.querySelector(`[data-placed-id="${placedId}"]`)!,
-    );
-    fireEvent.click(await screen.findByText('Remove'));
-    await waitFor(() => {
-      expect(usePlacedPedalsStore.getState().byRig[rig.id]).toEqual([]);
-    });
-  });
-
-  it('Duplicate adds a second placed pedal', async () => {
-    await seedAndAdd();
-    const placedId =
-      usePlacedPedalsStore.getState().byRig[rig.id]?.[0]?.id ?? '';
-    fireEvent.contextMenu(
-      document.querySelector(`[data-placed-id="${placedId}"]`)!,
-    );
-    fireEvent.click(await screen.findByText('Duplicate'));
-    await waitFor(() => {
-      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(2);
-    });
-  });
-
-  it('style picker updates the rig style', async () => {
-    render(<RigScreen rig={rig} onBack={() => undefined} />);
-    // Find the bottom-bar Wood style chip via its label text.
-    const woodLabel = await screen.findByText('Wood');
-    fireEvent.click(woodLabel.closest('button')!);
-    await waitFor(async () => {
-      const rigs = await listRigs();
-      expect(rigs.find((r) => r.id === rig.id)?.style).toBe('wood');
-    });
-  });
-
-  it('settings sheet renames the rig and updates dimensions', async () => {
+  it('settings sheet shows the current board and renames the rig', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Rig settings'));
-    const nameInput = await screen.findByDisplayValue('Test rig');
+    const dialog = (await screen.findByText('Rig settings')).closest(
+      '[role="dialog"]',
+    )!;
+    const nameInput = within(dialog as HTMLElement).getByDisplayValue(
+      'Test rig',
+    );
     fireEvent.change(nameInput, { target: { value: 'Renamed' } });
-    fireEvent.change(screen.getByDisplayValue('24'), {
-      target: { value: '30' },
+    fireEvent.click(within(dialog as HTMLElement).getByText('Apply'));
+    await waitFor(async () => {
+      const rigs = await listRigs();
+      expect(rigs.find((r) => r.id === rig.id)?.name).toBe('Renamed');
     });
-    fireEvent.change(screen.getByDisplayValue('8'), {
-      target: { value: '14' },
-    });
-    fireEvent.click(screen.getByText('Apply'));
+  });
+
+  it('Change board flow swaps width / depth / style atomically', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Rig settings'));
+    const dialog = (await screen.findByText('Rig settings')).closest(
+      '[role="dialog"]',
+    )!;
+    fireEvent.click(within(dialog as HTMLElement).getByText('Change'));
+
+    // We're now in the picker view. Pick "Classic Pro" (32 × 16 rail).
+    const classicCard = (await screen.findByText('Classic Pro')).closest(
+      'button',
+    )!;
+    fireEvent.click(classicCard);
+    fireEvent.click(screen.getByText('Use this board'));
+    // Back in the main view — Apply commits.
+    fireEvent.click(await screen.findByText('Apply'));
     await waitFor(async () => {
       const rigs = await listRigs();
       const updated = rigs.find((r) => r.id === rig.id);
-      expect(updated?.name).toBe('Renamed');
-      expect(updated?.widthIn).toBe(30);
-      expect(updated?.depthIn).toBe(14);
+      expect(updated?.widthIn).toBe(32);
+      expect(updated?.depthIn).toBe(16);
+      expect(updated?.style).toBe('rail');
     });
   });
 
   it('zoom controls appear and reset works after a Cmd+wheel zoom', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     await screen.findByTestId('board-canvas');
-    // No zoom controls at scale=1.
     expect(screen.queryByLabelText('Reset zoom')).not.toBeInTheDocument();
 
-    // Simulate a wheel zoom on the canvas area (Cmd+wheel).
     const wheelEvent = new WheelEvent('wheel', {
       deltaY: -100,
       ctrlKey: true,

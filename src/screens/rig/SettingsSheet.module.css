@@ -1,0 +1,77 @@
+.body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pickerBody {
+  padding: 14px 16px;
+  max-height: 70dvh;
+  overflow-y: auto;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.boardSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border);
+  background: var(--surface-alt);
+}
+
+.boardThumb {
+  flex-shrink: 0;
+  padding: 4px;
+  background: #888;
+  border-radius: 3px;
+}
+
+.boardInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.boardName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.boardStyle {
+  font-size: 11px;
+  color: var(--muted-soft);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.changedTag {
+  color: var(--primary-fg);
+  font-weight: 500;
+}
+
+.error {
+  font-size: 12px;
+  color: var(--danger-fg);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
