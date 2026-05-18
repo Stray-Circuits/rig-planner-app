@@ -141,4 +141,29 @@ describe('RigScreen', () => {
       expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(2);
     });
   });
+
+  it('zoom controls appear and reset works after a Cmd+wheel zoom', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    await screen.findByTestId('board-canvas');
+    // No zoom controls at scale=1.
+    expect(screen.queryByLabelText('Reset zoom')).not.toBeInTheDocument();
+
+    // Simulate a wheel zoom on the canvas area (Cmd+wheel).
+    const wheelEvent = new WheelEvent('wheel', {
+      deltaY: -100,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    const canvasArea = screen.getByTestId('board-canvas').parentElement
+      ?.parentElement;
+    canvasArea?.dispatchEvent(wheelEvent);
+
+    const resetBtn = await screen.findByLabelText('Reset zoom');
+    expect(resetBtn).toBeInTheDocument();
+    fireEvent.click(resetBtn);
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Reset zoom')).not.toBeInTheDocument();
+    });
+  });
 });

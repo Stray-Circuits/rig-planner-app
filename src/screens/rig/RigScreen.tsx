@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
 import { colorFromImagePath } from '../../data/seedPedals';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
+import { useViewport } from '../../canvas/useViewport';
 import { centeredOnRig, clampToBoard } from '../../lib/geometry';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
@@ -217,6 +218,8 @@ function CanvasArea({
 }: CanvasAreaProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [pxPerInch, setPxPerInch] = useState(18);
+  const { viewport, pointerHandlers, attachWheel, reset, setScale } =
+    useViewport();
 
   // Fit the board into the available viewport whenever the wrap resizes.
   useEffect(() => {
@@ -236,17 +239,70 @@ function CanvasArea({
     return () => ro.disconnect();
   }, [rig.widthIn, rig.depthIn]);
 
+  const wrapRefCallback = useCallback(
+    (el: HTMLDivElement | null) => {
+      wrapRef.current = el;
+      attachWheel(el);
+    },
+    [attachWheel],
+  );
+
   return (
-    <div className={styles.canvasArea} ref={wrapRef}>
-      <BoardCanvas
-        rig={rig}
-        placed={placed}
-        pedalsById={pedalsById}
-        pxPerInch={pxPerInch}
-        onDragMove={onDragMove}
-        onDragCommit={onDragCommit}
-        onRequestActions={onRequestActions}
-      />
+    <div
+      className={styles.canvasArea}
+      ref={wrapRefCallback}
+      onPointerDown={pointerHandlers.onPointerDown}
+      onPointerMove={pointerHandlers.onPointerMove}
+      onPointerUp={pointerHandlers.onPointerUp}
+      onPointerCancel={pointerHandlers.onPointerCancel}
+    >
+      <div
+        className={styles.canvasTransform}
+        style={{
+          transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.scale})`,
+        }}
+      >
+        <BoardCanvas
+          rig={rig}
+          placed={placed}
+          pedalsById={pedalsById}
+          pxPerInch={pxPerInch}
+          onDragMove={onDragMove}
+          onDragCommit={onDragCommit}
+          onRequestActions={onRequestActions}
+        />
+      </div>
+      {viewport.scale !== 1 || viewport.panX !== 0 || viewport.panY !== 0 ? (
+        <div className={styles.zoomControls}>
+          <button
+            type="button"
+            className={styles.zoomBtn}
+            aria-label="Reset zoom"
+            onClick={reset}
+          >
+            <i className="ti ti-focus-centered" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={styles.zoomBtn}
+            aria-label="Zoom out"
+            onClick={() => setScale(viewport.scale * 0.8)}
+          >
+            <i className="ti ti-minus" aria-hidden />
+          </button>
+          <span className={styles.zoomLabel}>
+            {Math.round(viewport.scale * 100)}%
+          </span>
+          <button
+            type="button"
+            className={styles.zoomBtn}
+            aria-label="Zoom in"
+            onClick={() => setScale(viewport.scale * 1.25)}
+          >
+            <i className="ti ti-plus" aria-hidden />
+          </button>
+        </div>
+      ) : null}
       {empty ? (
         <div className={styles.emptyOverlay}>
           <p>Your library is empty.</p>

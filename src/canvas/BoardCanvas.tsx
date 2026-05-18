@@ -138,6 +138,9 @@ export function BoardCanvas({
         longPressFired: false,
       };
       e.currentTarget.setPointerCapture(e.pointerId);
+      // Pedal drag owns this pointer; don't let canvas-level pinch/pan
+      // gestures pick it up.
+      e.stopPropagation();
     },
     [onDragMove, onRequestActions, pedalsById, pointerToInches],
   );
