@@ -31,7 +31,13 @@ export function BoardThumb({
     canvas.height = Math.round(height * dpr);
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    const ctx = canvas.getContext('2d');
+    let ctx: CanvasRenderingContext2D | null = null;
+    try {
+      ctx = canvas.getContext('2d');
+    } catch {
+      // jsdom and some sandboxed environments don't implement Canvas2D.
+      return;
+    }
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const draw = BOARD_DRAWERS[style];
