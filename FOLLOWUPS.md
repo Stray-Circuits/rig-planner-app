@@ -41,13 +41,6 @@ links the phase that originated it so we know roughly when it was set aside.
 
 ## Image upload / background removal
 
-- **Storage quota** *(Phase 5)* — pedal photos are stored as data: URLs in
-  `pedals.image_path`. In browser dev mode that's localStorage, which is
-  ~5MB per origin. At ~200KB per 1024px transparent PNG, we hit the quota
-  around 20–25 pedals and `createPedal` will start throwing
-  `QuotaExceededError`. Tauri's SQLite has no practical limit. Worth
-  surfacing as a user-visible warning when localStorage gets close to
-  full, or moving to OPFS/IndexedDB for browser dev.
 
 ## Board presets
 

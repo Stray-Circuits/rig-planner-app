@@ -10,6 +10,7 @@ import type {
 } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { createPedal } from '../../data/pedalsRepo';
+import { isQuotaExceededError } from '../../data/memoryAdapter';
 import {
   blobToDataURL,
   cropToContent,
@@ -171,7 +172,13 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
       await reloadPedals();
       onCreated(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (isQuotaExceededError(err)) {
+        setError(
+          'Browser storage is full. Pedal photos take a few hundred KB each — pick a placeholder color instead, or delete unused pedals first. Tauri/desktop builds have no such limit.',
+        );
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       setSubmitting(false);
     }

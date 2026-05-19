@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Pedal } from '../../data/schema';
 import { pedalImageStyle } from '../../lib/pedalImage';
+import { getLocalStorageUsageFraction } from '../../data/memoryAdapter';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { Button, Sheet, SheetItem } from '../../ui';
 import styles from './PedalLibrarySheet.module.css';
@@ -36,6 +37,15 @@ export function PedalLibrarySheet({
 
   const usage = usePedalsStore((s) => s.usage);
   const deletePedal = usePedalsStore((s) => s.deletePedal);
+
+  // Re-poll the localStorage usage every time the sheet opens or the pedal
+  // list changes (which is when usage moves). Browser dev only; Tauri's
+  // SQLite has no comparable limit and this returns 0 there.
+  const [quotaFraction, setQuotaFraction] = useState<number | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setQuotaFraction(getLocalStorageUsageFraction());
+  }, [open, pedals.length]);
 
   const handleSeed = () => {
     void (async () => {
@@ -82,6 +92,14 @@ export function PedalLibrarySheet({
     <>
       <Sheet open={open} onClose={onClose} title="Add a pedal">
         <div className={styles.body}>
+          {quotaFraction !== null && quotaFraction >= 0.7 ? (
+            <div className={styles.quotaWarn} role="status">
+              <i className="ti ti-database-exclamation" aria-hidden /> Browser
+              storage is {Math.round(quotaFraction * 100)}% full. New pedal
+              photos may start failing — pick placeholder colors, or remove
+              unused pedals. Tauri/desktop builds aren&apos;t limited.
+            </div>
+          ) : null}
           <ul className={styles.list}>
             <li>
               <button

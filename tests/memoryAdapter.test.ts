@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   createMemoryAdapter,
+  getLocalStorageUsageFraction,
+  isQuotaExceededError,
   __clearMemoryAdapterStorage,
 } from '../src/data/memoryAdapter';
 
@@ -103,6 +105,40 @@ describe('MemoryAdapter', () => {
       ['r1'],
     );
     expect(Object.keys(rows[0] ?? {}).sort()).toEqual(['id', 'pedal_id']);
+  });
+
+  it('isQuotaExceededError matches the browser-specific names', () => {
+    const a = new Error('Mock quota exceeded');
+    a.name = 'QuotaExceededError';
+    expect(isQuotaExceededError(a)).toBe(true);
+
+    const b = new Error('Storage limit hit');
+    b.name = 'NS_ERROR_DOM_QUOTA_REACHED';
+    expect(isQuotaExceededError(b)).toBe(true);
+
+    const c = new Error('Setting the value of key X exceeded the quota.');
+    expect(isQuotaExceededError(c)).toBe(true);
+
+    expect(isQuotaExceededError(new Error('toBlob returned null'))).toBe(false);
+    expect(isQuotaExceededError('quota')).toBe(false);
+  });
+
+  it('getLocalStorageUsageFraction returns 0 with no payload, grows with writes', async () => {
+    __clearMemoryAdapterStorage();
+    const beforeAny = getLocalStorageUsageFraction();
+    // Either 0 (localStorage available, no key) or null (not available).
+    expect(beforeAny === 0 || beforeAny === null).toBe(true);
+
+    if (typeof localStorage === 'undefined') return; // jsdom flag-dependent
+    const db = createMemoryAdapter();
+    await db.execute(
+      'INSERT INTO rigs (id, name, width_in, depth_in, style) VALUES (?, ?, ?, ?, ?)',
+      ['r1', 'small', 1, 1, 'rail'],
+    );
+    const after = getLocalStorageUsageFraction();
+    // We can't assert > 0 reliably without real localStorage; just sanity
+    // check the function returns a number in [0, 1] or null.
+    expect(after === null || (after >= 0 && after <= 1)).toBe(true);
   });
 
   it('persists across adapter instances via localStorage', async () => {

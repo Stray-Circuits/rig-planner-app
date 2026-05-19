@@ -23,6 +23,44 @@ type Table = Map<string, Row>;
 
 const STORAGE_KEY = 'rig-planner-memory-db';
 
+/** Rough origin quota assumed by mainstream browsers for localStorage. */
+const ASSUMED_QUOTA_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Best-effort estimate of how full the memory-adapter's localStorage payload
+ * is. Returns 0..1 (fraction of the assumed ~5MB origin quota), or null when
+ * localStorage isn't reachable. Lets us proactively warn before a write
+ * trips QuotaExceededError. Only meaningful in browser dev mode — the Tauri
+ * build never persists here.
+ */
+export function getLocalStorageUsageFraction(): number | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === null) return 0;
+    // Each UTF-16 code unit is 2 bytes; lengths are close enough for a
+    // sanity check, especially since our writes are pure ASCII JSON +
+    // base64 data URLs.
+    const bytes = raw.length * 2;
+    return Math.min(1, bytes / ASSUMED_QUOTA_BYTES);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True iff an error looks like a localStorage quota failure (the names
+ * differ across browsers, hence the broad heuristic).
+ */
+export function isQuotaExceededError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const name = err.name;
+  if (name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+    return true;
+  }
+  return /quota/i.test(err.message);
+}
+
 /**
  * Shared state used when localStorage is unavailable (jsdom without
  * --localstorage-file, sandboxed iframes, etc.). Lives at module scope so all

@@ -2,6 +2,26 @@
   padding: 4px 0 8px;
 }
 
+.quotaWarn {
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  border: 0.5px solid var(--warning);
+  font-size: 12px;
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.quotaWarn i {
+  font-size: 14px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
 .empty {
   display: flex;
   flex-direction: column;
