@@ -302,7 +302,13 @@ function ImageStep({ draft, setDraft }: StepProps) {
     prefetchBgRemoval();
   }, []);
 
-  const processFile = async (file: Blob) => {
+  /**
+   * Run the full pipeline (shrink → bg removal → crop → dataURL) when
+   * `removeBg` is true. Skip the bg-removal step when false — used for
+   * already-transparent PNGs the user prepared elsewhere, OR as an escape
+   * hatch when the model fails (e.g. white pedal on white background).
+   */
+  const processFile = async (file: Blob, removeBg: boolean) => {
     setError(null);
     setDraft((d) => ({ ...d, photoSource: file }));
     try {
@@ -311,11 +317,11 @@ function ImageStep({ draft, setDraft }: StepProps) {
       // throws away detail the model could otherwise use and leaves the
       // saved transparent PNG looking grainy when the canvas zooms in.
       const shrunk = await shrinkImage(file, 1024);
-      const transparent = await removeBackground(shrunk, {
-        onProgress: setProgress,
-      });
+      const processed = removeBg
+        ? await removeBackground(shrunk, { onProgress: setProgress })
+        : shrunk;
       setProgress({ phase: 'finalizing', fraction: null });
-      const cropped = await cropToContent(transparent);
+      const cropped = await cropToContent(processed);
       const dataUrl = await blobToDataURL(cropped);
       setDraft((d) => ({ ...d, photoDataUrl: dataUrl }));
     } catch (err) {
@@ -329,11 +335,15 @@ function ImageStep({ draft, setDraft }: StepProps) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    void processFile(file);
+    void processFile(file, true);
   };
 
   const handleReprocess = () => {
-    if (draft.photoSource) void processFile(draft.photoSource);
+    if (draft.photoSource) void processFile(draft.photoSource, true);
+  };
+
+  const handleUseOriginal = () => {
+    if (draft.photoSource) void processFile(draft.photoSource, false);
   };
 
   const handleUseColor = () => {
@@ -361,13 +371,17 @@ function ImageStep({ draft, setDraft }: StepProps) {
           <Button variant="secondary" onClick={handleReprocess}>
             <i className="ti ti-refresh" aria-hidden /> Re-process
           </Button>
+          <Button variant="secondary" onClick={handleUseOriginal}>
+            Use as-is
+          </Button>
           <Button variant="ghost" onClick={handleUseColor}>
-            Use a color instead
+            Color instead
           </Button>
         </div>
         <p className={styles.helpMuted}>
-          Backdrop color is just for preview — the saved pedal keeps its
-          transparency.
+          Background removal failed on a white pedal? Tap{' '}
+          <strong>Use as-is</strong> to skip it — works best if your photo
+          already has a transparent background.
         </p>
       </div>
     );
