@@ -11,9 +11,12 @@
  */
 
 export type BgRemovalPhase =
+  | 'preparing-image' // shrinking + decoding the upload
   | 'loading-library' // dynamic-importing @imgly/background-removal
+  | 'initializing-runtime' // library loaded but ORT/WASM still warming up
   | 'fetching-model' // first-time model download
-  | 'processing'; // running inference
+  | 'processing' // running inference
+  | 'finalizing'; // cropping + encoding the result
 
 export interface BgRemovalProgress {
   phase: BgRemovalPhase;
@@ -44,15 +47,21 @@ export async function removeBackground(
   onProgress?.({ phase: 'loading-library', fraction: null });
 
   // Dynamic import — keeps the heavy lib out of the initial bundle.
+  // If we prefetched earlier this resolves instantly; first-time it's the
+  // ~22KB imgly chunk + ~109KB ORT JS.
   const mod = await import('@imgly/background-removal');
 
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
 
-  // The library has a single progress callback that fires for both model
-  // download and inference. We translate that into our two-phase shape.
-  let phase: BgRemovalPhase = 'fetching-model';
+  // The library doesn't expose a "runtime ready" event — calling
+  // removeBackground triggers ORT WASM instantiation under the hood. This
+  // can take a few seconds with no visible progress; surface that as its
+  // own phase so the user doesn't sit on a stale "Loading…" forever.
+  onProgress?.({ phase: 'initializing-runtime', fraction: null });
+
+  let phase: BgRemovalPhase = 'initializing-runtime';
   const result = await mod.removeBackground(source, {
     output: { format: 'image/png', quality: 1 },
     progress: (key: string, current: number, total: number) => {
@@ -60,6 +69,8 @@ export async function removeBackground(
       // `compute:onnxruntime/...` once inference starts.
       if (key.startsWith('compute')) {
         phase = 'processing';
+      } else if (key.startsWith('fetch')) {
+        phase = 'fetching-model';
       }
       const fraction = total > 0 ? current / total : null;
       onProgress?.({ phase, fraction });
@@ -71,6 +82,16 @@ export async function removeBackground(
   }
 
   return result;
+}
+
+/**
+ * Kick off the bg-removal library load in the background. Safe to call
+ * repeatedly — the dynamic-import cache de-dupes. Use this from the wizard's
+ * image step so the chunk is ready by the time the user picks a file.
+ */
+export function prefetchBgRemoval(): void {
+  // Best-effort; ignore failures so a flaky network doesn't crash the wizard.
+  void import('@imgly/background-removal').catch(() => undefined);
 }
 
 /** Convert a Blob (e.g. the removeBackground result) to a data: URL. */

@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type {
   JackSides,
   Pedal,
@@ -13,6 +13,7 @@ import { createPedal } from '../../data/pedalsRepo';
 import {
   blobToDataURL,
   cropToContent,
+  prefetchBgRemoval,
   removeBackground,
   shrinkImage,
   type BgRemovalProgress,
@@ -269,6 +270,25 @@ function isValidHex(s: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(s.trim());
 }
 
+const PHASE_LABELS: Record<BgRemovalProgress['phase'], string> = {
+  'preparing-image': 'Preparing image…',
+  'loading-library': 'Loading background remover…',
+  'initializing-runtime': 'Warming up the engine…',
+  'fetching-model': 'Downloading model (one-time, ~176 MB)…',
+  processing: 'Removing background…',
+  finalizing: 'Cropping silhouette…',
+};
+
+const PHASE_SUBS: Record<BgRemovalProgress['phase'], string | null> = {
+  'preparing-image': 'Downsizing your photo to 512px.',
+  'loading-library': 'Fetching the JS chunk (~110 KB gzipped).',
+  'initializing-runtime':
+    'Spinning up the WebGPU / WASM backend — this is the slow first-run step.',
+  'fetching-model': 'Cached after this. Subsequent uploads are instant.',
+  processing: 'Should only take a few seconds.',
+  finalizing: 'Trimming transparent margins.',
+};
+
 function ImageStep({ draft, setDraft }: StepProps) {
   const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
   const customValid = isValidHex(draft.color);
@@ -276,14 +296,22 @@ function ImageStep({ draft, setDraft }: StepProps) {
   const [progress, setProgress] = useState<BgRemovalProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Warm the bg-removal chunk so it's ready by the time the user clicks
+  // "Use a photo". Best-effort, no UI feedback for the prefetch itself.
+  useEffect(() => {
+    prefetchBgRemoval();
+  }, []);
+
   const processFile = async (file: Blob) => {
     setError(null);
     setDraft((d) => ({ ...d, photoSource: file }));
     try {
+      setProgress({ phase: 'preparing-image', fraction: null });
       const shrunk = await shrinkImage(file, 512);
       const transparent = await removeBackground(shrunk, {
         onProgress: setProgress,
       });
+      setProgress({ phase: 'finalizing', fraction: null });
       const cropped = await cropToContent(transparent);
       const dataUrl = await blobToDataURL(cropped);
       setDraft((d) => ({ ...d, photoDataUrl: dataUrl }));
@@ -344,12 +372,8 @@ function ImageStep({ draft, setDraft }: StepProps) {
 
   // ---------- Processing: progress bar + cancel-by-replacing-source ----------
   if (progress) {
-    const phaseLabel =
-      progress.phase === 'loading-library'
-        ? 'Loading background remover…'
-        : progress.phase === 'fetching-model'
-          ? 'Downloading model (one-time, ~176 MB)…'
-          : 'Removing background…';
+    const phaseLabel = PHASE_LABELS[progress.phase];
+    const phaseSub = PHASE_SUBS[progress.phase];
     return (
       <div className={styles.imageStep}>
         <div className={styles.pedalPreview}>
@@ -362,16 +386,23 @@ function ImageStep({ draft, setDraft }: StepProps) {
         </div>
         <div className={styles.progressWrap}>
           <div className={styles.progressLabel}>{phaseLabel}</div>
-          <div className={styles.progressBar}>
+          {phaseSub ? (
+            <div className={styles.progressSub}>{phaseSub}</div>
+          ) : null}
+          <div
+            className={`${styles.progressBar} ${
+              progress.fraction === null ? styles.progressBarIndeterminate : ''
+            }`}
+          >
             <div
               className={styles.progressFill}
-              style={{
-                width:
-                  progress.fraction === null
-                    ? '40%'
-                    : `${Math.round(progress.fraction * 100)}%`,
-                opacity: progress.fraction === null ? 0.5 : 1,
-              }}
+              style={
+                progress.fraction === null
+                  ? undefined
+                  : {
+                      width: `${Math.round(progress.fraction * 100)}%`,
+                    }
+              }
             />
           </div>
         </div>

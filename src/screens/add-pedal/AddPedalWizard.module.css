@@ -182,7 +182,14 @@
 }
 
 .progressLabel {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  text-align: center;
+}
+
+.progressSub {
+  font-size: 11px;
   color: var(--muted);
   text-align: center;
 }
@@ -192,6 +199,7 @@
   background: var(--surface-alt);
   border-radius: 3px;
   overflow: hidden;
+  position: relative;
 }
 
 .progressFill {
@@ -199,6 +207,24 @@
   background: var(--primary);
   border-radius: 3px;
   transition: width 0.2s ease;
+}
+
+/* Indeterminate state: animate a sliding band rather than a static-width
+   fill so the user has visual confirmation the UI hasn't frozen. */
+.progressBarIndeterminate .progressFill {
+  width: 40%;
+  position: absolute;
+  left: 0;
+  animation: progressSlide 1.4s ease-in-out infinite;
+}
+
+@keyframes progressSlide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
 }
 
 .jacksStep {
