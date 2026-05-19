@@ -8,8 +8,6 @@ links the phase that originated it so we know roughly when it was set aside.
 - **Rotation can feel jumpy when the rotated footprint won't fit** *(Phase 3e)* —
   the clamp shoves the pedal back onto the board, which jumps it noticeably.
   Could animate, or refuse the rotation when it doesn't fit and surface a hint.
-- **Delete-rig from the rig screen** *(Phase 4e)* — currently only available
-  from the rig list. A Delete item in Settings would be more discoverable.
 
 ## Add Pedal wizard
 

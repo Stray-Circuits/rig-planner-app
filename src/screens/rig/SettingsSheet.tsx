@@ -13,6 +13,7 @@ import styles from './SettingsSheet.module.css';
 interface SettingsSheetProps {
   open: boolean;
   rig: Rig;
+  placedCount: number;
   onClose: () => void;
   onRename: (name: string) => Promise<void>;
   onChangeBoard: (
@@ -20,6 +21,7 @@ interface SettingsSheetProps {
     depthIn: number,
     style: BoardStyle,
   ) => Promise<void>;
+  onDelete: () => Promise<void>;
 }
 
 /**
@@ -34,11 +36,14 @@ interface SettingsSheetProps {
 export function SettingsSheet({
   open,
   rig,
+  placedCount,
   onClose,
   onRename,
   onChangeBoard,
+  onDelete,
 }: SettingsSheetProps) {
-  const [view, setView] = useState<'main' | 'board'>('main');
+  const [view, setView] = useState<'main' | 'board' | 'confirmDelete'>('main');
+  const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState(rig.name);
   const [pickerState, setPickerState] = useState(() =>
     initialPickerStateFor(rig),
@@ -49,6 +54,7 @@ export function SettingsSheet({
   useEffect(() => {
     if (!open) return;
     setView('main');
+    setDeleting(false);
     setName(rig.name);
     setPickerState(
       initialPickerStateFor({
@@ -107,12 +113,29 @@ export function SettingsSheet({
     })();
   };
 
+  const sheetTitle =
+    view === 'main'
+      ? 'Rig settings'
+      : view === 'board'
+        ? 'Change board'
+        : 'Delete rig?';
+
+  const handleConfirmDelete = () => {
+    setError(null);
+    void (async () => {
+      setDeleting(true);
+      try {
+        await onDelete();
+        // Parent is responsible for navigating away; nothing else to do here.
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setDeleting(false);
+      }
+    })();
+  };
+
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title={view === 'main' ? 'Rig settings' : 'Change board'}
-    >
+    <Sheet open={open} onClose={onClose} title={sheetTitle}>
       {view === 'main' ? (
         <div className={styles.body}>
           <label className={styles.field}>
@@ -169,8 +192,18 @@ export function SettingsSheet({
               {saving ? 'Saving…' : 'Apply'}
             </Button>
           </div>
+
+          <div className={styles.dangerZone}>
+            <button
+              type="button"
+              className={styles.deleteRigBtn}
+              onClick={() => setView('confirmDelete')}
+            >
+              <i className="ti ti-trash" aria-hidden /> Delete rig
+            </button>
+          </div>
         </div>
-      ) : (
+      ) : view === 'board' ? (
         <div className={styles.pickerBody}>
           <BoardPicker
             selection={pickerState.selection}
@@ -188,6 +221,37 @@ export function SettingsSheet({
             </Button>
             <Button disabled={!pickerChoice} onClick={() => setView('main')}>
               Use this board
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.body}>
+          <p className={styles.confirmText}>
+            Permanently delete <strong>{rig.name}</strong>?
+          </p>
+          {placedCount > 0 ? (
+            <p className={styles.confirmWarn}>
+              <i className="ti ti-alert-triangle" aria-hidden /> This rig has{' '}
+              {placedCount} placed pedal
+              {placedCount === 1 ? '' : 's'} and their signal-chain connections.
+              Those will be removed too. Pedals stay in your collection.
+            </p>
+          ) : null}
+          {error ? <p className={styles.error}>{error}</p> : null}
+          <div className={styles.actions}>
+            <Button
+              variant="ghost"
+              onClick={() => setView('main')}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting…' : 'Delete rig'}
             </Button>
           </div>
         </div>

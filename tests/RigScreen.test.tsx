@@ -303,6 +303,46 @@ describe('RigScreen', () => {
     });
   });
 
+  it('Delete rig in Settings cascades and routes back', async () => {
+    const onBack = vi.fn();
+    render(<RigScreen rig={rig} onBack={onBack} />);
+    // Seed + place a pedal so we exercise the cascade warning.
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
+    fireEvent.click(await screen.findByText('DS-1'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
+    });
+
+    fireEvent.click(screen.getByLabelText('Rig settings'));
+    const dialog = (await screen.findByText('Rig settings')).closest(
+      '[role="dialog"]',
+    )!;
+    fireEvent.click(within(dialog as HTMLElement).getByText('Delete rig'));
+
+    expect(await screen.findByText('Delete rig?')).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 placed pedal and their signal-chain connections/i),
+    ).toBeInTheDocument();
+
+    const confirmDialog = screen
+      .getByText('Delete rig?')
+      .closest('[role="dialog"]')!;
+    fireEvent.click(
+      within(confirmDialog as HTMLElement).getByRole('button', {
+        name: /Delete rig/,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(onBack).toHaveBeenCalledOnce();
+    });
+    await waitFor(async () => {
+      const rigs = await listRigs();
+      expect(rigs.find((r) => r.id === rig.id)).toBeUndefined();
+    });
+  });
+
   it('zoom controls appear and reset works after a Cmd+wheel zoom', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     await screen.findByTestId('board-canvas');

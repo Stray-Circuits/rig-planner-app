@@ -52,6 +52,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
   const renameRig = useRigsStore((s) => s.renameRig);
   const updateBoard = useRigsStore((s) => s.updateBoard);
+  const deleteRig = useRigsStore((s) => s.deleteRig);
 
   const connections = useSignalChainStore(
     (s) => s.connectionsByRig[rig.id] ?? EMPTY_CONNECTIONS,
@@ -356,6 +357,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
       <SettingsSheet
         open={settingsOpen}
         rig={rig}
+        placedCount={placed.length}
         onClose={() => setSettingsOpen(false)}
         onRename={(name) => renameRig(rig.id, name)}
         onChangeBoard={async (w, d, style) => {
@@ -364,6 +366,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             { id: rig.id, widthIn: w, depthIn: d },
             pedalsById,
           );
+        }}
+        onDelete={async () => {
+          await deleteRig(rig.id);
+          setSettingsOpen(false);
+          onBack();
         }}
       />
 
