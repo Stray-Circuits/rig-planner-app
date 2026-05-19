@@ -61,10 +61,6 @@ links the phase that originated it so we know roughly when it was set aside.
   `QuotaExceededError`. Tauri's SQLite has no practical limit. Worth
   surfacing as a user-visible warning when localStorage gets close to
   full, or moving to OPFS/IndexedDB for browser dev.
-- **Cellular-data warning before model download** *(Phase 5)* — the ~176MB
-  model downloads silently on first upload. On mobile data that's
-  expensive. Should detect `navigator.connection?.type === 'cellular'`
-  and prompt before kicking off the fetch.
 
 ## Board presets
 

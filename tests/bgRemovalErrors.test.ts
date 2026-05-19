@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { describeImageError } from '../src/lib/bgRemoval';
+import { afterEach, describe, expect, it } from 'vitest';
+import { describeImageError, isMeteredConnection } from '../src/lib/bgRemoval';
 
 describe('describeImageError', () => {
   it('maps AbortError to a short Canceled message', () => {
@@ -28,5 +28,35 @@ describe('describeImageError', () => {
 
   it('coerces non-Error throwns to strings', () => {
     expect(describeImageError('something broke')).toBe('something broke');
+  });
+});
+
+describe('isMeteredConnection', () => {
+  const navAny = navigator as unknown as {
+    connection?: { type?: string; effectiveType?: string; saveData?: boolean };
+  };
+
+  afterEach(() => {
+    delete navAny.connection;
+  });
+
+  it('returns false when navigator.connection is unavailable', () => {
+    delete navAny.connection;
+    expect(isMeteredConnection()).toBe(false);
+  });
+
+  it('returns true when saveData is on', () => {
+    navAny.connection = { saveData: true };
+    expect(isMeteredConnection()).toBe(true);
+  });
+
+  it('returns true on cellular type', () => {
+    navAny.connection = { type: 'cellular' };
+    expect(isMeteredConnection()).toBe(true);
+  });
+
+  it('returns false on wifi', () => {
+    navAny.connection = { type: 'wifi', saveData: false };
+    expect(isMeteredConnection()).toBe(false);
   });
 });

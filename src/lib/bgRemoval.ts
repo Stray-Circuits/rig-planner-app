@@ -100,6 +100,50 @@ export function prefetchBgRemoval(): void {
   void import('@imgly/background-removal').catch(() => undefined);
 }
 
+/**
+ * True when the current connection looks like one a user would want a warning
+ * before before we burn ~176MB on a model download. Uses the Network
+ * Information API (`navigator.connection`); on browsers without it we err on
+ * the side of NOT warning, since most desktop browsers don't expose it.
+ */
+export function isMeteredConnection(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  // The Network Information API isn't in lib.dom yet; cast through unknown.
+  const conn = (
+    navigator as unknown as {
+      connection?: {
+        type?: string;
+        effectiveType?: string;
+        saveData?: boolean;
+      };
+    }
+  ).connection;
+  if (!conn) return false;
+  if (conn.saveData) return true;
+  if (conn.type === 'cellular') return true;
+  return false;
+}
+
+const MODEL_DOWNLOADED_KEY = 'rig-planner-bg-model-downloaded';
+
+/** True iff a previous run completed a successful model fetch on this origin. */
+export function hasDownloadedModel(): boolean {
+  try {
+    return localStorage.getItem(MODEL_DOWNLOADED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Mark the model as cached so we stop warning about its download. */
+export function markModelDownloaded(): void {
+  try {
+    localStorage.setItem(MODEL_DOWNLOADED_KEY, '1');
+  } catch {
+    /* localStorage full or unavailable — best effort */
+  }
+}
+
 const IMAGE_DECODE_HINTS = [
   'createimagebitmap',
   'source image could not be decoded',

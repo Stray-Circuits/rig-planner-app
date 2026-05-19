@@ -14,6 +14,9 @@ import {
   blobToDataURL,
   cropToContent,
   describeImageError,
+  hasDownloadedModel,
+  isMeteredConnection,
+  markModelDownloaded,
   prefetchBgRemoval,
   removeBackground,
   removeColorThreshold,
@@ -321,6 +324,12 @@ function ImageStep({ draft, setDraft }: StepProps) {
   const [progress, setProgress] = useState<BgRemovalProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // When non-null, the wizard is asking the user to confirm a model download
+  // over a metered connection. `pending` holds the file to process if they
+  // accept.
+  const [meteredPrompt, setMeteredPrompt] = useState<{ file: Blob } | null>(
+    null,
+  );
   // When non-null, the wizard is in "tune the threshold" sub-mode.
   // previewDataUrl is the live-updated transparent PNG that reflects the
   // current tolerance; the user can Apply it to draft.photoDataUrl or
@@ -393,7 +402,26 @@ function ImageStep({ draft, setDraft }: StepProps) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    void processFile(file, true);
+    // Warn before kicking off the ~176MB model fetch on a metered connection.
+    if (isMeteredConnection() && !hasDownloadedModel()) {
+      setMeteredPrompt({ file });
+      return;
+    }
+    void processFile(file, true).then(() => markModelDownloaded());
+  };
+
+  const acceptMeteredDownload = () => {
+    const file = meteredPrompt?.file;
+    setMeteredPrompt(null);
+    if (file) void processFile(file, true).then(() => markModelDownloaded());
+  };
+
+  const skipMeteredBgRemoval = () => {
+    const file = meteredPrompt?.file;
+    setMeteredPrompt(null);
+    // Use-as-is path: still resize + crop but skip the model entirely so
+    // no big download.
+    if (file) void processFile(file, false);
   };
 
   const handleReprocess = () => {
@@ -587,6 +615,34 @@ function ImageStep({ draft, setDraft }: StepProps) {
           </div>
           <div className={styles.progressActions}>
             <Button variant="ghost" size="sm" onClick={handleCancelProcessing}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Metered-connection confirm before first-time model fetch ----
+  if (meteredPrompt) {
+    return (
+      <div className={styles.imageStep}>
+        <div className={styles.meteredBox} role="alert">
+          <div className={styles.meteredTitle}>
+            <i className="ti ti-cellular-signal-3" aria-hidden /> You appear to
+            be on cellular data
+          </div>
+          <p className={styles.meteredBody}>
+            Removing the background uses a one-time <strong>~176 MB</strong>{' '}
+            model download. It&apos;s cached after that, but the first run is
+            heavy on a metered plan.
+          </p>
+          <div className={styles.photoActions}>
+            <Button onClick={acceptMeteredDownload}>Download anyway</Button>
+            <Button variant="secondary" onClick={skipMeteredBgRemoval}>
+              Use photo as-is
+            </Button>
+            <Button variant="ghost" onClick={() => setMeteredPrompt(null)}>
               Cancel
             </Button>
           </div>

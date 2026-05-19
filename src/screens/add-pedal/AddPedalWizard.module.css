@@ -272,6 +272,35 @@
   margin-top: 4px;
 }
 
+.meteredBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--warning);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+}
+
+.meteredTitle {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meteredTitle i {
+  font-size: 18px;
+}
+
+.meteredBody {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fg);
+}
+
 .slider {
   width: 100%;
   accent-color: var(--primary);
