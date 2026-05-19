@@ -1,9 +1,0 @@
-- "Floor" options. Instead of just a medium grey gradient as the app background, let the user select between a grey basement floor, black stage floor, beige/tan carpet, wood, or sidewalk.
-
-- seed a bunch of pedals. We can develop an agent to do this well enough, find a pedal image that's face on, and find it's dimensions. Then seed the top ~200 pedals mentioned on the guitarpedal and/or pedalboards subreddits using that agent in parallel.
-
-- UX: make buttons more colorful and a little easier to press on mobile (a little bigger, more spaced, more centered). Anchor the settings icon to the top right, anchor the add pedal and signal routing buttons to the bottom right.
-
-- feature: prevent pedal overlap, or at least warn the user with highlighting. We know where the jacks on each pedal are located, so we can add a border that extends from that edge of the pedal based on the standard size of the jack connectors on each side of the pedal.
-
- 
