@@ -15,6 +15,7 @@ import {
   cropToContent,
   prefetchBgRemoval,
   removeBackground,
+  removeColorThreshold,
   shrinkImage,
   type BgRemovalProgress,
 } from '../../lib/bgRemoval';
@@ -232,7 +233,7 @@ function titleForStep(step: number): string {
 function subtitleForStep(step: number): string {
   switch (step) {
     case 0:
-      return 'Pick a placeholder color for now. Upload + background removal lands in phase 5.';
+      return 'Upload a photo (we’ll remove the background) or pick a placeholder color.';
     case 1:
       return 'Tell us what the pedal is and how big it is.';
     case 2:
@@ -295,6 +296,15 @@ function ImageStep({ draft, setDraft }: StepProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [progress, setProgress] = useState<BgRemovalProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // When non-null, the wizard is in "tune the threshold" sub-mode.
+  // previewDataUrl is the live-updated transparent PNG that reflects the
+  // current tolerance; the user can Apply it to draft.photoDataUrl or
+  // Cancel back to whatever they had before.
+  const [threshold, setThreshold] = useState<{
+    tolerance: number;
+    previewDataUrl: string | null;
+    busy: boolean;
+  } | null>(null);
 
   // Warm the bg-removal chunk so it's ready by the time the user clicks
   // "Use a photo". Best-effort, no UI feedback for the prefetch itself.
@@ -351,6 +361,108 @@ function ImageStep({ draft, setDraft }: StepProps) {
     setError(null);
   };
 
+  const enterThreshold = () => {
+    if (!draft.photoSource) return;
+    setThreshold({ tolerance: 0.12, previewDataUrl: null, busy: false });
+  };
+
+  // Re-run the chroma-key filter whenever the user nudges the slider. We
+  // cache the shrunk source on draft.photoSource so we don't re-shrink.
+  useEffect(() => {
+    if (!threshold || !draft.photoSource) return;
+    let cancelled = false;
+    setThreshold((t) => (t ? { ...t, busy: true } : null));
+    void (async () => {
+      try {
+        const shrunk = await shrinkImage(draft.photoSource!, 1024);
+        const filtered = await removeColorThreshold(
+          shrunk,
+          threshold.tolerance,
+        );
+        const cropped = await cropToContent(filtered);
+        const url = await blobToDataURL(cropped);
+        if (cancelled) return;
+        setThreshold((t) =>
+          t ? { ...t, previewDataUrl: url, busy: false } : null,
+        );
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setThreshold(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // We intentionally re-run on tolerance changes only; draft.photoSource
+    // is stable through the threshold flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threshold?.tolerance]);
+
+  const applyThreshold = () => {
+    if (!threshold?.previewDataUrl) return;
+    const url = threshold.previewDataUrl;
+    setDraft((d) => ({ ...d, photoDataUrl: url }));
+    setThreshold(null);
+  };
+
+  const cancelThreshold = () => setThreshold(null);
+
+  // ---------- Threshold tuning ----------
+  if (threshold) {
+    const preview = threshold.previewDataUrl ?? draft.photoDataUrl;
+    return (
+      <div className={styles.imageStep}>
+        <div className={styles.pedalPreview}>
+          <div
+            className={styles.pedalPhotoPreview}
+            style={{ background: draft.color }}
+          >
+            {preview ? (
+              <img
+                src={preview}
+                alt="Threshold preview"
+                className={styles.pedalPhoto}
+              />
+            ) : null}
+          </div>
+        </div>
+        <label className={styles.field}>
+          <span className={styles.label}>
+            Tolerance · {Math.round(threshold.tolerance * 100)}%
+            {threshold.busy ? ' (updating…)' : ''}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={0.5}
+            step={0.005}
+            value={threshold.tolerance}
+            onChange={(e) =>
+              setThreshold((t) =>
+                t ? { ...t, tolerance: Number(e.target.value) } : null,
+              )
+            }
+            className={styles.slider}
+          />
+        </label>
+        <p className={styles.helpMuted}>
+          Samples the four corners of your photo as the background color and
+          erases pixels within this tolerance. Useful when the model erases a
+          light-colored pedal.
+        </p>
+        <div className={styles.photoActions}>
+          <Button onClick={applyThreshold} disabled={!threshold.previewDataUrl}>
+            Apply
+          </Button>
+          <Button variant="ghost" onClick={cancelThreshold}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   // ---------- Photo present: show transparent preview + actions ----------
   if (draft.photoDataUrl && !progress) {
     return (
@@ -371,6 +483,9 @@ function ImageStep({ draft, setDraft }: StepProps) {
           <Button variant="secondary" onClick={handleReprocess}>
             <i className="ti ti-refresh" aria-hidden /> Re-process
           </Button>
+          <Button variant="secondary" onClick={enterThreshold}>
+            <i className="ti ti-adjustments" aria-hidden /> Tune threshold
+          </Button>
           <Button variant="secondary" onClick={handleUseOriginal}>
             Use as-is
           </Button>
@@ -379,9 +494,9 @@ function ImageStep({ draft, setDraft }: StepProps) {
           </Button>
         </div>
         <p className={styles.helpMuted}>
-          Background removal failed on a white pedal? Tap{' '}
-          <strong>Use as-is</strong> to skip it — works best if your photo
-          already has a transparent background.
+          Model erased part of the pedal? <strong>Tune threshold</strong> gives
+          you a slider that removes a single bg color.{' '}
+          <strong>Use as-is</strong> skips bg removal entirely.
         </p>
       </div>
     );

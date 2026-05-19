@@ -174,6 +174,80 @@ export async function cropToContent(blob: Blob, paddingPx = 1): Promise<Blob> {
 }
 
 /**
+ * Chroma-key style background removal. Samples the four corner pixels of
+ * the image to estimate the background color, then makes any pixel whose
+ * RGB distance to that color is under `tolerance × max-distance` transparent.
+ *
+ * Works well for photos with a roughly uniform background (e.g. a white pedal
+ * on a white sheet of paper where the two whites are still visibly different)
+ * — exactly the case ISNet conflates. Failure mode: a busy background, or a
+ * pedal that shares its main color with the background to within tolerance.
+ *
+ * `tolerance` is 0..1, where 0 removes only pixels essentially identical to
+ * the corner color and 1 removes everything.
+ */
+export async function removeColorThreshold(
+  source: Blob,
+  tolerance: number,
+): Promise<Blob> {
+  const bitmap = await createImageBitmap(source);
+  const w = bitmap.width;
+  const h = bitmap.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    bitmap.close?.();
+    return source;
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  // Sample 4 corner pixels slightly inset from the edge — true edges
+  // sometimes have JPEG-y fringe colors. Average for a stable estimate.
+  const inset = Math.max(2, Math.round(Math.min(w, h) * 0.01));
+  const sampleAt = (x: number, y: number) => {
+    const i = (y * w + x) * 4;
+    return [data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0] as const;
+  };
+  const corners = [
+    sampleAt(inset, inset),
+    sampleAt(w - 1 - inset, inset),
+    sampleAt(inset, h - 1 - inset),
+    sampleAt(w - 1 - inset, h - 1 - inset),
+  ];
+  const bgR = corners.reduce((s, c) => s + c[0], 0) / 4;
+  const bgG = corners.reduce((s, c) => s + c[1], 0) / 4;
+  const bgB = corners.reduce((s, c) => s + c[2], 0) / 4;
+
+  // Max possible RGB distance is sqrt(3 × 255²) ≈ 441.7.
+  const maxDist = Math.sqrt(3) * 255;
+  const threshold = tolerance * maxDist;
+  const sqThreshold = threshold * threshold;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const dr = (data[i] ?? 0) - bgR;
+    const dg = (data[i + 1] ?? 0) - bgG;
+    const db = (data[i + 2] ?? 0) - bgB;
+    if (dr * dr + dg * dg + db * db < sqThreshold) {
+      data[i + 3] = 0;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((b) => {
+      if (b) resolve(b);
+      else reject(new Error('toBlob returned null'));
+    }, 'image/png');
+  });
+}
+
+/**
  * Resize a Blob image (canvas-based) so its long side is at most maxPx. We
  * pre-shrink uploads before bg removal so the model isn't asked to chew on
  * a 12MP raw camera frame, and to keep the resulting data URL we store

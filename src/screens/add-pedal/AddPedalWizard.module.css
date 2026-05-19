@@ -212,6 +212,11 @@
   transition: width 0.2s ease;
 }
 
+.slider {
+  width: 100%;
+  accent-color: var(--primary);
+}
+
 /* Indeterminate state: animate a sliding band rather than a static-width
    fill so the user has visual confirmation the UI hasn't frozen. */
 .progressBarIndeterminate .progressFill {
