@@ -463,9 +463,13 @@ function CanvasArea({
     const el = wrapRef.current;
     if (!el) return;
     const fit = () => {
+      // Reserve vertical room for the endpoint chip strip above the board so
+      // chips don't get clipped by the canvas-area's overflow. Horizontal
+      // padding stays modest — chips wrap into clusters at the corners.
       const padding = 24;
+      const endpointBudget = 44;
       const availW = el.clientWidth - padding * 2;
-      const availH = el.clientHeight - padding * 2;
+      const availH = el.clientHeight - padding * 2 - endpointBudget;
       if (availW <= 0 || availH <= 0) return;
       const px = Math.min(availW / rig.widthIn, availH / rig.depthIn);
       setPxPerInch(Math.max(6, Math.min(80, px)));

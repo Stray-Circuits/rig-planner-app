@@ -61,15 +61,23 @@
   }
 }
 
-.endpointsLayer {
+.endpointsRow {
   position: absolute;
-  inset: 0;
+  left: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   pointer-events: none;
-  overflow: visible;
+}
+
+.endpointsCluster {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .endpointChip {
-  position: absolute;
   display: inline-flex;
   align-items: center;
   gap: 6px;

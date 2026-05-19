@@ -201,67 +201,77 @@ export function ChainOverlay({
           });
         })}
       </div>
-      <div className={styles.endpointsLayer}>
-        {endpoints.map((ep) => {
-          const anchor = endpointAnchor(ep, rig);
-          if (!anchor) return null;
-          // Convert inches to px relative to the wrap (which itself is sized
-          // to the rig). Anchors are slightly off the edge — translate to
-          // keep the chip readable.
-          const left = anchor.xIn * pxPerInch;
-          const top = anchor.yIn * pxPerInch;
-          const isSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
-          return (
-            <button
-              key={ep.id}
-              type="button"
-              className={`${styles.endpointChip} ${
-                isSource ? styles.endpointSource : styles.endpointSink
-              }`}
-              style={{
-                left,
-                top,
-                transform:
-                  ep.kind === 'guitar' || ep.kind === 'amp_fx_send'
-                    ? 'translate(0, -50%)'
-                    : 'translate(-100%, -50%)',
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onEndpointTap?.(ep.id);
-              }}
-              title={isSource ? `From ${ep.label}` : `To ${ep.label}`}
-            >
-              <span className={styles.endpointDot} aria-hidden />
-              <span className={styles.endpointLabel}>
-                {isSource ? `From ${ep.label}` : `To ${ep.label}`}
-              </span>
-            </button>
-          );
-        })}
+      {/*
+       * Endpoint chips render in a strip immediately above the board so they
+       * stay visible regardless of board width — the prior side-anchored
+       * positioning got clipped by the canvas-area's overflow in the default
+       * fit-to-view. Cables still terminate at the board edge via
+       * lookupConnectionEnd; the chip is just the tap target / label.
+       */}
+      <div
+        className={styles.endpointsRow}
+        style={{ top: -ENDPOINT_ROW_OFFSET, width: widthPx }}
+      >
+        <div className={styles.endpointsCluster}>
+          {endpoints
+            .filter((ep) => ep.kind === 'amp_in' || ep.kind === 'amp_fx_send')
+            .map((ep) => (
+              <EndpointChip
+                key={ep.id}
+                ep={ep}
+                isSource={false}
+                onTap={onEndpointTap}
+              />
+            ))}
+        </div>
+        <div className={styles.endpointsCluster}>
+          {endpoints
+            .filter((ep) => ep.kind === 'guitar' || ep.kind === 'amp_fx_return')
+            .map((ep) => (
+              <EndpointChip
+                key={ep.id}
+                ep={ep}
+                isSource={true}
+                onTap={onEndpointTap}
+              />
+            ))}
+        </div>
       </div>
     </>
   );
 }
 
-/** Visual anchor (inches, board coords) for an endpoint chip. */
-function endpointAnchor(
-  ep: ExternalEndpoint,
-  rig: Rig,
-): { xIn: number; yIn: number } | null {
-  const off = 0.5;
-  switch (ep.kind) {
-    case 'guitar':
-      return { xIn: rig.widthIn + off, yIn: rig.depthIn / 2 };
-    case 'amp_in':
-      return { xIn: -off, yIn: rig.depthIn / 2 };
-    case 'amp_fx_send':
-      return { xIn: -off, yIn: rig.depthIn / 4 };
-    case 'amp_fx_return':
-      return { xIn: -off, yIn: (rig.depthIn * 3) / 4 };
-    default:
-      return { xIn: rig.widthIn + off, yIn: rig.depthIn / 2 };
-  }
+/**
+ * Pixel offset above the board where the endpoint chip row hovers. The fit
+ * calculation in CanvasArea reserves matching vertical space so the row
+ * stays visible at the default zoom.
+ */
+const ENDPOINT_ROW_OFFSET = 36;
+
+interface EndpointChipProps {
+  ep: ExternalEndpoint;
+  isSource: boolean;
+  onTap: ((id: string) => void) | undefined;
+}
+
+function EndpointChip({ ep, isSource, onTap }: EndpointChipProps) {
+  const label = isSource ? `From ${ep.label}` : `To ${ep.label}`;
+  return (
+    <button
+      type="button"
+      className={`${styles.endpointChip} ${
+        isSource ? styles.endpointSource : styles.endpointSink
+      }`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onTap?.(ep.id);
+      }}
+      title={label}
+    >
+      <span className={styles.endpointDot} aria-hidden />
+      <span className={styles.endpointLabel}>{label}</span>
+    </button>
+  );
 }
 
 interface ConnectionEnd {
