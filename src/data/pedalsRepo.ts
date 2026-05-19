@@ -240,8 +240,60 @@ export async function createPedal(input: CreatePedalInput): Promise<Pedal> {
   return created;
 }
 
-export async function deletePedal(id: string): Promise<void> {
+/**
+ * Returns the set of rig ids that currently have a placed instance of this
+ * pedal. Used to warn the user before destroying placements.
+ */
+export async function pedalUsage(id: string): Promise<{ rigIds: string[] }> {
   const db = await getDb();
-  // CASCADE handles the ports table.
+  const rows = await db.select<{ rig_id: string }>(
+    'SELECT rig_id FROM placed_pedals WHERE pedal_id = ?',
+    [id],
+  );
+  const seen = new Set<string>();
+  for (const r of rows) seen.add(r.rig_id);
+  return { rigIds: [...seen] };
+}
+
+export async function deletePedal(id: string): Promise<{
+  removedPlaced: string[];
+  affectedRigIds: string[];
+}> {
+  const db = await getDb();
+
+  // Find every placement of this pedal across all rigs so we can clean up
+  // their connections first (placed_pedals has ON DELETE RESTRICT in SQL,
+  // and the memory adapter doesn't enforce FKs but we'd otherwise leave
+  // orphan rows).
+  const placed = await db.select<{ id: string; rig_id: string }>(
+    'SELECT id, rig_id FROM placed_pedals WHERE pedal_id = ?',
+    [id],
+  );
+
+  for (const p of placed) {
+    const fromConns = await db.select<{ id: string }>(
+      'SELECT id FROM connections WHERE from_node_id = ?',
+      [p.id],
+    );
+    for (const c of fromConns) {
+      await db.execute('DELETE FROM connections WHERE id = ?', [c.id]);
+    }
+    const toConns = await db.select<{ id: string }>(
+      'SELECT id FROM connections WHERE to_node_id = ?',
+      [p.id],
+    );
+    for (const c of toConns) {
+      await db.execute('DELETE FROM connections WHERE id = ?', [c.id]);
+    }
+    await db.execute('DELETE FROM placed_pedals WHERE id = ?', [p.id]);
+  }
+
+  // CASCADE handles the ports table for the pedal row itself.
   await db.execute('DELETE FROM pedals WHERE id = ?', [id]);
+
+  const affectedRigIds = [...new Set(placed.map((p) => p.rig_id))];
+  return {
+    removedPlaced: placed.map((p) => p.id),
+    affectedRigIds,
+  };
 }

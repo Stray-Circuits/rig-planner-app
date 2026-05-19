@@ -258,6 +258,53 @@ describe('RigScreen', () => {
     expect(screen.getByLabelText(/^DS-1 Out/)).toBeInTheDocument();
   });
 
+  it('removing a pedal from the library cascades through placements + connections', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
+    // Place DS-1 on the rig.
+    fireEvent.click(await screen.findByText('DS-1'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
+    });
+    // Connect Guitar → DS-1 In so we have a connection that will be cascaded.
+    fireEvent.click(screen.getByLabelText('Show signal chain'));
+    fireEvent.click(await screen.findByLabelText(/^DS-1 In/));
+    fireEvent.click(await screen.findByText('From Guitar'));
+    await waitFor(() => {
+      expect(
+        useSignalChainStore.getState().connectionsByRig[rig.id],
+      ).toHaveLength(1);
+    });
+
+    // Reopen library, then ⋯ → Remove → confirm.
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByLabelText('DS-1 actions'));
+    fireEvent.click(await screen.findByText('Remove from collection'));
+    expect(
+      await screen.findByText(
+        /currently placed on 1 rig\. Those placements/i,
+      ),
+    ).toBeInTheDocument();
+    const dialog = screen
+      .getByText('Remove pedal?')
+      .closest('[role="dialog"]')!;
+    fireEvent.click(within(dialog as HTMLElement).getByText('Remove'));
+
+    await waitFor(() => {
+      // Library lost the pedal …
+      expect(
+        usePedalsStore.getState().pedals.some((p) => p.name === 'DS-1'),
+      ).toBe(false);
+      // … the rig lost its placement …
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]).toEqual([]);
+      // … and the connection went with it.
+      expect(useSignalChainStore.getState().connectionsByRig[rig.id]).toEqual(
+        [],
+      );
+    });
+  });
+
   it('zoom controls appear and reset works after a Cmd+wheel zoom', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     await screen.findByTestId('board-canvas');
