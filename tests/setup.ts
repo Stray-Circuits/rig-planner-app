@@ -24,6 +24,14 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   };
 }
 
+// @imgly/background-removal loads a 176MB ONNX model + WebGPU/WASM runtime;
+// none of that works in jsdom. Replace it with a stub that pretends to do
+// the work and returns the same Blob unchanged. Real exercise of bg removal
+// happens via manual / device testing.
+vi.mock('@imgly/background-removal', () => ({
+  removeBackground: vi.fn((input: Blob) => Promise.resolve(input)),
+}));
+
 afterEach(() => {
   cleanup();
 });

@@ -1,2 +1,8 @@
 allowBuilds:
   esbuild: true
+  # protobufjs's postinstall only generates CLI tools we don't use at runtime.
+  protobufjs: false
+storeDir: ~/Library/pnpm/store
+# pnpm 11 otherwise runs `pnpm install` before every script. We trust the
+# lockfile + node_modules here.
+verifyDepsBeforeRun: false

@@ -57,6 +57,6 @@ mockups/          # Original HTML mockups (reference)
 - [x] Phase 2 — Rigs: list, new-rig wizard, persistence
 - [x] Phase 3 — Canvas: board styles, drag, gestures, rotate
 - [x] Phase 4 — Add-pedal wizard
-- [ ] Phase 5 — Background removal (rembg-webgpu)
+- [x] Phase 5 — Background removal (@imgly/background-removal — WebGPU + WASM fallback)
 - [x] Phase 6 — Signal-chain overlay
 - [ ] Phase 7 — Mobile polish + native builds

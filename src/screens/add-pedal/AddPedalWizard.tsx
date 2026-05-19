@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import type {
   JackSides,
   Pedal,
@@ -10,6 +10,12 @@ import type {
 } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { createPedal } from '../../data/pedalsRepo';
+import {
+  blobToDataURL,
+  removeBackground,
+  shrinkImage,
+  type BgRemovalProgress,
+} from '../../lib/bgRemoval';
 import { Button, TextField, WizardShell } from '../../ui';
 import styles from './AddPedalWizard.module.css';
 
@@ -22,6 +28,10 @@ type DraftPort = Omit<Port, 'id' | 'pedalId'>;
 
 interface WizardDraft {
   color: string;
+  /** Data-URL of a background-removed photo. When set, takes precedence over `color`. */
+  photoDataUrl: string | null;
+  /** Raw user upload kept across step navigation so "Re-process" can retry. */
+  photoSource: Blob | null;
   brand: string;
   name: string;
   widthIn: string;
@@ -70,6 +80,8 @@ const STEPS = ['Image', 'Name & size', 'Jacks', 'Connections', 'Review'];
 function initialDraft(): WizardDraft {
   return {
     color: DEFAULT_COLOR,
+    photoDataUrl: null,
+    photoSource: null,
     brand: '',
     name: '',
     widthIn: '',
@@ -96,7 +108,9 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
 
   const canAdvanceFromCurrent = (() => {
     if (step === 0) {
-      if (!isValidHex(draft.color)) return false;
+      // A photo overrides the color picker; only validate the color when no
+      // photo is staged.
+      if (!draft.photoDataUrl && !isValidHex(draft.color)) return false;
     }
     if (step === 1) {
       if (!trimmedBrand) return false;
@@ -142,7 +156,7 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
         name: trimmedName,
         widthIn: widthNum,
         depthIn: depthNum,
-        imagePath: `color:${draft.color}`,
+        imagePath: draft.photoDataUrl ?? `color:${draft.color}`,
         jackSides: draft.jackSides,
         powerSide: draft.powerSide,
         ports: draft.ports,
@@ -257,9 +271,143 @@ function isValidHex(s: string): boolean {
 function ImageStep({ draft, setDraft }: StepProps) {
   const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
   const customValid = isValidHex(draft.color);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [progress, setProgress] = useState<BgRemovalProgress | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
+  const processFile = async (file: Blob) => {
+    setError(null);
+    setDraft((d) => ({ ...d, photoSource: file }));
+    try {
+      const shrunk = await shrinkImage(file, 512);
+      const transparent = await removeBackground(shrunk, {
+        onProgress: setProgress,
+      });
+      const dataUrl = await blobToDataURL(transparent);
+      setDraft((d) => ({ ...d, photoDataUrl: dataUrl }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    void processFile(file);
+  };
+
+  const handleReprocess = () => {
+    if (draft.photoSource) void processFile(draft.photoSource);
+  };
+
+  const handleUseColor = () => {
+    setDraft((d) => ({ ...d, photoDataUrl: null, photoSource: null }));
+    setError(null);
+  };
+
+  // ---------- Photo present: show transparent preview + actions ----------
+  if (draft.photoDataUrl && !progress) {
+    return (
+      <div className={styles.imageStep}>
+        <div className={styles.pedalPreview}>
+          <div
+            className={styles.pedalPhotoPreview}
+            style={{ background: draft.color }}
+          >
+            <img
+              src={draft.photoDataUrl}
+              alt="Background-removed pedal preview"
+              className={styles.pedalPhoto}
+            />
+          </div>
+        </div>
+        <div className={styles.photoActions}>
+          <Button variant="secondary" onClick={handleReprocess}>
+            <i className="ti ti-refresh" aria-hidden /> Re-process
+          </Button>
+          <Button variant="ghost" onClick={handleUseColor}>
+            Use a color instead
+          </Button>
+        </div>
+        <p className={styles.helpMuted}>
+          Backdrop color is just for preview — the saved pedal keeps its
+          transparency.
+        </p>
+      </div>
+    );
+  }
+
+  // ---------- Processing: progress bar + cancel-by-replacing-source ----------
+  if (progress) {
+    const phaseLabel =
+      progress.phase === 'loading-library'
+        ? 'Loading background remover…'
+        : progress.phase === 'fetching-model'
+          ? 'Downloading model (one-time, ~176 MB)…'
+          : 'Removing background…';
+    return (
+      <div className={styles.imageStep}>
+        <div className={styles.pedalPreview}>
+          <div
+            className={styles.pedalPreviewBox}
+            style={{ background: draft.color, opacity: 0.6 }}
+          >
+            <span className={styles.pedalPreviewLabel}>Working…</span>
+          </div>
+        </div>
+        <div className={styles.progressWrap}>
+          <div className={styles.progressLabel}>{phaseLabel}</div>
+          <div className={styles.progressBar}>
+            <div
+              className={styles.progressFill}
+              style={{
+                width:
+                  progress.fraction === null
+                    ? '40%'
+                    : `${Math.round(progress.fraction * 100)}%`,
+                opacity: progress.fraction === null ? 0.5 : 1,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Default: file picker + color picker ----------
   return (
     <div className={styles.imageStep}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFile}
+        className={styles.hiddenFileInput}
+      />
+      <button
+        type="button"
+        className={styles.uploadCta}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <i className="ti ti-camera-plus" aria-hidden />
+        <span className={styles.uploadCtaTitle}>Use a photo</span>
+        <span className={styles.uploadCtaSub}>
+          Background removed automatically
+        </span>
+      </button>
+
+      {error ? (
+        <div className={styles.errorBox} role="alert">
+          <i className="ti ti-alert-triangle" aria-hidden /> {error}
+        </div>
+      ) : null}
+
+      <div className={styles.colorSectionLabel}>
+        Or pick a placeholder color
+      </div>
       <div className={styles.pedalPreview}>
         <div
           className={styles.pedalPreviewBox}
@@ -301,9 +449,6 @@ function ImageStep({ draft, setDraft }: StepProps) {
           onChange={(e) => setColor(e.target.value)}
         />
       </label>
-      <p className={styles.helpMuted}>
-        Real photo upload + background removal lands in phase 5.
-      </p>
     </div>
   );
 }
