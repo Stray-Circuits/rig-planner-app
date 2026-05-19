@@ -71,16 +71,70 @@
   text-overflow: ellipsis;
 }
 
-.swatchGrid {
+.colorRow {
   display: flex;
+  align-items: center;
+  gap: 16px;
   flex-wrap: wrap;
-  gap: 10px;
-  justify-content: flex-start;
 }
 
-.swatch {
-  width: 36px;
-  height: 36px;
+.colorPickerWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+/* Native <input type="color"> styled as a clean round swatch. The default
+   chrome (system date/file-style box) is ugly; resetting appearance and
+   restyling ::-webkit-color-swatch / ::-moz-color-swatch gives us a tidy
+   circle that still opens the system color picker on click. */
+.colorPicker {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.colorPicker:hover {
+  border-color: var(--border-strong);
+}
+.colorPicker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.colorPicker::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+.colorPicker::-moz-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.colorHex {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.quickPicks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.quickPick {
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: 1.5px solid var(--border);
   cursor: pointer;
@@ -88,11 +142,11 @@
   flex-shrink: 0;
 }
 
-.swatch:hover {
+.quickPick:hover {
   border-color: var(--border-strong);
 }
 
-.swatchSelected {
+.quickPickSelected {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary-bg);
 }

@@ -254,17 +254,14 @@ interface StepProps {
   ) => void;
 }
 
-const SWATCHES = [
+/** Quick-pick chips next to the native color picker. */
+const QUICK_PICKS = [
   '#C62828', // red
   '#E65100', // orange
-  '#F9A825', // amber
   '#2E7D32', // green
   '#1565C0', // blue
   '#4A148C', // purple
-  '#D4537E', // pink
-  '#37474F', // slate
   '#212121', // black
-  '#9E9E9E', // grey
 ];
 
 function isValidHex(s: string): boolean {
@@ -292,7 +289,6 @@ const PHASE_SUBS: Record<BgRemovalProgress['phase'], string | null> = {
 
 function ImageStep({ draft, setDraft }: StepProps) {
   const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
-  const customValid = isValidHex(draft.color);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [progress, setProgress] = useState<BgRemovalProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -584,36 +580,34 @@ function ImageStep({ draft, setDraft }: StepProps) {
           </span>
         </div>
       </div>
-      <div className={styles.swatchGrid} role="radiogroup" aria-label="Color">
-        {SWATCHES.map((s) => {
-          const selected = draft.color.toLowerCase() === s.toLowerCase();
-          return (
-            <button
-              key={s}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              aria-label={`Color ${s}`}
-              className={
-                styles.swatch + (selected ? ' ' + styles.swatchSelected : '')
-              }
-              style={{ background: s }}
-              onClick={() => setColor(s)}
-            />
-          );
-        })}
+      <div className={styles.colorRow}>
+        <label className={styles.colorPickerWrap}>
+          <input
+            type="color"
+            value={draft.color}
+            onChange={(e) => setColor(e.target.value)}
+            className={styles.colorPicker}
+            aria-label="Pick a color"
+          />
+          <span className={styles.colorHex}>{draft.color.toUpperCase()}</span>
+        </label>
+        <div className={styles.quickPicks} aria-label="Quick picks">
+          {QUICK_PICKS.map((s) => {
+            const selected = draft.color.toLowerCase() === s.toLowerCase();
+            return (
+              <button
+                key={s}
+                type="button"
+                aria-label={`Color ${s}`}
+                aria-pressed={selected}
+                className={`${styles.quickPick} ${selected ? styles.quickPickSelected : ''}`}
+                style={{ background: s }}
+                onClick={() => setColor(s)}
+              />
+            );
+          })}
+        </div>
       </div>
-      <label className={styles.field}>
-        <span className={styles.label}>Custom hex</span>
-        <TextField
-          inputSize="md"
-          placeholder="#RRGGBB"
-          maxLength={7}
-          value={draft.color}
-          invalid={!customValid}
-          onChange={(e) => setColor(e.target.value)}
-        />
-      </label>
     </div>
   );
 }
