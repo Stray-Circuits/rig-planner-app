@@ -3,12 +3,6 @@
 Polish items and deferred features called out during phased delivery. Each entry
 links the phase that originated it so we know roughly when it was set aside.
 
-## Canvas / placement
-
-
-## Add Pedal wizard
-
-
 ## Pedal library / collection
 
 - **"Add new pedal" position** *(Phase 4e)* — currently the first row of the
@@ -38,9 +32,6 @@ links the phase that originated it so we know roughly when it was set aside.
 - **Routing isn't aware of pedal obstacles** *(Phase 6e)* — the 3-segment
   manhattan path can cross through other pedals if endpoints geometrically line
   it up that way. A proper router would detour around them.
-
-## Image upload / background removal
-
 
 ## Board presets
 
