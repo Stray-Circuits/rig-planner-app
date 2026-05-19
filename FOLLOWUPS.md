@@ -57,12 +57,30 @@ links the phase that originated it so we know roughly when it was set aside.
   manhattan path can cross through other pedals if endpoints geometrically line
   it up that way. A proper router would detour around them.
 
-## Phase 5 — not yet started
+## Image upload / background removal
 
-- **Real photo upload + background removal** — the wizard image step is
-  currently a color picker. rembg-webgpu integration replaces it (~176MB model,
-  lazy-downloaded on first use). Color placeholders remain a fallback when the
-  user doesn't have / doesn't want a photo.
+- **Storage quota** *(Phase 5)* — pedal photos are stored as data: URLs in
+  `pedals.image_path`. In browser dev mode that's localStorage, which is
+  ~5MB per origin. At ~200KB per 1024px transparent PNG, we hit the quota
+  around 20–25 pedals and `createPedal` will start throwing
+  `QuotaExceededError`. Tauri's SQLite has no practical limit. Worth
+  surfacing as a user-visible warning when localStorage gets close to
+  full, or moving to OPFS/IndexedDB for browser dev.
+- **Cellular-data warning before model download** *(Phase 5)* — the ~176MB
+  model downloads silently on first upload. On mobile data that's
+  expensive. Should detect `navigator.connection?.type === 'cellular'`
+  and prompt before kicking off the fetch.
+- **HEIC photos from iOS** *(Phase 5)* — `createImageBitmap` may not
+  decode HEIC in all browsers. The catch will surface an error, but a
+  clearer "this format isn't supported, try JPEG/PNG" message would help.
+- **Cancel in-progress bg removal** *(Phase 5)* — `RemoveBackgroundOptions`
+  already accepts an `AbortSignal`, but no UI uses it. A "Cancel" button
+  during the multi-second runtime warm-up + model download would be nice.
+- **Pure-function unit tests for the canvas helpers** *(Phase 5)* —
+  `cropToContent` and `removeColorThreshold` rely on `createImageBitmap`
+  (not in jsdom), so they're only manually tested today. Extracting the
+  bbox-find and color-distance loops into pure helpers operating on
+  `Uint8ClampedArray` would make them unit-testable.
 
 ## Mobile / native
 
