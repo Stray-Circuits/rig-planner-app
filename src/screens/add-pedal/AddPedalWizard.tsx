@@ -278,6 +278,10 @@ const PHASE_LABELS: Record<BgRemovalProgress['phase'], string> = {
   finalizing: 'Cropping silhouette…',
 };
 
+function abortError(): DOMException {
+  return new DOMException('Aborted', 'AbortError');
+}
+
 /**
  * Reject obviously unsupported uploads up front so the user sees a clear
  * message instead of an opaque createImageBitmap decode error. iOS HEIC
@@ -316,6 +320,7 @@ function ImageStep({ draft, setDraft }: StepProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [progress, setProgress] = useState<BgRemovalProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   // When non-null, the wizard is in "tune the threshold" sub-mode.
   // previewDataUrl is the live-updated transparent PNG that reflects the
   // current tolerance; the user can Apply it to draft.photoDataUrl or
@@ -330,6 +335,9 @@ function ImageStep({ draft, setDraft }: StepProps) {
   // "Use a photo". Best-effort, no UI feedback for the prefetch itself.
   useEffect(() => {
     prefetchBgRemoval();
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   /**
@@ -345,6 +353,10 @@ function ImageStep({ draft, setDraft }: StepProps) {
       setError(rejection);
       return;
     }
+    // Cancel any in-flight run before starting a new one.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setDraft((d) => ({ ...d, photoSource: file }));
     try {
       setProgress({ phase: 'preparing-image', fraction: null });
@@ -352,18 +364,29 @@ function ImageStep({ draft, setDraft }: StepProps) {
       // throws away detail the model could otherwise use and leaves the
       // saved transparent PNG looking grainy when the canvas zooms in.
       const shrunk = await shrinkImage(file, 1024);
+      if (controller.signal.aborted) throw abortError();
       const processed = removeBg
-        ? await removeBackground(shrunk, { onProgress: setProgress })
+        ? await removeBackground(shrunk, {
+            onProgress: setProgress,
+            signal: controller.signal,
+          })
         : shrunk;
+      if (controller.signal.aborted) throw abortError();
       setProgress({ phase: 'finalizing', fraction: null });
       const cropped = await cropToContent(processed);
+      if (controller.signal.aborted) throw abortError();
       const dataUrl = await blobToDataURL(cropped);
       setDraft((d) => ({ ...d, photoDataUrl: dataUrl }));
     } catch (err) {
       setError(describeImageError(err));
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setProgress(null);
     }
+  };
+
+  const handleCancelProcessing = () => {
+    abortRef.current?.abort();
   };
 
   const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -561,6 +584,11 @@ function ImageStep({ draft, setDraft }: StepProps) {
                     }
               }
             />
+          </div>
+          <div className={styles.progressActions}>
+            <Button variant="ghost" size="sm" onClick={handleCancelProcessing}>
+              Cancel
+            </Button>
           </div>
         </div>
       </div>

@@ -266,6 +266,12 @@
   transition: width 0.2s ease;
 }
 
+.progressActions {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
 .slider {
   width: 100%;
   accent-color: var(--primary);

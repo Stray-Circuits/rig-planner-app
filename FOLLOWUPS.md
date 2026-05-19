@@ -65,9 +65,6 @@ links the phase that originated it so we know roughly when it was set aside.
   model downloads silently on first upload. On mobile data that's
   expensive. Should detect `navigator.connection?.type === 'cellular'`
   and prompt before kicking off the fetch.
-- **Cancel in-progress bg removal** *(Phase 5)* — `RemoveBackgroundOptions`
-  already accepts an `AbortSignal`, but no UI uses it. A "Cancel" button
-  during the multi-second runtime warm-up + model download would be nice.
 
 ## Board presets
 
