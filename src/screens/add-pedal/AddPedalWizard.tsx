@@ -307,7 +307,10 @@ function ImageStep({ draft, setDraft }: StepProps) {
     setDraft((d) => ({ ...d, photoSource: file }));
     try {
       setProgress({ phase: 'preparing-image', fraction: null });
-      const shrunk = await shrinkImage(file, 512);
+      // 1024 matches imgly's default ISNet input resolution — going lower
+      // throws away detail the model could otherwise use and leaves the
+      // saved transparent PNG looking grainy when the canvas zooms in.
+      const shrunk = await shrinkImage(file, 1024);
       const transparent = await removeBackground(shrunk, {
         onProgress: setProgress,
       });

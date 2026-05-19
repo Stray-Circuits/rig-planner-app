@@ -175,9 +175,10 @@ export async function cropToContent(blob: Blob, paddingPx = 1): Promise<Blob> {
 
 /**
  * Resize a Blob image (canvas-based) so its long side is at most maxPx. We
- * pre-shrink uploads before bg removal both for speed and to keep the data
- * URL we eventually store small enough for localStorage (browser dev mode)
- * and reasonable for SQLite (Tauri).
+ * pre-shrink uploads before bg removal so the model isn't asked to chew on
+ * a 12MP raw camera frame, and to keep the resulting data URL we store
+ * within reason. 1024 matches imgly's default ISNet input resolution —
+ * smaller throws away detail the model could otherwise use.
  */
 export async function shrinkImage(source: Blob, maxPx: number): Promise<Blob> {
   const bitmap = await createImageBitmap(source);

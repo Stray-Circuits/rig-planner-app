@@ -26,6 +26,11 @@
 .bodyImage {
   border: none;
   box-shadow: none;
+  /* Nudge the browser toward better quality resampling for photo backgrounds
+     rather than the fast-but-noisy default. Safari + Chrome respect
+     `high-quality`; older browsers fall back to optimize-contrast. */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: high-quality;
 }
 
 .bodyImage .label {
