@@ -1,3 +1,9 @@
+import {
+  applyColorThreshold,
+  findAlphaBBox,
+  sampleCornerBgColor,
+} from './imageHelpers';
+
 /**
  * Background-removal wrapper around `@imgly/background-removal`.
  *
@@ -128,30 +134,13 @@ export async function cropToContent(blob: Blob, paddingPx = 1): Promise<Blob> {
   bitmap.close?.();
 
   const { data } = ctx.getImageData(0, 0, w, h);
-  let minX = w;
-  let minY = h;
-  let maxX = -1;
-  let maxY = -1;
-  // Alpha threshold of 8 ignores near-transparent fringes the model often
-  // leaves around the silhouette edge.
-  const threshold = 8;
-  for (let y = 0; y < h; y++) {
-    const row = y * w;
-    for (let x = 0; x < w; x++) {
-      if (data[(row + x) * 4 + 3]! > threshold) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-  if (maxX < 0) return blob;
+  const bbox = findAlphaBBox(data, w, h);
+  if (!bbox) return blob;
 
-  const x0 = Math.max(0, minX - paddingPx);
-  const y0 = Math.max(0, minY - paddingPx);
-  const x1 = Math.min(w, maxX + 1 + paddingPx);
-  const y1 = Math.min(h, maxY + 1 + paddingPx);
+  const x0 = Math.max(0, bbox.minX - paddingPx);
+  const y0 = Math.max(0, bbox.minY - paddingPx);
+  const x1 = Math.min(w, bbox.maxX + 1 + paddingPx);
+  const y1 = Math.min(h, bbox.maxY + 1 + paddingPx);
   const cw = x1 - x0;
   const ch = y1 - y0;
 
@@ -205,39 +194,8 @@ export async function removeColorThreshold(
   bitmap.close?.();
 
   const imgData = ctx.getImageData(0, 0, w, h);
-  const data = imgData.data;
-
-  // Sample 4 corner pixels slightly inset from the edge — true edges
-  // sometimes have JPEG-y fringe colors. Average for a stable estimate.
-  const inset = Math.max(2, Math.round(Math.min(w, h) * 0.01));
-  const sampleAt = (x: number, y: number) => {
-    const i = (y * w + x) * 4;
-    return [data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0] as const;
-  };
-  const corners = [
-    sampleAt(inset, inset),
-    sampleAt(w - 1 - inset, inset),
-    sampleAt(inset, h - 1 - inset),
-    sampleAt(w - 1 - inset, h - 1 - inset),
-  ];
-  const bgR = corners.reduce((s, c) => s + c[0], 0) / 4;
-  const bgG = corners.reduce((s, c) => s + c[1], 0) / 4;
-  const bgB = corners.reduce((s, c) => s + c[2], 0) / 4;
-
-  // Max possible RGB distance is sqrt(3 × 255²) ≈ 441.7.
-  const maxDist = Math.sqrt(3) * 255;
-  const threshold = tolerance * maxDist;
-  const sqThreshold = threshold * threshold;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const dr = (data[i] ?? 0) - bgR;
-    const dg = (data[i + 1] ?? 0) - bgG;
-    const db = (data[i + 2] ?? 0) - bgB;
-    if (dr * dr + dg * dg + db * db < sqThreshold) {
-      data[i + 3] = 0;
-    }
-  }
-
+  const bg = sampleCornerBgColor(imgData.data, w, h);
+  applyColorThreshold(imgData.data, bg, tolerance);
   ctx.putImageData(imgData, 0, 0);
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => {
