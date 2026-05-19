@@ -72,17 +72,20 @@
 }
 
 .swatchGrid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-start;
 }
 
 .swatch {
-  aspect-ratio: 1;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 1.5px solid var(--border);
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
 }
 
 .swatch:hover {
