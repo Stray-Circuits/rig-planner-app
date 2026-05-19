@@ -85,6 +85,74 @@ export function blobToDataURL(blob: Blob): Promise<string> {
 }
 
 /**
+ * Crop a transparent PNG (e.g. the removeBackground result) to the bounding
+ * box of non-transparent pixels, with a small padding. Without this, the
+ * model leaves the original dimensions intact — empty backgrounds become
+ * transparent margins that shrink the visible pedal when CSS `contain`s the
+ * result into a smaller container.
+ */
+export async function cropToContent(blob: Blob, paddingPx = 4): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  const w = bitmap.width;
+  const h = bitmap.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    bitmap.close?.();
+    return blob;
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+
+  const { data } = ctx.getImageData(0, 0, w, h);
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+  // Alpha threshold of 8 ignores near-transparent fringes the model often
+  // leaves around the silhouette edge.
+  const threshold = 8;
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      if (data[(row + x) * 4 + 3]! > threshold) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) return blob;
+
+  const x0 = Math.max(0, minX - paddingPx);
+  const y0 = Math.max(0, minY - paddingPx);
+  const x1 = Math.min(w, maxX + 1 + paddingPx);
+  const y1 = Math.min(h, maxY + 1 + paddingPx);
+  const cw = x1 - x0;
+  const ch = y1 - y0;
+
+  const out = document.createElement('canvas');
+  out.width = cw;
+  out.height = ch;
+  const octx = out.getContext('2d');
+  if (!octx) return blob;
+  octx.drawImage(canvas, x0, y0, cw, ch, 0, 0, cw, ch);
+  return new Promise<Blob>((resolve, reject) => {
+    out.toBlob(
+      (b) => {
+        if (b) resolve(b);
+        else reject(new Error('toBlob returned null'));
+      },
+      'image/png',
+      0.92,
+    );
+  });
+}
+
+/**
  * Resize a Blob image (canvas-based) so its long side is at most maxPx. We
  * pre-shrink uploads before bg removal both for speed and to keep the data
  * URL we eventually store small enough for localStorage (browser dev mode)

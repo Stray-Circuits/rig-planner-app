@@ -12,6 +12,7 @@ import { usePedalsStore } from '../../stores/pedalsStore';
 import { createPedal } from '../../data/pedalsRepo';
 import {
   blobToDataURL,
+  cropToContent,
   removeBackground,
   shrinkImage,
   type BgRemovalProgress,
@@ -283,7 +284,8 @@ function ImageStep({ draft, setDraft }: StepProps) {
       const transparent = await removeBackground(shrunk, {
         onProgress: setProgress,
       });
-      const dataUrl = await blobToDataURL(transparent);
+      const cropped = await cropToContent(transparent);
+      const dataUrl = await blobToDataURL(cropped);
       setDraft((d) => ({ ...d, photoDataUrl: dataUrl }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
