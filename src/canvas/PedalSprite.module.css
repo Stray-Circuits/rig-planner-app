@@ -19,9 +19,12 @@
 }
 
 /* Real (background-removed) photos already have their own silhouette, so we
-   drop the chrome chassis treatment to let the alpha channel breathe. */
+   drop the chrome chassis treatment to let the alpha channel breathe.
+   `border: none` matters here: with global `box-sizing: border-box`, leaving
+   even a transparent 1.5px border on each side eats 3px out of the box's
+   content area, which is what made photo pedals render slightly shrunken. */
 .bodyImage {
-  border-color: transparent;
+  border: none;
   box-shadow: none;
 }
 

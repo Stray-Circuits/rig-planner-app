@@ -91,7 +91,7 @@ export function blobToDataURL(blob: Blob): Promise<string> {
  * transparent margins that shrink the visible pedal when CSS `contain`s the
  * result into a smaller container.
  */
-export async function cropToContent(blob: Blob, paddingPx = 4): Promise<Blob> {
+export async function cropToContent(blob: Blob, paddingPx = 1): Promise<Blob> {
   const bitmap = await createImageBitmap(blob);
   const w = bitmap.width;
   const h = bitmap.height;

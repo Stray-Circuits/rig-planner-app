@@ -282,9 +282,7 @@ describe('RigScreen', () => {
     fireEvent.click(await screen.findByLabelText('DS-1 actions'));
     fireEvent.click(await screen.findByText('Remove from collection'));
     expect(
-      await screen.findByText(
-        /currently placed on 1 rig\. Those placements/i,
-      ),
+      await screen.findByText(/currently placed on 1 rig\. Those placements/i),
     ).toBeInTheDocument();
     const dialog = screen
       .getByText('Remove pedal?')
