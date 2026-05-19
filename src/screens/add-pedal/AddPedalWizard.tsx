@@ -1243,6 +1243,14 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
       ports: d.ports.filter((_, i) => i !== idx),
     }));
 
+  const togglePortOptional = (idx: number) =>
+    setDraft((d) => ({
+      ...d,
+      ports: d.ports.map((p, i) =>
+        i === idx ? { ...p, optional: !p.optional } : p,
+      ),
+    }));
+
   const addCustomPort = (role: RoleOption, connector: Connector) => {
     setDraft((d) => {
       const side = pickDefaultSide(d);
@@ -1303,6 +1311,16 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
               <span className={styles.portMeta}>
                 {p.side} · {p.connector.toUpperCase()}
               </span>
+              <button
+                type="button"
+                className={
+                  p.optional ? styles.portOptionalChip : styles.portRequiredChip
+                }
+                aria-label={`${p.label} is ${p.optional ? 'optional' : 'required'}. Toggle.`}
+                onClick={() => togglePortOptional(idx)}
+              >
+                {p.optional ? 'Optional' : 'Required'}
+              </button>
               <button
                 type="button"
                 className={styles.portRemoveBtn}

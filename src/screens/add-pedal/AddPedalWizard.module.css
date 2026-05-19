@@ -480,6 +480,31 @@
   letter-spacing: 0.04em;
 }
 
+.portRequiredChip,
+.portOptionalChip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 0.5px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.portRequiredChip {
+  background: var(--primary-faint, rgba(37, 99, 235, 0.12));
+  color: var(--primary-fg, var(--primary));
+  border-color: var(--primary-border, rgba(37, 99, 235, 0.28));
+}
+
+.portOptionalChip {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+}
+
 .portRemoveBtn {
   width: 24px;
   height: 24px;

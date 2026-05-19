@@ -18,9 +18,6 @@ links the phase that originated it so we know roughly when it was set aside.
 - **Explicit side selection when adding a port** *(Phase 4f)* — currently the
   custom-port picker auto-picks the first jack-marked side. A third picker step
   would let users choose.
-- **Mark required vs optional on new ports** *(Phase 4f)* — new ports default
-  to optional; the user can't currently flip a port to required during the
-  wizard.
 
 ## Pedal library / collection
 

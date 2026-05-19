@@ -179,6 +179,32 @@ describe('AddPedalWizard', () => {
     expect(expr?.signalType).toBe('expression');
   });
 
+  it('Required/Optional chip toggles a port between the two states', async () => {
+    const onCreated = vi.fn();
+    render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
+    fireEvent.click(screen.getByText('Continue'));
+    fillNameSize();
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Continue'));
+
+    // Default In + Out are both required.
+    const requiredChips = screen.getAllByText('Required');
+    expect(requiredChips).toHaveLength(2);
+    // Click the In chip → flips to Optional.
+    fireEvent.click(requiredChips[0]!);
+    expect(screen.getAllByText('Required')).toHaveLength(1);
+    expect(screen.getByText('Optional')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Continue'));
+    fireEvent.click(screen.getByText('Add to library'));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const created = (await listPedals())[0]!;
+    const optional = created.ports.find((p) => p.optional);
+    const required = created.ports.find((p) => !p.optional);
+    expect(optional).toBeDefined();
+    expect(required).toBeDefined();
+  });
+
   it('removing a port from the list updates the count', () => {
     render(
       <AddPedalWizard onCreated={() => undefined} onCancel={() => undefined} />,
