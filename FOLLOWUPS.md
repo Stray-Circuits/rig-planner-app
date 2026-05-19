@@ -15,9 +15,6 @@ links the phase that originated it so we know roughly when it was set aside.
   Today the only edit is remove + re-add.
 - **Reorder ports along their side** *(Phase 4f)* — drag handles, or up/down
   arrows in the port row.
-- **Explicit side selection when adding a port** *(Phase 4f)* — currently the
-  custom-port picker auto-picks the first jack-marked side. A third picker step
-  would let users choose.
 
 ## Pedal library / collection
 

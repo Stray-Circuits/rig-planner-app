@@ -628,6 +628,12 @@
   flex: 1;
 }
 
+.portPickerHint {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .review {
   display: flex;
   flex-direction: column;

@@ -166,6 +166,8 @@ describe('AddPedalWizard', () => {
     fireEvent.click(screen.getByText('Expression'));
     // Connector picker now visible — pick TRS.
     fireEvent.click(screen.getByText(/TRS \(stereo \/ balanced\)/));
+    // Side picker now visible — pick Right.
+    fireEvent.click(screen.getByText('Right'));
 
     expect(screen.getByText(/Ports \(3\)/)).toBeInTheDocument();
 
@@ -177,6 +179,7 @@ describe('AddPedalWizard', () => {
     expect(expr).toBeDefined();
     expect(expr?.connector).toBe('trs');
     expect(expr?.signalType).toBe('expression');
+    expect(expr?.side).toBe('right');
   });
 
   it('Required/Optional chip toggles a port between the two states', async () => {

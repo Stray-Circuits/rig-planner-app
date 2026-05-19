@@ -1219,10 +1219,13 @@ function pickDefaultSide(draft: WizardDraft): Side {
 }
 
 function ConnectionsStep({ draft, setDraft }: StepProps) {
-  const [pickerStep, setPickerStep] = useState<'closed' | 'role' | 'connector'>(
-    'closed',
-  );
+  const [pickerStep, setPickerStep] = useState<
+    'closed' | 'role' | 'connector' | 'side'
+  >('closed');
   const [pickedRole, setPickedRole] = useState<RoleOption | null>(null);
+  const [pickedConnector, setPickedConnector] = useState<Connector | null>(
+    null,
+  );
 
   const applyPreset = (preset: ConnectionPreset) => {
     const built = preset.build();
@@ -1251,9 +1254,12 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
       ),
     }));
 
-  const addCustomPort = (role: RoleOption, connector: Connector) => {
+  const addCustomPort = (
+    role: RoleOption,
+    connector: Connector,
+    side: Side,
+  ) => {
     setDraft((d) => {
-      const side = pickDefaultSide(d);
       const maxOrderOnSide = d.ports
         .filter((p) => p.side === side)
         .reduce((m, p) => Math.max(m, p.sideOrder), -1);
@@ -1270,6 +1276,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
     });
     setPickerStep('closed');
     setPickedRole(null);
+    setPickedConnector(null);
   };
 
   return (
@@ -1346,15 +1353,25 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
         <PortPicker
           step={pickerStep}
           pickedRole={pickedRole}
+          pickedConnector={pickedConnector}
+          defaultSide={pickDefaultSide(draft)}
           onPickRole={(role) => {
             setPickedRole(role);
             setPickerStep('connector');
           }}
           onPickConnector={(connector) => {
-            if (pickedRole) addCustomPort(pickedRole, connector);
+            setPickedConnector(connector);
+            setPickerStep('side');
+          }}
+          onPickSide={(side) => {
+            if (pickedRole && pickedConnector)
+              addCustomPort(pickedRole, pickedConnector, side);
           }}
           onBack={() => {
-            if (pickerStep === 'connector') {
+            if (pickerStep === 'side') {
+              setPickerStep('connector');
+              setPickedConnector(null);
+            } else if (pickerStep === 'connector') {
               setPickerStep('role');
               setPickedRole(null);
             } else {
@@ -1368,20 +1385,39 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
 }
 
 interface PortPickerProps {
-  step: 'role' | 'connector';
+  step: 'role' | 'connector' | 'side';
   pickedRole: RoleOption | null;
+  pickedConnector: Connector | null;
+  defaultSide: Side;
   onPickRole: (role: RoleOption) => void;
   onPickConnector: (connector: Connector) => void;
+  onPickSide: (side: Side) => void;
   onBack: () => void;
 }
+
+const SIDE_LABELS: Record<Side, string> = {
+  top: 'Top',
+  right: 'Right',
+  bottom: 'Bottom',
+  left: 'Left',
+};
 
 function PortPicker({
   step,
   pickedRole,
+  pickedConnector,
+  defaultSide,
   onPickRole,
   onPickConnector,
+  onPickSide,
   onBack,
 }: PortPickerProps) {
+  const title =
+    step === 'role'
+      ? 'Choose port type'
+      : step === 'connector'
+        ? `Choose connector · ${pickedRole?.label ?? ''}`
+        : `Choose side · ${pickedRole?.label ?? ''}`;
   return (
     <div className={styles.portPicker}>
       <div className={styles.portPickerHeader}>
@@ -1393,48 +1429,69 @@ function PortPicker({
         >
           <i className="ti ti-chevron-left" aria-hidden /> Back
         </button>
-        <span className={styles.portPickerTitle}>
-          {step === 'role'
-            ? 'Choose port type'
-            : `Choose connector · ${pickedRole?.label ?? ''}`}
-        </span>
+        <span className={styles.portPickerTitle}>{title}</span>
       </div>
-      {step === 'role'
-        ? ROLE_GROUPS.map((group) => (
-            <div key={group.heading}>
-              <div className={styles.portPickerSection}>{group.heading}</div>
-              {group.options.map((opt) => (
-                <button
-                  key={opt.role}
-                  type="button"
-                  className={styles.portPickerOpt}
-                  onClick={() => onPickRole(opt)}
-                >
-                  <span
-                    className={
-                      opt.signalType === 'midi'
-                        ? styles.jackDotMidi
-                        : styles.jackDotAudio
-                    }
-                    aria-hidden
-                  />
-                  <span className={styles.portPickerOptName}>{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          ))
-        : pickedRole?.connectors.map((c) => (
+      {step === 'role' &&
+        ROLE_GROUPS.map((group) => (
+          <div key={group.heading}>
+            <div className={styles.portPickerSection}>{group.heading}</div>
+            {group.options.map((opt) => (
+              <button
+                key={opt.role}
+                type="button"
+                className={styles.portPickerOpt}
+                onClick={() => onPickRole(opt)}
+              >
+                <span
+                  className={
+                    opt.signalType === 'midi'
+                      ? styles.jackDotMidi
+                      : styles.jackDotAudio
+                  }
+                  aria-hidden
+                />
+                <span className={styles.portPickerOptName}>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      {step === 'connector' &&
+        pickedRole?.connectors.map((c) => (
+          <button
+            key={c}
+            type="button"
+            className={styles.portPickerOpt}
+            onClick={() => onPickConnector(c)}
+          >
+            <span className={styles.portPickerOptName}>
+              {CONNECTOR_LABELS[c]}
+            </span>
+          </button>
+        ))}
+      {step === 'side' && (
+        <>
+          {(['top', 'right', 'bottom', 'left'] as Side[]).map((side) => (
             <button
-              key={c}
+              key={side}
               type="button"
               className={styles.portPickerOpt}
-              onClick={() => onPickConnector(c)}
+              onClick={() => onPickSide(side)}
             >
               <span className={styles.portPickerOptName}>
-                {CONNECTOR_LABELS[c]}
+                {SIDE_LABELS[side]}
+                {side === defaultSide ? (
+                  <span className={styles.portPickerHint}> · suggested</span>
+                ) : null}
               </span>
             </button>
           ))}
+          {pickedConnector ? (
+            <p className={styles.helpMuted}>
+              Picked: {CONNECTOR_LABELS[pickedConnector]}
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
