@@ -13,6 +13,7 @@ import { createPedal } from '../../data/pedalsRepo';
 import {
   blobToDataURL,
   cropToContent,
+  describeImageError,
   prefetchBgRemoval,
   removeBackground,
   removeColorThreshold,
@@ -277,6 +278,29 @@ const PHASE_LABELS: Record<BgRemovalProgress['phase'], string> = {
   finalizing: 'Cropping silhouette…',
 };
 
+/**
+ * Reject obviously unsupported uploads up front so the user sees a clear
+ * message instead of an opaque createImageBitmap decode error. iOS HEIC
+ * comes through as `image/heic` or `image/heif` (or no MIME with a `.heic`
+ * extension); browsers can't decode it without a polyfill.
+ */
+function rejectUnsupportedImage(file: Blob): string | null {
+  const mime = file.type.toLowerCase();
+  const name = file instanceof File ? file.name.toLowerCase() : '';
+  if (
+    mime === 'image/heic' ||
+    mime === 'image/heif' ||
+    name.endsWith('.heic') ||
+    name.endsWith('.heif')
+  ) {
+    return "HEIC photos from iOS aren't supported in the browser yet — please export as JPEG or PNG first.";
+  }
+  if (mime && !mime.startsWith('image/')) {
+    return `That doesn't look like an image (${mime || 'unknown type'}). Try a JPEG or PNG.`;
+  }
+  return null;
+}
+
 const PHASE_SUBS: Record<BgRemovalProgress['phase'], string | null> = {
   'preparing-image': 'Downsizing your photo to 512px.',
   'loading-library': 'Fetching the JS chunk (~110 KB gzipped).',
@@ -316,6 +340,11 @@ function ImageStep({ draft, setDraft }: StepProps) {
    */
   const processFile = async (file: Blob, removeBg: boolean) => {
     setError(null);
+    const rejection = rejectUnsupportedImage(file);
+    if (rejection) {
+      setError(rejection);
+      return;
+    }
     setDraft((d) => ({ ...d, photoSource: file }));
     try {
       setProgress({ phase: 'preparing-image', fraction: null });
@@ -331,7 +360,7 @@ function ImageStep({ draft, setDraft }: StepProps) {
       const dataUrl = await blobToDataURL(cropped);
       setDraft((d) => ({ ...d, photoDataUrl: dataUrl }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeImageError(err));
     } finally {
       setProgress(null);
     }
@@ -383,7 +412,7 @@ function ImageStep({ draft, setDraft }: StepProps) {
         );
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(describeImageError(err));
         setThreshold(null);
       }
     })();

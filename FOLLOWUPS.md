@@ -65,17 +65,9 @@ links the phase that originated it so we know roughly when it was set aside.
   model downloads silently on first upload. On mobile data that's
   expensive. Should detect `navigator.connection?.type === 'cellular'`
   and prompt before kicking off the fetch.
-- **HEIC photos from iOS** *(Phase 5)* — `createImageBitmap` may not
-  decode HEIC in all browsers. The catch will surface an error, but a
-  clearer "this format isn't supported, try JPEG/PNG" message would help.
 - **Cancel in-progress bg removal** *(Phase 5)* — `RemoveBackgroundOptions`
   already accepts an `AbortSignal`, but no UI uses it. A "Cancel" button
   during the multi-second runtime warm-up + model download would be nice.
-- **Pure-function unit tests for the canvas helpers** *(Phase 5)* —
-  `cropToContent` and `removeColorThreshold` rely on `createImageBitmap`
-  (not in jsdom), so they're only manually tested today. Extracting the
-  bbox-find and color-distance loops into pure helpers operating on
-  `Uint8ClampedArray` would make them unit-testable.
 
 ## Board presets
 

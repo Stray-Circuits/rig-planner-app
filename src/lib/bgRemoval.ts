@@ -100,6 +100,31 @@ export function prefetchBgRemoval(): void {
   void import('@imgly/background-removal').catch(() => undefined);
 }
 
+const IMAGE_DECODE_HINTS = [
+  'createimagebitmap',
+  'source image could not be decoded',
+  'the image source is not supported',
+  'invalid image',
+];
+
+/**
+ * Map a thrown error from the image pipeline to a message that's actually
+ * actionable. The big offender is HEIC from iOS: createImageBitmap throws
+ * a generic "Cannot decode" in Chromium, "type not supported" in Safari.
+ * Returns the original error message when we don't recognize the cause.
+ */
+export function describeImageError(err: unknown): string {
+  if (err instanceof DOMException && err.name === 'AbortError') {
+    return 'Canceled.';
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  if (IMAGE_DECODE_HINTS.some((hint) => lower.includes(hint))) {
+    return "We couldn't decode that image — try JPEG or PNG. HEIC photos from iOS aren't supported in the browser yet.";
+  }
+  return msg;
+}
+
 /** Convert a Blob (e.g. the removeBackground result) to a data: URL. */
 export function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
