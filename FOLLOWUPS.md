@@ -11,8 +11,6 @@ links the phase that originated it so we know roughly when it was set aside.
 
 ## Add Pedal wizard
 
-- **Edit an existing port** *(Phase 4f)* — rename, change side, swap connector.
-  Today the only edit is remove + re-add.
 
 ## Pedal library / collection
 

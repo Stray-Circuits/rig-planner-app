@@ -1226,6 +1226,13 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
   const [pickedConnector, setPickedConnector] = useState<Connector | null>(
     null,
   );
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+
+  const updatePort = (idx: number, patch: Partial<DraftPort>) =>
+    setDraft((d) => ({
+      ...d,
+      ports: d.ports.map((p, i) => (i === idx ? { ...p, ...patch } : p)),
+    }));
 
   const applyPreset = (preset: ConnectionPreset) => {
     const built = preset.build();
@@ -1336,6 +1343,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
             const positionAmongSide = sameSide.indexOf(p);
             const canMoveUp = positionAmongSide > 0;
             const canMoveDown = positionAmongSide < sameSide.length - 1;
+            const isEditing = editingIdx === idx;
             return (
               <li
                 key={`${p.role}-${p.label}-${idx}`}
@@ -1349,50 +1357,68 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
                   }
                   aria-hidden
                 />
-                <span className={styles.portName}>{p.label}</span>
-                <span className={styles.portMeta}>
-                  {p.side} · {p.connector.toUpperCase()}
-                </span>
-                <div className={styles.portReorder}>
-                  <button
-                    type="button"
-                    className={styles.portReorderBtn}
-                    aria-label={`Move ${p.label} earlier on ${p.side}`}
-                    disabled={!canMoveUp}
-                    onClick={() => movePort(idx, 'up')}
-                  >
-                    <i className="ti ti-chevron-up" aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.portReorderBtn}
-                    aria-label={`Move ${p.label} later on ${p.side}`}
-                    disabled={!canMoveDown}
-                    onClick={() => movePort(idx, 'down')}
-                  >
-                    <i className="ti ti-chevron-down" aria-hidden />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className={
-                    p.optional
-                      ? styles.portOptionalChip
-                      : styles.portRequiredChip
-                  }
-                  aria-label={`${p.label} is ${p.optional ? 'optional' : 'required'}. Toggle.`}
-                  onClick={() => togglePortOptional(idx)}
-                >
-                  {p.optional ? 'Optional' : 'Required'}
-                </button>
-                <button
-                  type="button"
-                  className={styles.portRemoveBtn}
-                  aria-label={`Remove ${p.label}`}
-                  onClick={() => removePort(idx)}
-                >
-                  <i className="ti ti-x" aria-hidden />
-                </button>
+                {isEditing ? (
+                  <PortInlineEditor
+                    port={p}
+                    onChange={(patch) => updatePort(idx, patch)}
+                    onDone={() => setEditingIdx(null)}
+                  />
+                ) : (
+                  <>
+                    <span className={styles.portName}>{p.label}</span>
+                    <span className={styles.portMeta}>
+                      {p.side} · {p.connector.toUpperCase()}
+                    </span>
+                    <div className={styles.portReorder}>
+                      <button
+                        type="button"
+                        className={styles.portReorderBtn}
+                        aria-label={`Move ${p.label} earlier on ${p.side}`}
+                        disabled={!canMoveUp}
+                        onClick={() => movePort(idx, 'up')}
+                      >
+                        <i className="ti ti-chevron-up" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.portReorderBtn}
+                        aria-label={`Move ${p.label} later on ${p.side}`}
+                        disabled={!canMoveDown}
+                        onClick={() => movePort(idx, 'down')}
+                      >
+                        <i className="ti ti-chevron-down" aria-hidden />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className={
+                        p.optional
+                          ? styles.portOptionalChip
+                          : styles.portRequiredChip
+                      }
+                      aria-label={`${p.label} is ${p.optional ? 'optional' : 'required'}. Toggle.`}
+                      onClick={() => togglePortOptional(idx)}
+                    >
+                      {p.optional ? 'Optional' : 'Required'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.portEditBtn}
+                      aria-label={`Edit ${p.label}`}
+                      onClick={() => setEditingIdx(idx)}
+                    >
+                      <i className="ti ti-pencil" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.portRemoveBtn}
+                      aria-label={`Remove ${p.label}`}
+                      onClick={() => removePort(idx)}
+                    >
+                      <i className="ti ti-x" aria-hidden />
+                    </button>
+                  </>
+                )}
               </li>
             );
           })}
@@ -1550,6 +1576,67 @@ function PortPicker({
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+interface PortInlineEditorProps {
+  port: DraftPort;
+  onChange: (patch: Partial<DraftPort>) => void;
+  onDone: () => void;
+}
+
+/**
+ * Inline edit panel for an existing port: rename label, change side, swap
+ * connector. Role/signalType are fixed (changing those is conceptually a
+ * remove + re-add). The connector dropdown is constrained to the set
+ * declared on the role option so users can't pick a nonsensical pairing.
+ */
+function PortInlineEditor({ port, onChange, onDone }: PortInlineEditorProps) {
+  const roleOption = ROLE_GROUPS.flatMap((g) => g.options).find(
+    (o) => o.role === port.role,
+  );
+  const connectors = roleOption?.connectors ?? [port.connector];
+  return (
+    <div className={styles.portEditor}>
+      <input
+        type="text"
+        className={styles.portEditorInput}
+        value={port.label}
+        aria-label="Port label"
+        onChange={(e) => onChange({ label: e.target.value })}
+      />
+      <select
+        className={styles.portEditorSelect}
+        aria-label="Port side"
+        value={port.side}
+        onChange={(e) => onChange({ side: e.target.value as Side })}
+      >
+        <option value="top">Top</option>
+        <option value="right">Right</option>
+        <option value="bottom">Bottom</option>
+        <option value="left">Left</option>
+      </select>
+      <select
+        className={styles.portEditorSelect}
+        aria-label="Port connector"
+        value={port.connector}
+        onChange={(e) => onChange({ connector: e.target.value as Connector })}
+      >
+        {connectors.map((c) => (
+          <option key={c} value={c}>
+            {CONNECTOR_LABELS[c]}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className={styles.portEditorDone}
+        aria-label="Done editing"
+        onClick={onDone}
+      >
+        <i className="ti ti-check" aria-hidden />
+      </button>
     </div>
   );
 }
