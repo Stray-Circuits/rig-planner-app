@@ -303,6 +303,43 @@ describe('RigScreen', () => {
     });
   });
 
+  it('refuses a rotation that would exceed the board and surfaces a notice', async () => {
+    // Shrink the board so the rotated DS-1 (4.75 × 2.85) is wider than the
+    // 4" board → rotation should be refused.
+    const narrow = await createRig({
+      name: 'Tiny',
+      widthIn: 4,
+      depthIn: 4,
+      style: 'rail',
+    });
+    useRigsStore.setState({
+      rigs: [narrow, rig],
+      status: 'ready',
+      error: null,
+    });
+
+    render(<RigScreen rig={narrow} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
+    fireEvent.click(await screen.findByText('DS-1'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[narrow.id]?.length).toBe(1);
+    });
+
+    const placedId =
+      usePlacedPedalsStore.getState().byRig[narrow.id]?.[0]?.id ?? '';
+    fireEvent.contextMenu(
+      document.querySelector(`[data-placed-id="${placedId}"]`)!,
+    );
+    fireEvent.click(await screen.findByText('Rotate 90°'));
+
+    expect(await screen.findByText(/won't fit rotated/i)).toBeInTheDocument();
+    // Rotation was not applied.
+    expect(
+      usePlacedPedalsStore.getState().byRig[narrow.id]?.[0]?.rotation,
+    ).toBe(0);
+  });
+
   it('Delete rig in Settings cascades and routes back', async () => {
     const onBack = vi.fn();
     render(<RigScreen rig={rig} onBack={onBack} />);

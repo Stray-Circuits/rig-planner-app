@@ -5,9 +5,6 @@ links the phase that originated it so we know roughly when it was set aside.
 
 ## Canvas / placement
 
-- **Rotation can feel jumpy when the rotated footprint won't fit** *(Phase 3e)* —
-  the clamp shoves the pedal back onto the board, which jumps it noticeably.
-  Could animate, or refuse the rotation when it doesn't fit and surface a hint.
 
 ## Add Pedal wizard
 

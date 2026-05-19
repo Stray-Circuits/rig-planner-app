@@ -9,7 +9,11 @@ import {
 import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
 import { useViewport } from '../../canvas/useViewport';
-import { centeredOnRig, clampToBoard } from '../../lib/geometry';
+import {
+  centeredOnRig,
+  clampToBoard,
+  placedFootprint,
+} from '../../lib/geometry';
 import { computeUnconnectedRequiredPorts } from '../../lib/signalChainWarnings';
 import type { Connection, ExternalEndpoint } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
@@ -65,6 +69,14 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const removeConnection = useSignalChainStore((s) => s.removeConnection);
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);
+  // Short-lived non-blocking message shown above the canvas (e.g. when we
+  // refuse a rotation that wouldn't fit). Auto-dismisses after a few seconds.
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 3500);
+    return () => clearTimeout(t);
+  }, [notice]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -225,6 +237,16 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     if (!targetPlaced || !targetPedal) return;
     const nextRotation = ((targetPlaced.rotation + 90) %
       360) as PlacedPedal['rotation'];
+    const footprint = placedFootprint(targetPedal, nextRotation);
+    if (footprint.widthIn > rig.widthIn || footprint.depthIn > rig.depthIn) {
+      // Rotated pedal would exceed the board; refuse + surface a hint
+      // rather than jumping the pedal back to (0, 0) and visibly clipping.
+      setNotice(
+        `${targetPedal.brand} ${targetPedal.name} won't fit rotated — board is too narrow.`,
+      );
+      closeActions();
+      return;
+    }
     void rotateAction(targetPlaced.id, nextRotation);
     const clamped = clampToBoard(
       targetPlaced.xIn,
@@ -253,6 +275,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
   return (
     <div className={styles.screen}>
+      {notice ? (
+        <div className={styles.notice} role="status">
+          {notice}
+        </div>
+      ) : null}
       <CanvasArea
         rig={rig}
         placed={placed}

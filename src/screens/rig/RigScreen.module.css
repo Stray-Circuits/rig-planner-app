@@ -5,6 +5,36 @@
   background: var(--bg);
 }
 
+.notice {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: var(--surface);
+  color: var(--fg);
+  border: 0.5px solid var(--border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-size: 13px;
+  max-width: min(440px, calc(100% - 24px));
+  text-align: center;
+  pointer-events: none;
+  animation: noticeIn 0.18s ease-out;
+}
+
+@keyframes noticeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 .canvasArea {
   position: relative;
   flex: 1;
