@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PlacedPedal } from '../data/schema';
+import type { Pedal, PlacedPedal, Rig } from '../data/schema';
 import {
   deletePlaced,
   duplicatePlaced,
@@ -8,6 +8,7 @@ import {
   placePedal,
   rotatePlaced,
 } from '../data/placedPedalsRepo';
+import { clampToBoard } from '../lib/geometry';
 
 interface PlacedState {
   /** rigId -> array of placed pedals for that rig */
@@ -33,6 +34,15 @@ interface PlacedState {
   ) => Promise<void>;
   duplicate: (placedId: string) => Promise<PlacedPedal>;
   remove: (placedId: string) => Promise<void>;
+  /**
+   * Clamp every placed pedal on `rig` so it fits within the supplied
+   * dimensions. Persists each pedal that actually moved. Intended to run
+   * after a board resize via Settings → Change board.
+   */
+  clampToRigBounds: (
+    rig: Pick<Rig, 'id' | 'widthIn' | 'depthIn'>,
+    pedalsById: Map<string, Pedal>,
+  ) => Promise<void>;
 }
 
 function updateRigList(
@@ -133,5 +143,40 @@ export const usePlacedPedalsStore = create<PlacedState>((set, get) => ({
       ),
     }));
     await deletePlaced(placedId);
+  },
+
+  clampToRigBounds: async (rig, pedalsById) => {
+    const list = get().byRig[rig.id];
+    if (!list || list.length === 0) return;
+    const rigBounds: Rig = {
+      id: rig.id,
+      name: '',
+      widthIn: rig.widthIn,
+      depthIn: rig.depthIn,
+      style: 'plain',
+      createdAt: '',
+      updatedAt: '',
+    };
+    const moved: PlacedPedal[] = [];
+    const next = list.map((placed) => {
+      const pedal = pedalsById.get(placed.pedalId);
+      if (!pedal) return placed;
+      const clamped = clampToBoard(
+        placed.xIn,
+        placed.yIn,
+        pedal,
+        placed.rotation,
+        rigBounds,
+      );
+      if (clamped.xIn === placed.xIn && clamped.yIn === placed.yIn) {
+        return placed;
+      }
+      const updated = { ...placed, xIn: clamped.xIn, yIn: clamped.yIn };
+      moved.push(updated);
+      return updated;
+    });
+    if (moved.length === 0) return;
+    set((s) => ({ byRig: { ...s.byRig, [rig.id]: next } }));
+    await Promise.all(moved.map((p) => movePlaced(p.id, p.xIn, p.yIn)));
   },
 }));

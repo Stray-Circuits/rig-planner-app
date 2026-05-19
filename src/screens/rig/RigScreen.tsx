@@ -48,6 +48,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const moveAction = usePlacedPedalsStore((s) => s.move);
   const duplicateAction = usePlacedPedalsStore((s) => s.duplicate);
   const removeAction = usePlacedPedalsStore((s) => s.remove);
+  const clampToRigBounds = usePlacedPedalsStore((s) => s.clampToRigBounds);
 
   const renameRig = useRigsStore((s) => s.renameRig);
   const updateBoard = useRigsStore((s) => s.updateBoard);
@@ -357,7 +358,13 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         rig={rig}
         onClose={() => setSettingsOpen(false)}
         onRename={(name) => renameRig(rig.id, name)}
-        onChangeBoard={(w, d, style) => updateBoard(rig.id, w, d, style)}
+        onChangeBoard={async (w, d, style) => {
+          await updateBoard(rig.id, w, d, style);
+          await clampToRigBounds(
+            { id: rig.id, widthIn: w, depthIn: d },
+            pedalsById,
+          );
+        }}
       />
 
       {wizardOpen ? (

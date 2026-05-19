@@ -5,9 +5,6 @@ links the phase that originated it so we know roughly when it was set aside.
 
 ## Canvas / placement
 
-- **Clamp pedals on rig resize** *(Phase 3g)* — when the user shrinks a rig via
-  Settings → Change board, placed pedals can end up hanging off the new edge.
-  They can still be dragged back, but a clamp-on-resize pass would be friendlier.
 - **Rotation can feel jumpy when the rotated footprint won't fit** *(Phase 3e)* —
   the clamp shoves the pedal back onto the board, which jumps it noticeably.
   Could animate, or refuse the rotation when it doesn't fit and surface a hint.
@@ -81,6 +78,17 @@ links the phase that originated it so we know roughly when it was set aside.
   (not in jsdom), so they're only manually tested today. Extracting the
   bbox-find and color-distance loops into pure helpers operating on
   `Uint8ClampedArray` would make them unit-testable.
+
+## Board presets
+
+- **Real board photography + expanded preset list** *(Phase 2)* — today the
+  Pedaltrain and Temple Audio presets render as procedural rail/hole textures
+  with hand-entered dimensions. Pull real product photos (or accurate
+  top-down renders) for the existing six presets, then broaden the catalogue
+  (Pedaltrain JR, Novo 24, Duo 17, Trio 28, Templeboard 43, Templeboard 65,
+  plus competitors like Schmidt Array, Vertex Hinge, RockBoard). Each preset
+  should declare an `imagePath` rendered behind the procedural overlay (or
+  replacing it), so users see a recognizable board when they pick it.
 
 ## Mobile / native
 
