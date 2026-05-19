@@ -13,8 +13,6 @@ links the phase that originated it so we know roughly when it was set aside.
 
 - **Edit an existing port** *(Phase 4f)* — rename, change side, swap connector.
   Today the only edit is remove + re-add.
-- **Reorder ports along their side** *(Phase 4f)* — drag handles, or up/down
-  arrows in the port row.
 
 ## Pedal library / collection
 

@@ -480,6 +480,40 @@
   letter-spacing: 0.04em;
 }
 
+.portReorder {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.portReorderBtn {
+  width: 18px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.portReorderBtn:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.portReorderBtn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.portReorderBtn i {
+  font-size: 12px;
+  line-height: 1;
+}
+
 .portRequiredChip,
 .portOptionalChip {
   font-size: 10px;

@@ -1254,6 +1254,33 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
       ),
     }));
 
+  /**
+   * Swap a port with its previous/next same-side sibling. We also swap their
+   * `sideOrder` values so the change persists into the rendered jack layout
+   * — the array index alone doesn't control which slot a port lands in.
+   */
+  const movePort = (idx: number, direction: 'up' | 'down') =>
+    setDraft((d) => {
+      const port = d.ports[idx];
+      if (!port) return d;
+      const step = direction === 'up' ? -1 : 1;
+      let neighborIdx = idx + step;
+      while (
+        neighborIdx >= 0 &&
+        neighborIdx < d.ports.length &&
+        d.ports[neighborIdx]?.side !== port.side
+      ) {
+        neighborIdx += step;
+      }
+      if (neighborIdx < 0 || neighborIdx >= d.ports.length) return d;
+      const neighbor = d.ports[neighborIdx];
+      if (!neighbor) return d;
+      const swapped = [...d.ports];
+      swapped[idx] = { ...neighbor, sideOrder: port.sideOrder };
+      swapped[neighborIdx] = { ...port, sideOrder: neighbor.sideOrder };
+      return { ...d, ports: swapped };
+    });
+
   const addCustomPort = (
     role: RoleOption,
     connector: Connector,
@@ -1304,40 +1331,71 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
         </p>
       ) : (
         <ul className={styles.portList}>
-          {draft.ports.map((p, idx) => (
-            <li key={`${p.role}-${p.label}-${idx}`} className={styles.portRow}>
-              <span
-                className={
-                  p.signalType === 'midi'
-                    ? styles.jackDotMidi
-                    : styles.jackDotAudio
-                }
-                aria-hidden
-              />
-              <span className={styles.portName}>{p.label}</span>
-              <span className={styles.portMeta}>
-                {p.side} · {p.connector.toUpperCase()}
-              </span>
-              <button
-                type="button"
-                className={
-                  p.optional ? styles.portOptionalChip : styles.portRequiredChip
-                }
-                aria-label={`${p.label} is ${p.optional ? 'optional' : 'required'}. Toggle.`}
-                onClick={() => togglePortOptional(idx)}
+          {draft.ports.map((p, idx) => {
+            const sameSide = draft.ports.filter((q) => q.side === p.side);
+            const positionAmongSide = sameSide.indexOf(p);
+            const canMoveUp = positionAmongSide > 0;
+            const canMoveDown = positionAmongSide < sameSide.length - 1;
+            return (
+              <li
+                key={`${p.role}-${p.label}-${idx}`}
+                className={styles.portRow}
               >
-                {p.optional ? 'Optional' : 'Required'}
-              </button>
-              <button
-                type="button"
-                className={styles.portRemoveBtn}
-                aria-label={`Remove ${p.label}`}
-                onClick={() => removePort(idx)}
-              >
-                <i className="ti ti-x" aria-hidden />
-              </button>
-            </li>
-          ))}
+                <span
+                  className={
+                    p.signalType === 'midi'
+                      ? styles.jackDotMidi
+                      : styles.jackDotAudio
+                  }
+                  aria-hidden
+                />
+                <span className={styles.portName}>{p.label}</span>
+                <span className={styles.portMeta}>
+                  {p.side} · {p.connector.toUpperCase()}
+                </span>
+                <div className={styles.portReorder}>
+                  <button
+                    type="button"
+                    className={styles.portReorderBtn}
+                    aria-label={`Move ${p.label} earlier on ${p.side}`}
+                    disabled={!canMoveUp}
+                    onClick={() => movePort(idx, 'up')}
+                  >
+                    <i className="ti ti-chevron-up" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.portReorderBtn}
+                    aria-label={`Move ${p.label} later on ${p.side}`}
+                    disabled={!canMoveDown}
+                    onClick={() => movePort(idx, 'down')}
+                  >
+                    <i className="ti ti-chevron-down" aria-hidden />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className={
+                    p.optional
+                      ? styles.portOptionalChip
+                      : styles.portRequiredChip
+                  }
+                  aria-label={`${p.label} is ${p.optional ? 'optional' : 'required'}. Toggle.`}
+                  onClick={() => togglePortOptional(idx)}
+                >
+                  {p.optional ? 'Optional' : 'Required'}
+                </button>
+                <button
+                  type="button"
+                  className={styles.portRemoveBtn}
+                  aria-label={`Remove ${p.label}`}
+                  onClick={() => removePort(idx)}
+                >
+                  <i className="ti ti-x" aria-hidden />
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
 
