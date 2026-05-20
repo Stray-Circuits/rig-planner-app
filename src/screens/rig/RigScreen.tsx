@@ -18,6 +18,11 @@ import {
   computeUnconnectedRequiredPorts,
   connectionCompatibility,
 } from '../../lib/signalChainWarnings';
+import {
+  type FloorStyle,
+  readFloorStyle,
+  writeFloorStyle,
+} from '../../lib/floorStyle';
 import type { Connection, ExternalEndpoint } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
@@ -70,6 +75,14 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const loadSignalChain = useSignalChainStore((s) => s.loadForRig);
   const addConnection = useSignalChainStore((s) => s.addConnection);
   const removeConnection = useSignalChainStore((s) => s.removeConnection);
+
+  const [floorStyle, setFloorStyle] = useState<FloorStyle>(() =>
+    readFloorStyle(),
+  );
+  const changeFloor = (next: FloorStyle) => {
+    setFloorStyle(next);
+    writeFloorStyle(next);
+  };
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   // Short-lived non-blocking message shown above the canvas (e.g. when we
@@ -312,6 +325,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         rig={rig}
         placed={placed}
         pedalsById={pedalsById}
+        floorStyle={floorStyle}
         onDragMove={dragMove}
         onDragCommit={(id) => {
           void commitMove(id);
@@ -417,8 +431,10 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         open={settingsOpen}
         rig={rig}
         placedCount={placed.length}
+        floorStyle={floorStyle}
         onClose={() => setSettingsOpen(false)}
         onRename={(name) => renameRig(rig.id, name)}
+        onChangeFloor={changeFloor}
         onChangeBoard={async (w, d, style) => {
           await updateBoard(rig.id, w, d, style);
           await clampToRigBounds(
@@ -452,6 +468,7 @@ interface CanvasAreaProps {
   rig: Rig;
   placed: PlacedPedal[];
   pedalsById: Map<string, Pedal>;
+  floorStyle: FloorStyle;
   onDragMove: (placedId: string, xIn: number, yIn: number) => void;
   onDragCommit: (placedId: string) => void;
   onRequestActions: (placedId: string) => void;
@@ -472,6 +489,7 @@ function CanvasArea({
   rig,
   placed,
   pedalsById,
+  floorStyle,
   onDragMove,
   onDragCommit,
   onRequestActions,
@@ -524,9 +542,20 @@ function CanvasArea({
     [attachWheel],
   );
 
+  const floorClass =
+    floorStyle === 'concrete_grey'
+      ? styles.floorConcreteGrey
+      : floorStyle === 'stage_black'
+        ? styles.floorStageBlack
+        : floorStyle === 'carpet_beige'
+          ? styles.floorCarpetBeige
+          : floorStyle === 'wood'
+            ? styles.floorWood
+            : styles.floorSidewalk;
+
   return (
     <div
-      className={styles.canvasArea}
+      className={`${styles.canvasArea} ${floorClass}`}
       ref={wrapRefCallback}
       onPointerDown={pointerHandlers.onPointerDown}
       onPointerMove={pointerHandlers.onPointerMove}

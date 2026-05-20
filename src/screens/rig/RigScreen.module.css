@@ -49,6 +49,69 @@
     env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
+/* ---------- Floor styles -------------------------------------------------
+   The user picks the surface their board "sits on" from SettingsSheet. Pure
+   CSS for v1 — image-based textures could come later.                       */
+.floorConcreteGrey {
+  background:
+    radial-gradient(
+      circle at 30% 20%,
+      rgba(255, 255, 255, 0.05),
+      transparent 60%
+    ),
+    #8a8a8a;
+}
+
+.floorStageBlack {
+  background:
+    radial-gradient(
+      circle at 20% 10%,
+      rgba(255, 255, 255, 0.04),
+      transparent 55%
+    ),
+    #141416;
+}
+
+.floorCarpetBeige {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(0, 0, 0, 0.04) 0 1px,
+      transparent 1px 4px
+    ),
+    #c9b58a;
+}
+
+.floorWood {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.07) 0 1px,
+      transparent 1px 70px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.03) 0 4px,
+      transparent 4px 22px
+    ),
+    linear-gradient(180deg, #7a4f2a, #5e3a1d);
+}
+
+.floorSidewalk {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.08) 0 1px,
+      transparent 1px 160px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.08) 0 1px,
+      transparent 1px 160px
+    ),
+    #bcbcb6;
+}
+
 .canvasTransform {
   display: flex;
   align-items: center;

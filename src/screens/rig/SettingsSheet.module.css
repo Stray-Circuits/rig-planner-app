@@ -64,6 +64,64 @@
   font-weight: 500;
 }
 
+/* ---------- Floor picker ---------- */
+.floorChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.floorChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 8px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.floorChip:hover {
+  background: var(--surface-alt);
+}
+
+.floorChipActive {
+  border-color: var(--primary);
+  background: var(--primary-bg, var(--surface-alt));
+}
+
+.floorChipLabel {
+  line-height: 1;
+}
+
+.floorSwatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+  background: #888;
+}
+
+.floorSwatch_concrete_grey .floorSwatch {
+  background: #8a8a8a;
+}
+.floorSwatch_stage_black .floorSwatch {
+  background: #141416;
+}
+.floorSwatch_carpet_beige .floorSwatch {
+  background: #c9b58a;
+}
+.floorSwatch_wood .floorSwatch {
+  background: linear-gradient(180deg, #7a4f2a, #5e3a1d);
+}
+.floorSwatch_sidewalk .floorSwatch {
+  background: #bcbcb6;
+}
+
 .error {
   font-size: 12px;
   color: var(--danger-fg);

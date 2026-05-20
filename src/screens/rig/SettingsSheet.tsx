@@ -7,6 +7,7 @@ import {
   resolveBoardChoice,
   type BoardSelection,
 } from '../../components/boardPickerHelpers';
+import { FLOOR_STYLES, type FloorStyle } from '../../lib/floorStyle';
 import { Button, Sheet, TextField } from '../../ui';
 import styles from './SettingsSheet.module.css';
 
@@ -14,6 +15,7 @@ interface SettingsSheetProps {
   open: boolean;
   rig: Rig;
   placedCount: number;
+  floorStyle: FloorStyle;
   onClose: () => void;
   onRename: (name: string) => Promise<void>;
   onChangeBoard: (
@@ -21,6 +23,7 @@ interface SettingsSheetProps {
     depthIn: number,
     style: BoardStyle,
   ) => Promise<void>;
+  onChangeFloor: (style: FloorStyle) => void;
   onDelete: () => Promise<void>;
 }
 
@@ -37,9 +40,11 @@ export function SettingsSheet({
   open,
   rig,
   placedCount,
+  floorStyle,
   onClose,
   onRename,
   onChangeBoard,
+  onChangeFloor,
   onDelete,
 }: SettingsSheetProps) {
   const [view, setView] = useState<'main' | 'board' | 'confirmDelete'>('main');
@@ -179,6 +184,27 @@ export function SettingsSheet({
               >
                 Change
               </Button>
+            </div>
+          </div>
+
+          <div className={styles.field}>
+            <span className={styles.label}>Floor</span>
+            <div className={styles.floorChips} role="radiogroup">
+              {FLOOR_STYLES.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={floorStyle === f.id}
+                  className={`${styles.floorChip} ${styles[`floorSwatch_${f.id}`] ?? ''} ${
+                    floorStyle === f.id ? styles.floorChipActive : ''
+                  }`}
+                  onClick={() => onChangeFloor(f.id)}
+                >
+                  <span className={styles.floorSwatch} aria-hidden />
+                  <span className={styles.floorChipLabel}>{f.label}</span>
+                </button>
+              ))}
             </div>
           </div>
 
