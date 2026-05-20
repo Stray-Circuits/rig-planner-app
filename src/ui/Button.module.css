@@ -17,17 +17,20 @@
   opacity: 1;
 }
 
+/* Mobile-first sizes — each clears a ≥36/44/52px tap target so buttons
+   don't feel small for thumbs. Desktop steps down at the bottom of the
+   file. */
 .sm {
-  font-size: 12px;
-  padding: 6px 10px;
+  font-size: 13px;
+  padding: 9px 14px;
 }
 .md {
-  font-size: 14px;
-  padding: 10px 14px;
+  font-size: 15px;
+  padding: 13px 18px;
 }
 .lg {
-  font-size: 15px;
-  padding: 14px 18px;
+  font-size: 16px;
+  padding: 16px 22px;
 }
 
 .fullWidth {
@@ -74,4 +77,19 @@
 }
 .danger:hover:not(:disabled) {
   background: #a51f1f;
+}
+
+@media (min-width: 720px) {
+  .sm {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  .md {
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+  .lg {
+    font-size: 15px;
+    padding: 14px 18px;
+  }
 }

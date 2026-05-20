@@ -17,13 +17,24 @@
 }
 
 .md {
-  font-size: 14px;
-  padding: 10px 12px;
+  font-size: 15px;
+  padding: 13px 14px;
 }
 
 .lg {
   font-size: 18px;
-  padding: 14px 16px;
+  padding: 16px 18px;
+}
+
+@media (min-width: 720px) {
+  .md {
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+  .lg {
+    font-size: 18px;
+    padding: 14px 16px;
+  }
 }
 
 .invalid {
