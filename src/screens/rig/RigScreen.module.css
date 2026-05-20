@@ -72,35 +72,38 @@
   z-index: 5;
   pointer-events: none;
   display: flex;
-  gap: 10px;
+  gap: 14px;
 }
 
 .fabTopLeft {
-  top: calc(12px + env(safe-area-inset-top));
-  left: calc(12px + env(safe-area-inset-left));
+  top: calc(16px + env(safe-area-inset-top));
+  left: calc(16px + env(safe-area-inset-left));
 }
 
 .fabTopRight {
-  top: calc(12px + env(safe-area-inset-top));
-  right: calc(12px + env(safe-area-inset-right));
+  top: calc(16px + env(safe-area-inset-top));
+  right: calc(16px + env(safe-area-inset-right));
 }
 
 .fabBottomRight {
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  right: calc(20px + env(safe-area-inset-right));
   flex-direction: row;
   align-items: flex-end;
 }
 
 .fab {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.96);
-  color: var(--fg);
+  /* Default icon color: primary blue. Colored FABs (Add/Chain/Active)
+     override to white. Gives the neutral Back/Settings FABs a touch of
+     color instead of reading as greyscale next to the blue/teal pair. */
+  color: var(--primary);
   border: 0.5px solid var(--border);
   box-shadow:
     0 6px 16px rgba(0, 0, 0, 0.18),
@@ -121,7 +124,7 @@
 }
 
 .fab i {
-  font-size: 24px;
+  font-size: 26px;
 }
 
 /* The bottom-right FABs both render at the same size so they read as a
@@ -130,8 +133,8 @@
    teal accent in its default state and flips to success-green when
    active. */
 .fabAddPedal {
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
@@ -145,12 +148,12 @@
 }
 
 .fabAddPedal i {
-  font-size: 28px;
+  font-size: 30px;
 }
 
 .fabChain {
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   background: #14b8a6;
   color: #fff;
   border-color: #14b8a6;
@@ -164,7 +167,7 @@
 }
 
 .fabChain i {
-  font-size: 28px;
+  font-size: 30px;
 }
 
 /* Signal-chain FAB swaps to success-green when chain mode is on. */
@@ -192,8 +195,8 @@
   }
   .fabAddPedal,
   .fabChain {
-    width: 50px;
-    height: 50px;
+    width: 52px;
+    height: 52px;
   }
   .fabAddPedal i,
   .fabChain i {

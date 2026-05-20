@@ -467,13 +467,17 @@ function CanvasArea({
     const el = wrapRef.current;
     if (!el) return;
     const fit = () => {
-      // Reserve vertical room for the endpoint chip strip above the board so
-      // chips don't get clipped by the canvas-area's overflow. Horizontal
-      // padding stays modest — chips wrap into clusters at the corners.
-      const padding = 24;
-      const endpointBudget = 44;
-      const availW = el.clientWidth - padding * 2;
-      const availH = el.clientHeight - padding * 2 - endpointBudget;
+      // Reserve enough space on each side that the board's edges always
+      // clear the corner FABs at the default centered/unzoomed view —
+      // i.e. the board "dodges" the floating buttons. Flex centering then
+      // distributes the reserve symmetrically. Bottom FABs are the tallest
+      // (Add/Chain at 64px + 24px inset ≈ 88px), so mirror that vertically.
+      // Side reserves stay small — corner FABs already clear horizontally
+      // via the vertical reserve.
+      const vertReserve = 92;
+      const sideReserve = 14;
+      const availW = el.clientWidth - sideReserve * 2;
+      const availH = el.clientHeight - vertReserve * 2;
       if (availW <= 0 || availH <= 0) return;
       const px = Math.min(availW / rig.widthIn, availH / rig.depthIn);
       setPxPerInch(Math.max(6, Math.min(80, px)));
