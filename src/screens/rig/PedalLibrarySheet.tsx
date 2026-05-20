@@ -101,21 +101,6 @@ export function PedalLibrarySheet({
             </div>
           ) : null}
           <ul className={styles.list}>
-            <li>
-              <button
-                type="button"
-                className={`${styles.entry} ${styles.newEntry}`}
-                onClick={onStartNewPedal}
-              >
-                <span className={styles.newThumb} aria-hidden>
-                  <i className="ti ti-plus" />
-                </span>
-                <div className={styles.info}>
-                  <div className={styles.name}>Add new pedal</div>
-                  <div className={styles.brand}>5-step wizard</div>
-                </div>
-              </button>
-            </li>
             {pedals.map((p) => (
               <PedalRow
                 key={p.id}
@@ -125,11 +110,24 @@ export function PedalLibrarySheet({
               />
             ))}
           </ul>
+          {/* Floating "Add new pedal" anchored bottom-right inside the
+              sheet card. Positioned absolutely so it floats above the
+              pedal list; the extra bottom padding on `.body` keeps the
+              last row from sliding under it. */}
+          <button
+            type="button"
+            className={styles.addFab}
+            onClick={onStartNewPedal}
+            aria-label="Add new pedal"
+          >
+            <i className="ti ti-plus" aria-hidden />
+            <span className={styles.addFabLabel}>Add new pedal</span>
+          </button>
           {pedals.length === 0 ? (
             <div className={styles.empty}>
               <p className={styles.muted}>
-                Your library is empty — tap <strong>Add new pedal</strong>
-                above to create one.
+                Your library is empty — tap <strong>Add new pedal</strong>{' '}
+                below to create one.
               </p>
               <Button
                 variant="ghost"

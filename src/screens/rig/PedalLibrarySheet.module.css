@@ -1,5 +1,8 @@
 .body {
-  padding: 4px 0 8px;
+  /* Tall enough that the list scrolls past the floating Add-pedal FAB
+     without obscuring the last item. */
+  padding: 4px 0 88px;
+  position: relative;
 }
 
 .quotaWarn {
@@ -61,14 +64,20 @@
 .entry {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 14px;
+  padding: 16px 18px;
   flex: 1;
   min-width: 0;
   background: transparent;
   border: none;
   cursor: pointer;
   text-align: left;
+}
+
+@media (min-width: 720px) {
+  .entry {
+    padding: 12px 16px;
+  }
 }
 
 .moreBtn {
@@ -101,37 +110,47 @@
   }
 }
 
-.newEntry {
-  border-bottom: 0.5px solid var(--border);
-  background: var(--primary-bg);
-}
-
-.newEntry:hover {
-  background: #d5e8f7;
-}
-
-.newEntry .name {
-  color: var(--primary-fg);
-}
-
-.newEntry .brand {
-  color: var(--primary);
-}
-
-.newThumb {
-  width: 24px;
-  height: 34px;
-  border-radius: 3px;
-  background: var(--primary);
-  color: #fff;
+/* Floating Add-pedal pill anchored to the bottom-right of the sheet card.
+   Uses position:sticky inside the scrolling sheet panel so the pill stays
+   visible while the list scrolls, then sits naturally at the bottom once
+   the list scroll completes. margin-left:auto right-aligns it inside the
+   flex column body. */
+.addFab {
+  position: sticky;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  align-self: flex-end;
+  margin-right: 16px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 8px;
+  padding: 12px 18px 12px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow:
+    0 8px 20px rgba(37, 99, 235, 0.32),
+    0 3px 6px rgba(0, 0, 0, 0.16);
+  z-index: 2;
 }
 
-.newThumb i {
-  font-size: 16px;
+.addFab:hover {
+  background: var(--primary-strong);
+}
+
+.addFab:active {
+  transform: scale(0.97);
+}
+
+.addFab i {
+  font-size: 20px;
+}
+
+.addFabLabel {
+  line-height: 1;
 }
 
 .entry:hover {
