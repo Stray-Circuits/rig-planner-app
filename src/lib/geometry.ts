@@ -29,6 +29,93 @@ export function clampToBoard(
   };
 }
 
+/**
+ * "Keep-out" rect for a placed pedal — the footprint extended outward on
+ * each side that has at least one jack (audio or MIDI) so cables and
+ * jack barrels have room to live. Used to render translucent shadow
+ * strips around pedals and to flag overlap.
+ *
+ * Returned in board (inch) coordinates. May extend off the board; callers
+ * should clip to rig bounds when rendering.
+ *
+ * 1.0 inches is a conservative estimate for a 1/4" plug barrel + cable
+ * bend radius; real-world jacks on heavy cables can push past this.
+ */
+export const KEEP_OUT_INCHES = 1.0;
+
+export function keepOutRect(
+  placed: PlacedPedal,
+  pedal: Pedal,
+): { xIn: number; yIn: number; widthIn: number; depthIn: number } {
+  const { widthIn, depthIn } = placedFootprint(pedal, placed.rotation);
+  // Translate each logical jack-bearing side to its visual side after
+  // rotation, then accumulate which visual sides should be padded.
+  const visualSides = new Set<Side>();
+  const j = pedal.jackSides;
+  const addIf = (cond: boolean, logical: Side) => {
+    if (cond) visualSides.add(rotatedSide(logical, placed.rotation));
+  };
+  addIf(j.top || j.midi_top, 'top');
+  addIf(j.bottom || j.midi_bottom, 'bottom');
+  addIf(j.left || j.midi_left, 'left');
+  addIf(j.right || j.midi_right, 'right');
+  const padTop = visualSides.has('top') ? KEEP_OUT_INCHES : 0;
+  const padBot = visualSides.has('bottom') ? KEEP_OUT_INCHES : 0;
+  const padLeft = visualSides.has('left') ? KEEP_OUT_INCHES : 0;
+  const padRight = visualSides.has('right') ? KEEP_OUT_INCHES : 0;
+  return {
+    xIn: placed.xIn - padLeft,
+    yIn: placed.yIn - padTop,
+    widthIn: widthIn + padLeft + padRight,
+    depthIn: depthIn + padTop + padBot,
+  };
+}
+
+/** Axis-aligned rectangle overlap test (inclusive of edges = no overlap). */
+export function rectsOverlap(
+  a: { xIn: number; yIn: number; widthIn: number; depthIn: number },
+  b: { xIn: number; yIn: number; widthIn: number; depthIn: number },
+): boolean {
+  return (
+    a.xIn < b.xIn + b.widthIn &&
+    a.xIn + a.widthIn > b.xIn &&
+    a.yIn < b.yIn + b.depthIn &&
+    a.yIn + a.depthIn > b.yIn
+  );
+}
+
+/**
+ * Returns the set of placed-pedal IDs whose footprint or keep-out rect
+ * overlaps another pedal on the same rig. Used to surface visual warning
+ * highlights without changing drag/drop behavior.
+ */
+export function overlappingPlacedIds(
+  placed: readonly PlacedPedal[],
+  pedalsById: Map<string, Pedal>,
+): Set<string> {
+  const rects = placed
+    .map((p) => {
+      const def = pedalsById.get(p.pedalId);
+      return def ? { id: p.id, rect: keepOutRect(p, def) } : null;
+    })
+    .filter(
+      (x): x is { id: string; rect: ReturnType<typeof keepOutRect> } =>
+        x !== null,
+    );
+  const flagged = new Set<string>();
+  for (let i = 0; i < rects.length; i++) {
+    for (let k = i + 1; k < rects.length; k++) {
+      const a = rects[i]!;
+      const b = rects[k]!;
+      if (rectsOverlap(a.rect, b.rect)) {
+        flagged.add(a.id);
+        flagged.add(b.id);
+      }
+    }
+  }
+  return flagged;
+}
+
 /** Center a pedal on a rig (used when adding from the sidebar). */
 export function centeredOnRig(
   pedal: Pedal,

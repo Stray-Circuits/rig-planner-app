@@ -13,7 +13,11 @@ import type {
   PlacedPedal,
   Rig,
 } from '../data/schema';
-import { clampToBoard } from '../lib/geometry';
+import {
+  clampToBoard,
+  keepOutRect,
+  overlappingPlacedIds,
+} from '../lib/geometry';
 import { BOARD_DRAWERS, backgroundForStyle } from './boardStyles';
 import { PedalSprite } from './PedalSprite';
 import { ChainOverlay } from './ChainOverlay';
@@ -92,6 +96,10 @@ export function BoardCanvas({
   unconnectedRequired,
 }: BoardCanvasProps) {
   const warnings = unconnectedRequired ?? EMPTY_WARNING_SET;
+  const overlapping = useMemo(
+    () => overlappingPlacedIds(placed, pedalsById),
+    [placed, pedalsById],
+  );
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -251,6 +259,28 @@ export function BoardCanvas({
         className={styles.canvas}
         style={{ background: backgroundForStyle(rig.style) }}
       />
+      <div className={styles.keepOutLayer} aria-hidden>
+        {placed.map((p) => {
+          const def = pedalsById.get(p.pedalId);
+          if (!def) return null;
+          const r = keepOutRect(p, def);
+          const isOverlapping = overlapping.has(p.id);
+          return (
+            <div
+              key={p.id}
+              className={`${styles.keepOut} ${
+                isOverlapping ? styles.keepOutOverlap : ''
+              }`}
+              style={{
+                left: r.xIn * pxPerInch,
+                top: r.yIn * pxPerInch,
+                width: r.widthIn * pxPerInch,
+                height: r.depthIn * pxPerInch,
+              }}
+            />
+          );
+        })}
+      </div>
       <div className={styles.pedals}>
         {placed.map((p) => {
           const def = pedalsById.get(p.pedalId);

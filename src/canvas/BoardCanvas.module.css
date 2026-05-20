@@ -16,6 +16,29 @@
   inset: 0;
 }
 
+/* Translucent "shadow" around each pedal showing the jack/cable clearance
+   it wants on each side. Always visible — meant as a passive hint so the
+   user can see where cables will land. Overlap with another pedal's
+   keep-out zone flips to a warning fill. */
+.keepOutLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.keepOut {
+  position: absolute;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  outline: 0.5px dashed rgba(255, 255, 255, 0.25);
+  outline-offset: -2px;
+}
+
+.keepOutOverlap {
+  background: rgba(220, 38, 38, 0.18);
+  outline-color: rgba(220, 38, 38, 0.55);
+}
+
 .pedalPos {
   position: absolute;
   transform: translate3d(0, 0, 0);
