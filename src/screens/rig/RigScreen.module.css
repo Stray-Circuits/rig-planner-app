@@ -57,77 +57,143 @@
   will-change: transform;
 }
 
-/* ---------- Floating action buttons (back / add / settings) ---------- */
-.fabBackWrap,
-.fabActions {
+/* ---------- Floating action buttons -------------------------------------
+   Layout:
+     • Back     — top-left
+     • Settings — top-right
+     • Chain + Add Pedal — bottom-right (Add Pedal is the rightmost / largest)
+   Sized for thumb reach on phones; the corner anchors stay clear of the
+   board because the fit-to-view calc leaves padding around it.            */
+
+.fabTopLeft,
+.fabTopRight,
+.fabBottomRight {
   position: absolute;
-  top: calc(12px + env(safe-area-inset-top));
   z-index: 5;
   pointer-events: none;
+  display: flex;
+  gap: 10px;
 }
 
-.fabBackWrap {
+.fabTopLeft {
+  top: calc(12px + env(safe-area-inset-top));
   left: calc(12px + env(safe-area-inset-left));
 }
 
-.fabActions {
+.fabTopRight {
+  top: calc(12px + env(safe-area-inset-top));
   right: calc(12px + env(safe-area-inset-right));
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+}
+
+.fabBottomRight {
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  right: calc(16px + env(safe-area-inset-right));
+  flex-direction: row;
+  align-items: flex-end;
 }
 
 .fab {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.96);
   color: var(--fg);
   border: 0.5px solid var(--border);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.18),
+    0 2px 4px rgba(0, 0, 0, 0.14);
   cursor: pointer;
   pointer-events: auto;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .fab:hover {
   background: var(--surface);
 }
 
-.fabActive {
+.fab:active {
+  transform: scale(0.96);
+}
+
+.fab i {
+  font-size: 24px;
+}
+
+/* Primary (chain mode + add pedal) — colored, attention-grabbing. */
+.fabPrimary {
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
 }
 
-.fabActive:hover {
+.fabPrimary:hover {
   background: var(--primary-strong);
 }
 
-.fab:active {
-  background: var(--surface-alt);
+/* The signal-chain FAB swaps colors when active so the on/off state is
+   obvious without reading the label. */
+.fabActive {
+  background: var(--success, #2e7d32);
+  color: #fff;
+  border-color: var(--success, #2e7d32);
 }
 
-.fab i {
-  font-size: 22px;
+.fabActive:hover {
+  background: var(--success-strong, #266b2a);
+}
+
+/* Add-Pedal is the primary, most-tapped action on the screen — make it
+   visually heavier than its sibling. */
+.fabAccent {
+  width: 60px;
+  height: 60px;
+  box-shadow:
+    0 8px 20px rgba(37, 99, 235, 0.32),
+    0 3px 6px rgba(0, 0, 0, 0.16);
+}
+
+.fabAccent i {
+  font-size: 28px;
+}
+
+/* On wider viewports drop back to a tighter, less-aggressive size — the
+   thumb-reach concerns don't apply when there's a mouse. */
+@media (min-width: 720px) {
+  .fab {
+    width: 44px;
+    height: 44px;
+  }
+  .fab i {
+    font-size: 22px;
+  }
+  .fabAccent {
+    width: 50px;
+    height: 50px;
+  }
+  .fabAccent i {
+    font-size: 24px;
+  }
 }
 
 /* ---------- Zoom controls (appear when zoomed/panned) ---------- */
 .zoomControls {
   position: absolute;
-  /* Sit beneath the stack of floating action buttons. */
-  top: calc(124px + env(safe-area-inset-top));
+  /* Sit just below the top-right Settings FAB. */
+  top: calc(76px + env(safe-area-inset-top));
   right: calc(12px + env(safe-area-inset-right));
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.96);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   z-index: 5;
 }
 

@@ -299,7 +299,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         onEndpointTap={handleEndpointTap}
         onBackgroundTap={handleCanvasBackgroundClick}
       >
-        <div className={styles.fabBackWrap}>
+        <div className={styles.fabTopLeft}>
           <button
             type="button"
             className={styles.fab}
@@ -309,10 +309,22 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             <i className="ti ti-chevron-left" aria-hidden />
           </button>
         </div>
-        <div className={styles.fabActions}>
+        <div className={styles.fabTopRight}>
           <button
             type="button"
-            className={`${styles.fab} ${chainMode ? styles.fabActive : ''}`}
+            className={styles.fab}
+            aria-label="Rig settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <i className="ti ti-settings" aria-hidden />
+          </button>
+        </div>
+        <div className={styles.fabBottomRight}>
+          <button
+            type="button"
+            className={`${styles.fab} ${styles.fabPrimary} ${
+              chainMode ? styles.fabActive : ''
+            }`}
             aria-label={chainMode ? 'Hide signal chain' : 'Show signal chain'}
             aria-pressed={chainMode}
             onClick={() => setChainMode((v) => !v)}
@@ -321,19 +333,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           </button>
           <button
             type="button"
-            className={styles.fab}
+            className={`${styles.fab} ${styles.fabPrimary} ${styles.fabAccent}`}
             aria-label="Add pedal"
             onClick={() => setLibraryOpen(true)}
           >
             <i className="ti ti-plus" aria-hidden />
-          </button>
-          <button
-            type="button"
-            className={styles.fab}
-            aria-label="Rig settings"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <i className="ti ti-settings" aria-hidden />
           </button>
         </div>
       </CanvasArea>
