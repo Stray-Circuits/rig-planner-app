@@ -8,23 +8,23 @@
 
 .body {
   border-radius: 3px;
-  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  /* Inset shadow instead of a real border so the chassis highlight doesn't
+     eat into the content area (which would shrink the pedal away from the
+     port dots and misalign them with the visible chassis edge). */
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.18),
+    0 1px 4px rgba(0, 0, 0, 0.35);
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   transition: transform 0.18s ease;
   pointer-events: auto;
 }
 
 /* Real (background-removed) photos already have their own silhouette, so we
-   drop the chrome chassis treatment to let the alpha channel breathe.
-   `border: none` matters here: with global `box-sizing: border-box`, leaving
-   even a transparent 1.5px border on each side eats 3px out of the box's
-   content area, which is what made photo pedals render slightly shrunken. */
+   drop the chassis treatment entirely to let the alpha channel breathe. */
 .bodyImage {
-  border: none;
   box-shadow: none;
   /* Nudge the browser toward better quality resampling for photo backgrounds
      rather than the fast-but-noisy default. Safari + Chrome respect
