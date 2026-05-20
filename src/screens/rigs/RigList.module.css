@@ -8,7 +8,7 @@
 .header {
   background: var(--surface);
   border-bottom: 0.5px solid var(--border);
-  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  padding: max(8px, env(safe-area-inset-top)) 16px 8px;
   flex-shrink: 0;
 }
 
@@ -31,7 +31,7 @@
 
 .body {
   flex: 1;
-  padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+  padding: 14px 14px max(14px, env(safe-area-inset-bottom));
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
@@ -41,12 +41,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .title {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 500;
+}
+
+@media (min-width: 720px) {
+  .body {
+    padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+  }
+  .titleRow {
+    margin-bottom: 16px;
+  }
+  .title {
+    font-size: 22px;
+  }
 }
 
 .empty {
@@ -75,8 +87,8 @@
 .card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px;
+  gap: 12px;
+  padding: 10px;
   background: var(--surface);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
@@ -84,6 +96,13 @@
   cursor: pointer;
   width: 100%;
   position: relative;
+}
+
+@media (min-width: 720px) {
+  .card {
+    gap: 14px;
+    padding: 12px;
+  }
 }
 
 .card:hover {

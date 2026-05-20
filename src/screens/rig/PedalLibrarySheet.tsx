@@ -126,8 +126,8 @@ export function PedalLibrarySheet({
           {pedals.length === 0 ? (
             <div className={styles.empty}>
               <p className={styles.muted}>
-                Your library is empty — tap <strong>Add new pedal</strong>{' '}
-                below to create one.
+                Your library is empty — tap <strong>Add new pedal</strong> below
+                to create one.
               </p>
               <Button
                 variant="ghost"
