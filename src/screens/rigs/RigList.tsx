@@ -42,20 +42,9 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
         </div>
       </header>
       <main className={styles.body}>
-        <div className={styles.titleRow}>
-          <h1 className={styles.title}>Your rigs</h1>
-          <Button size="sm" onClick={onCreateRig}>
-            <i className="ti ti-plus" aria-hidden /> New rig
-          </Button>
-        </div>
+        <h1 className={styles.title}>Your rigs</h1>
         {status === 'loading' && <p className={styles.empty}>Loading rigs…</p>}
-        {status === 'ready' && rigs.length === 0 && (
-          <div className={styles.empty}>
-            <p>No rigs yet.</p>
-            <Button onClick={onCreateRig}>Create your first rig</Button>
-          </div>
-        )}
-        {rigs.length > 0 && (
+        {status === 'ready' && (
           <ul className={styles.grid}>
             {rigs.map((rig) => (
               <RigCard
@@ -65,6 +54,25 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
                 onOpen={() => onOpenRig(rig)}
               />
             ))}
+            <li>
+              <button
+                type="button"
+                className={styles.newRigCard}
+                onClick={onCreateRig}
+              >
+                <span className={styles.newRigThumb} aria-hidden>
+                  <i className="ti ti-plus" />
+                </span>
+                <div className={styles.newRigMeta}>
+                  <div className={styles.newRigName}>
+                    {rigs.length === 0 ? 'Create your first rig' : 'New rig'}
+                  </div>
+                  <div className={styles.newRigSub}>
+                    Pick a board, name it, place pedals
+                  </div>
+                </div>
+              </button>
+            </li>
           </ul>
         )}
       </main>

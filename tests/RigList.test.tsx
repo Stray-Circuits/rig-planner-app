@@ -36,12 +36,23 @@ beforeEach(() => {
 });
 
 describe('RigList', () => {
-  it('renders an empty state when there are no rigs', () => {
+  it('shows the "create your first rig" card when there are no rigs', () => {
     useRigsStore.setState({ rigs: [], status: 'ready', error: null });
-    render(
-      <RigList onOpenRig={() => undefined} onCreateRig={() => undefined} />,
-    );
-    expect(screen.getByText('No rigs yet.')).toBeInTheDocument();
+    const onCreate = vi.fn();
+    render(<RigList onOpenRig={() => undefined} onCreateRig={onCreate} />);
+    const card = screen.getByText('Create your first rig');
+    expect(card).toBeInTheDocument();
+    fireEvent.click(card);
+    expect(onCreate).toHaveBeenCalledOnce();
+  });
+
+  it('renders a "New rig" card alongside existing rigs', () => {
+    const rig = mkRig('a', 'Main board');
+    useRigsStore.setState({ rigs: [rig], status: 'ready', error: null });
+    const onCreate = vi.fn();
+    render(<RigList onOpenRig={() => undefined} onCreateRig={onCreate} />);
+    fireEvent.click(screen.getByText('New rig'));
+    expect(onCreate).toHaveBeenCalledOnce();
   });
 
   it('renders cards and triggers onOpenRig', () => {
