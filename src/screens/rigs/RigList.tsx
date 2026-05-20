@@ -1,9 +1,13 @@
-import { useState } from 'react';
-import type { Rig } from '../../data/schema';
+import { useEffect, useMemo, useState } from 'react';
+import type { Pedal, Rig } from '../../data/schema';
+import { usePedalsStore } from '../../stores/pedalsStore';
+import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
 import { useRigsStore } from '../../stores/rigsStore';
-import { BoardThumb } from '../../canvas/BoardThumb';
+import { RigThumb } from '../../canvas/RigThumb';
 import { Button, Sheet, SheetItem, TextField } from '../../ui';
 import styles from './RigList.module.css';
+
+const EMPTY_PLACED: never[] = [];
 
 interface RigListProps {
   onOpenRig: (rig: Rig) => void;
@@ -13,6 +17,21 @@ interface RigListProps {
 export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
   const rigs = useRigsStore((s) => s.rigs);
   const status = useRigsStore((s) => s.status);
+  const pedals = usePedalsStore((s) => s.pedals);
+  const pedalsStatus = usePedalsStore((s) => s.status);
+  const loadPedals = usePedalsStore((s) => s.loadPedals);
+
+  // Need the pedal definitions to render thumbnail rectangles at the right
+  // size; load them once when the rig list mounts (idempotent).
+  useEffect(() => {
+    if (pedalsStatus === 'idle') void loadPedals();
+  }, [pedalsStatus, loadPedals]);
+
+  const pedalsById = useMemo(() => {
+    const m = new Map<string, Pedal>();
+    for (const p of pedals) m.set(p.id, p);
+    return m;
+  }, [pedals]);
 
   return (
     <div className={styles.screen}>
@@ -39,7 +58,12 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
         {rigs.length > 0 && (
           <ul className={styles.grid}>
             {rigs.map((rig) => (
-              <RigCard key={rig.id} rig={rig} onOpen={() => onOpenRig(rig)} />
+              <RigCard
+                key={rig.id}
+                rig={rig}
+                pedalsById={pedalsById}
+                onOpen={() => onOpenRig(rig)}
+              />
             ))}
           </ul>
         )}
@@ -50,10 +74,11 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
 
 interface RigCardProps {
   rig: Rig;
+  pedalsById: Map<string, Pedal>;
   onOpen: () => void;
 }
 
-function RigCard({ rig, onOpen }: RigCardProps) {
+function RigCard({ rig, pedalsById, onOpen }: RigCardProps) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(rig.name);
@@ -62,6 +87,15 @@ function RigCard({ rig, onOpen }: RigCardProps) {
   const renameRig = useRigsStore((s) => s.renameRig);
   const duplicateRig = useRigsStore((s) => s.duplicateRig);
   const deleteRig = useRigsStore((s) => s.deleteRig);
+
+  const placed = usePlacedPedalsStore((s) => s.byRig[rig.id] ?? EMPTY_PLACED);
+  const loadForRig = usePlacedPedalsStore((s) => s.loadForRig);
+
+  // Pull this rig's placements so the thumbnail can render them. The store
+  // dedupes; no harm if multiple cards load the same rig in parallel.
+  useEffect(() => {
+    void loadForRig(rig.id);
+  }, [rig.id, loadForRig]);
 
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -113,11 +147,12 @@ function RigCard({ rig, onOpen }: RigCardProps) {
         onTouchCancel={clearHold}
       >
         <div className={styles.thumbWrap}>
-          <BoardThumb
-            style={rig.style}
+          <RigThumb
+            rig={rig}
+            placed={placed}
+            pedalsById={pedalsById}
             width={140}
             height={Math.max(40, Math.round((rig.depthIn / rig.widthIn) * 140))}
-            scale={0.3}
             title={`${rig.name} thumbnail`}
           />
         </div>
