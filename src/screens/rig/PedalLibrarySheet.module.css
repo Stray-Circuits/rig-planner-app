@@ -1,8 +1,9 @@
 .body {
   /* Inner gap so rows and content don't crowd the modal's rounded edge.
-     Bottom padding leaves clearance for the floating Add-pedal FAB so
-     the last pedal row never hides behind it. */
-  padding: 8px 8px 96px;
+     Generous bottom padding keeps the last pedal row from sitting
+     behind the floating Add-pedal pill that's anchored to the panel
+     corner via Sheet.floatingActions. */
+  padding: 8px 8px 80px;
 }
 
 .quotaWarn {
@@ -105,16 +106,9 @@
   }
 }
 
-/* Floating Add-pedal pill bound to the bottom-right corner of the modal
-   panel itself (position:fixed relative to the panel viewport — the panel
-   has position:relative + overflow-y:auto, so the pill scrolls with the
-   panel chrome rather than the list inside it). Stays anchored as the
-   list scrolls. */
+/* Pill rendered via the Sheet floatingActions slot — Sheet positions it
+   in the panel's bottom-right corner so the styles here are just visual. */
 .addFab {
-  position: sticky;
-  bottom: 14px;
-  margin-left: auto;
-  margin-right: 14px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -129,10 +123,6 @@
   box-shadow:
     0 8px 20px rgba(37, 99, 235, 0.32),
     0 3px 6px rgba(0, 0, 0, 0.16);
-  z-index: 2;
-  /* Reserve space at the right of the row above so the list doesn't
-     reflow under the pill on tall scrolling lists. */
-  align-self: flex-end;
 }
 
 .addFab:hover {

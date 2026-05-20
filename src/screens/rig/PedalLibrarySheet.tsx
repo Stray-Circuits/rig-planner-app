@@ -90,7 +90,22 @@ export function PedalLibrarySheet({
 
   return (
     <>
-      <Sheet open={open} onClose={onClose} title="Add a pedal">
+      <Sheet
+        open={open}
+        onClose={onClose}
+        title="Add a pedal"
+        floatingActions={
+          <button
+            type="button"
+            className={styles.addFab}
+            onClick={onStartNewPedal}
+            aria-label="Add new pedal"
+          >
+            <i className="ti ti-plus" aria-hidden />
+            <span className={styles.addFabLabel}>Add new pedal</span>
+          </button>
+        }
+      >
         <div className={styles.body}>
           {quotaFraction !== null && quotaFraction >= 0.7 ? (
             <div className={styles.quotaWarn} role="status">
@@ -110,19 +125,6 @@ export function PedalLibrarySheet({
               />
             ))}
           </ul>
-          {/* Floating "Add new pedal" anchored bottom-right inside the
-              sheet card. Positioned absolutely so it floats above the
-              pedal list; the extra bottom padding on `.body` keeps the
-              last row from sliding under it. */}
-          <button
-            type="button"
-            className={styles.addFab}
-            onClick={onStartNewPedal}
-            aria-label="Add new pedal"
-          >
-            <i className="ti ti-plus" aria-hidden />
-            <span className={styles.addFabLabel}>Add new pedal</span>
-          </button>
           {pedals.length === 0 ? (
             <div className={styles.empty}>
               <p className={styles.muted}>

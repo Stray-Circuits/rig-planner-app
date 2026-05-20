@@ -12,6 +12,12 @@ interface SheetProps {
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  /**
+   * Content that renders inside the modal panel but OUTSIDE the scrolling
+   * body — used for floating actions (e.g. a bottom-right FAB) that need to
+   * stay anchored to the panel corner regardless of scroll position.
+   */
+  floatingActions?: ReactNode;
   /** Hint for visual placement on desktop ("center" | "anchored") */
   desktopPlacement?: 'center' | 'anchored';
 }
@@ -21,6 +27,7 @@ export function Sheet({
   onClose,
   title,
   children,
+  floatingActions,
   desktopPlacement = 'center',
 }: SheetProps) {
   const lastActive = useRef<Element | null>(null);
@@ -68,6 +75,9 @@ export function Sheet({
       >
         {title ? <div className={styles.title}>{title}</div> : null}
         <div className={styles.body}>{children}</div>
+        {floatingActions ? (
+          <div className={styles.floatingActions}>{floatingActions}</div>
+        ) : null}
       </div>
     </div>
   );
