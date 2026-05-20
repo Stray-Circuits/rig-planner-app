@@ -201,31 +201,35 @@
   }
 }
 
-/* ---------- Zoom controls (appear when zoomed/panned) ---------- */
+/* ---------- Zoom controls (appear when zoomed/panned) ----------
+   Anchored bottom-left — the only corner without a FAB, and reachable
+   by the left thumb on a phone. Stays out of the way of the bottom-right
+   action cluster (Chain + Add Pedal) and the top FABs. */
 .zoomControls {
   position: absolute;
-  /* Sit just below the top-right Settings FAB. */
-  top: calc(76px + env(safe-area-inset-top));
-  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  left: calc(12px + env(safe-area-inset-left));
   display: flex;
   align-items: center;
   gap: 4px;
   background: rgba(255, 255, 255, 0.96);
   border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   padding: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.18),
+    0 2px 4px rgba(0, 0, 0, 0.14);
   z-index: 5;
 }
 
 .zoomBtn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--muted);
+  border-radius: 50%;
+  color: var(--fg);
   cursor: pointer;
   background: transparent;
   border: none;
@@ -238,28 +242,30 @@
 
 .zoomBtn:active {
   background: var(--surface);
+  transform: scale(0.96);
 }
 
 .zoomBtn i {
-  font-size: 18px;
+  font-size: 22px;
 }
 
 .zoomLabel {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--fg);
-  min-width: 44px;
+  min-width: 48px;
   text-align: center;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
+  padding: 0 2px;
 }
 
 @media (min-width: 720px) {
   .zoomBtn {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
   }
   .zoomBtn i {
-    font-size: 15px;
+    font-size: 16px;
   }
   .zoomLabel {
     font-size: 12px;
@@ -270,7 +276,10 @@
 .chainStatusPill {
   position: fixed;
   left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  /* Top-center — stays clear of the bottom-left zoom controls and the
+     bottom-right action cluster. Passive status, so reachability isn't
+     a concern. Sits below the top-row FABs (Back / Settings). */
+  top: calc(76px + env(safe-area-inset-top));
   transform: translateX(-50%);
   background: var(--warning-bg);
   color: var(--warning-fg);
