@@ -322,7 +322,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         <div className={styles.fabBottomRight}>
           <button
             type="button"
-            className={`${styles.fab} ${styles.fabPrimary} ${
+            className={`${styles.fab} ${styles.fabChain} ${
               chainMode ? styles.fabActive : ''
             }`}
             aria-label={chainMode ? 'Hide signal chain' : 'Show signal chain'}
@@ -333,7 +333,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           </button>
           <button
             type="button"
-            className={`${styles.fab} ${styles.fabPrimary} ${styles.fabAccent}`}
+            className={`${styles.fab} ${styles.fabAddPedal}`}
             aria-label="Add pedal"
             onClick={() => setLibraryOpen(true)}
           >

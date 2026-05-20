@@ -1,8 +1,8 @@
 .body {
-  /* Tall enough that the list scrolls past the floating Add-pedal FAB
-     without obscuring the last item. */
-  padding: 4px 0 88px;
-  position: relative;
+  /* Inner gap so rows and content don't crowd the modal's rounded edge.
+     Bottom padding leaves clearance for the floating Add-pedal FAB so
+     the last pedal row never hides behind it. */
+  padding: 8px 8px 96px;
 }
 
 .quotaWarn {
@@ -65,19 +65,14 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 14px 12px;
   flex: 1;
   min-width: 0;
   background: transparent;
   border: none;
+  border-radius: var(--radius-md);
   cursor: pointer;
   text-align: left;
-}
-
-@media (min-width: 720px) {
-  .entry {
-    padding: 12px 16px;
-  }
 }
 
 .moreBtn {
@@ -110,16 +105,16 @@
   }
 }
 
-/* Floating Add-pedal pill anchored to the bottom-right of the sheet card.
-   Uses position:sticky inside the scrolling sheet panel so the pill stays
-   visible while the list scrolls, then sits naturally at the bottom once
-   the list scroll completes. margin-left:auto right-aligns it inside the
-   flex column body. */
+/* Floating Add-pedal pill bound to the bottom-right corner of the modal
+   panel itself (position:fixed relative to the panel viewport — the panel
+   has position:relative + overflow-y:auto, so the pill scrolls with the
+   panel chrome rather than the list inside it). Stays anchored as the
+   list scrolls. */
 .addFab {
   position: sticky;
-  bottom: calc(12px + env(safe-area-inset-bottom));
-  align-self: flex-end;
-  margin-right: 16px;
+  bottom: 14px;
+  margin-left: auto;
+  margin-right: 14px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -135,6 +130,9 @@
     0 8px 20px rgba(37, 99, 235, 0.32),
     0 3px 6px rgba(0, 0, 0, 0.16);
   z-index: 2;
+  /* Reserve space at the right of the row above so the list doesn't
+     reflow under the pill on tall scrolling lists. */
+  align-self: flex-end;
 }
 
 .addFab:hover {
@@ -162,11 +160,21 @@
 }
 
 .thumb {
-  width: 24px;
-  height: 34px;
-  border-radius: 3px;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
   border: 0.5px solid var(--border);
   flex-shrink: 0;
+  background-size: contain !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+@media (min-width: 720px) {
+  .thumb {
+    width: 48px;
+    height: 48px;
+  }
 }
 
 .info {
@@ -175,14 +183,15 @@
 }
 
 .name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--fg);
 }
 
 .brand {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted-soft);
+  margin-top: 2px;
 }
 
 .plusIcon {

@@ -124,45 +124,64 @@
   font-size: 24px;
 }
 
-/* Primary (chain mode + add pedal) — colored, attention-grabbing. */
-.fabPrimary {
+/* The bottom-right FABs both render at the same size so they read as a
+   matched pair of primary actions. Color carries the meaning instead:
+   Add Pedal is the bold primary CTA; Signal Chain uses a contrasting
+   teal accent in its default state and flips to success-green when
+   active. */
+.fabAddPedal {
+  width: 60px;
+  height: 60px;
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
-}
-
-.fabPrimary:hover {
-  background: var(--primary-strong);
-}
-
-/* The signal-chain FAB swaps colors when active so the on/off state is
-   obvious without reading the label. */
-.fabActive {
-  background: var(--success, #2e7d32);
-  color: #fff;
-  border-color: var(--success, #2e7d32);
-}
-
-.fabActive:hover {
-  background: var(--success-strong, #266b2a);
-}
-
-/* Add-Pedal is the primary, most-tapped action on the screen — make it
-   visually heavier than its sibling. */
-.fabAccent {
-  width: 60px;
-  height: 60px;
   box-shadow:
     0 8px 20px rgba(37, 99, 235, 0.32),
     0 3px 6px rgba(0, 0, 0, 0.16);
 }
 
-.fabAccent i {
+.fabAddPedal:hover {
+  background: var(--primary-strong);
+}
+
+.fabAddPedal i {
   font-size: 28px;
 }
 
-/* On wider viewports drop back to a tighter, less-aggressive size — the
-   thumb-reach concerns don't apply when there's a mouse. */
+.fabChain {
+  width: 60px;
+  height: 60px;
+  background: #14b8a6;
+  color: #fff;
+  border-color: #14b8a6;
+  box-shadow:
+    0 8px 20px rgba(20, 184, 166, 0.32),
+    0 3px 6px rgba(0, 0, 0, 0.16);
+}
+
+.fabChain:hover {
+  background: #0d9488;
+}
+
+.fabChain i {
+  font-size: 28px;
+}
+
+/* Signal-chain FAB swaps to success-green when chain mode is on. */
+.fabActive {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
+  box-shadow:
+    0 8px 20px rgba(22, 163, 74, 0.32),
+    0 3px 6px rgba(0, 0, 0, 0.16);
+}
+
+.fabActive:hover {
+  background: #15803d;
+}
+
+/* Tighter sizing for desktop where thumb-reach isn't a constraint. */
 @media (min-width: 720px) {
   .fab {
     width: 44px;
@@ -171,11 +190,13 @@
   .fab i {
     font-size: 22px;
   }
-  .fabAccent {
+  .fabAddPedal,
+  .fabChain {
     width: 50px;
     height: 50px;
   }
-  .fabAccent i {
+  .fabAddPedal i,
+  .fabChain i {
     font-size: 24px;
   }
 }
