@@ -38,9 +38,10 @@
 }
 
 .title {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 500;
-  margin: 0 0 12px;
+  margin: 0 0 10px;
+  color: var(--muted);
 }
 
 @media (min-width: 720px) {
@@ -50,6 +51,7 @@
   .title {
     font-size: 22px;
     margin: 0 0 16px;
+    color: var(--fg);
   }
 }
 
