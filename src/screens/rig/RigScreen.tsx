@@ -14,7 +14,10 @@ import {
   clampToBoard,
   placedFootprint,
 } from '../../lib/geometry';
-import { computeUnconnectedRequiredPorts } from '../../lib/signalChainWarnings';
+import {
+  computeUnconnectedRequiredPorts,
+  connectionCompatibility,
+} from '../../lib/signalChainWarnings';
 import type { Connection, ExternalEndpoint } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
@@ -161,6 +164,17 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
       setArmedPort(null);
       return;
     }
+    // Block obvious protocol mismatches (audio↔MIDI, audio↔control, etc.)
+    // — surfaced as a transient notice so the user can see what was wrong.
+    const compat = connectionCompatibility(
+      armedPortDef.signalType,
+      targetPortDef.signalType,
+    );
+    if (!compat.ok) {
+      setNotice(compat.reason);
+      setArmedPort(null);
+      return;
+    }
     const armedIsOutput = isOutputRole(armedPortDef.role);
     const targetIsOutput = isOutputRole(targetPortDef.role);
     const swap = !armedIsOutput && targetIsOutput;
@@ -202,6 +216,20 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     if (!armedPortDef) {
       setArmedPort(null);
       return;
+    }
+    // External endpoints (guitar / amp jacks) are all audio. A MIDI/control
+    // pedal port routing to one is meaningless — block + warn. 'custom'
+    // endpoints have no declared family so we let them through.
+    if (ep.kind !== 'custom') {
+      const compat = connectionCompatibility(
+        armedPortDef.signalType,
+        'instrument',
+      );
+      if (!compat.ok) {
+        setNotice(compat.reason);
+        setArmedPort(null);
+        return;
+      }
     }
     const armedIsOutput = isOutputRole(armedPortDef.role);
     const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';

@@ -14,6 +14,7 @@ import {
   routeCablePath,
 } from '../lib/geometry';
 import { colorForSignal } from '../lib/signalColors';
+import { sortConnectionsForRender } from '../lib/signalChainWarnings';
 import styles from './ChainOverlay.module.css';
 
 interface ChainOverlayProps {
@@ -86,6 +87,15 @@ export function ChainOverlay({
   const widthPx = rig.widthIn * pxPerInch;
   const heightPx = rig.depthIn * pxPerInch;
 
+  // Paint cables in role-group order so audio sits at the base, control
+  // above it, and MIDI on top. Without this, later-added cables would
+  // bury earlier ones regardless of signal type.
+  const orderedConnections = sortConnectionsForRender(
+    connections,
+    placed,
+    pedalsById,
+  );
+
   return (
     <>
       <svg
@@ -95,7 +105,7 @@ export function ChainOverlay({
         viewBox={`0 0 ${widthPx} ${heightPx}`}
         aria-hidden
       >
-        {connections.map((c) => {
+        {orderedConnections.map((c) => {
           const from = lookupConnectionEnd(
             c.fromNodeKind,
             c.fromNodeId,
