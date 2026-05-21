@@ -45,7 +45,7 @@ describe('NewRigWizard', () => {
     expect(screen.getByText('Continue')).not.toBeDisabled();
   });
 
-  it('advances to step 2 and submits a preset selection', async () => {
+  it('advances through name → board → I/O and submits a preset selection', async () => {
     const onCreated = vi.fn();
     render(<NewRigWizard onCreated={onCreated} rigCount={3} />);
 
@@ -57,7 +57,11 @@ describe('NewRigWizard', () => {
     expect(await screen.findByText('Choose your board')).toBeInTheDocument();
     // Pedaltrain Nano+ preset card
     fireEvent.click(screen.getByText('Nano+'));
+    fireEvent.click(screen.getByText('Continue'));
 
+    expect(
+      await screen.findByText("What's outside the board?"),
+    ).toBeInTheDocument();
     const submit = screen.getByText('Create rig');
     expect(submit).not.toBeDisabled();
     fireEvent.click(submit);
@@ -78,15 +82,15 @@ describe('NewRigWizard', () => {
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(await screen.findByText('Custom size'));
 
-    const submit = screen.getByText('Create rig');
-    expect(submit).toBeDisabled();
+    const cont = screen.getByText('Continue');
+    expect(cont).toBeDisabled();
     fireEvent.change(screen.getByPlaceholderText('24'), {
       target: { value: '20' },
     });
     fireEvent.change(screen.getByPlaceholderText('12'), {
       target: { value: '10' },
     });
-    expect(submit).not.toBeDisabled();
+    expect(cont).not.toBeDisabled();
   });
 
   it('back button returns to step 1', async () => {

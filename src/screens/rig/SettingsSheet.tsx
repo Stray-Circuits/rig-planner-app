@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { BoardStyle, Rig } from '../../data/schema';
+import type {
+  BoardStyle,
+  ExternalEndpoint,
+  ExternalEndpointKind,
+  Rig,
+} from '../../data/schema';
 import { BoardThumb } from '../../canvas/BoardThumb';
 import { BoardPicker } from '../../components/BoardPicker';
 import {
@@ -16,6 +21,7 @@ interface SettingsSheetProps {
   rig: Rig;
   placedCount: number;
   floorStyle: FloorStyle;
+  endpoints: ExternalEndpoint[];
   onClose: () => void;
   onRename: (name: string) => Promise<void>;
   onChangeBoard: (
@@ -24,8 +30,18 @@ interface SettingsSheetProps {
     style: BoardStyle,
   ) => Promise<void>;
   onChangeFloor: (style: FloorStyle) => void;
+  onAddEndpoint: (kind: ExternalEndpointKind, label: string) => Promise<void>;
+  onRemoveEndpoint: (endpointId: string) => Promise<void>;
   onDelete: () => Promise<void>;
 }
+
+const ENDPOINT_KIND_LABELS: Record<ExternalEndpointKind, string> = {
+  guitar: 'Instrument',
+  amp_in: 'Amp input',
+  amp_fx_send: 'FX send',
+  amp_fx_return: 'FX return',
+  custom: 'Custom',
+};
 
 /**
  * Settings sheet for the active rig.
@@ -41,12 +57,29 @@ export function SettingsSheet({
   rig,
   placedCount,
   floorStyle,
+  endpoints,
   onClose,
   onRename,
   onChangeBoard,
   onChangeFloor,
+  onAddEndpoint,
+  onRemoveEndpoint,
   onDelete,
 }: SettingsSheetProps) {
+  const [newEndpointKind, setNewEndpointKind] =
+    useState<ExternalEndpointKind>('custom');
+  const [newEndpointLabel, setNewEndpointLabel] = useState('');
+  const [showAddEndpoint, setShowAddEndpoint] = useState(false);
+
+  const handleAddEndpoint = () => {
+    const label = newEndpointLabel.trim();
+    if (!label) return;
+    void (async () => {
+      await onAddEndpoint(newEndpointKind, label);
+      setNewEndpointLabel('');
+      setShowAddEndpoint(false);
+    })();
+  };
   const [view, setView] = useState<'main' | 'board' | 'confirmDelete'>('main');
   const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState(rig.name);
@@ -185,6 +218,72 @@ export function SettingsSheet({
                 Change
               </Button>
             </div>
+          </div>
+
+          <div className={styles.field}>
+            <span className={styles.label}>External I/O</span>
+            <ul className={styles.endpointList}>
+              {endpoints.map((ep) => (
+                <li key={ep.id} className={styles.endpointRow}>
+                  <span className={styles.endpointKind}>
+                    {ENDPOINT_KIND_LABELS[ep.kind]}
+                  </span>
+                  <span className={styles.endpointLabel}>{ep.label}</span>
+                  <button
+                    type="button"
+                    className={styles.endpointRemove}
+                    aria-label={`Remove ${ep.label}`}
+                    onClick={() => void onRemoveEndpoint(ep.id)}
+                  >
+                    <i className="ti ti-x" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {showAddEndpoint ? (
+              <div className={styles.endpointAddRow}>
+                <select
+                  className={styles.endpointSelect}
+                  value={newEndpointKind}
+                  onChange={(e) =>
+                    setNewEndpointKind(e.target.value as ExternalEndpointKind)
+                  }
+                >
+                  <option value="guitar">Instrument</option>
+                  <option value="amp_in">Amp input</option>
+                  <option value="amp_fx_send">FX send</option>
+                  <option value="amp_fx_return">FX return</option>
+                  <option value="custom">Custom</option>
+                </select>
+                <TextField
+                  inputSize="md"
+                  placeholder="Label"
+                  value={newEndpointLabel}
+                  onChange={(e) => setNewEndpointLabel(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setShowAddEndpoint(false);
+                    setNewEndpointLabel('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleAddEndpoint}>
+                  Add
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowAddEndpoint(true)}
+              >
+                <i className="ti ti-plus" aria-hidden /> Add endpoint
+              </Button>
+            )}
           </div>
 
           <div className={styles.field}>

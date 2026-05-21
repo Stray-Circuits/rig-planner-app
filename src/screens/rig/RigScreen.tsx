@@ -75,6 +75,8 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const loadSignalChain = useSignalChainStore((s) => s.loadForRig);
   const addConnection = useSignalChainStore((s) => s.addConnection);
   const removeConnection = useSignalChainStore((s) => s.removeConnection);
+  const addEndpoint = useSignalChainStore((s) => s.addEndpoint);
+  const removeEndpoint = useSignalChainStore((s) => s.removeEndpoint);
 
   const [floorStyle, setFloorStyle] = useState<FloorStyle>(() =>
     readFloorStyle(),
@@ -432,9 +434,16 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         rig={rig}
         placedCount={placed.length}
         floorStyle={floorStyle}
+        endpoints={endpoints}
         onClose={() => setSettingsOpen(false)}
         onRename={(name) => renameRig(rig.id, name)}
         onChangeFloor={changeFloor}
+        onAddEndpoint={async (kind, label) => {
+          await addEndpoint(rig.id, kind, label);
+        }}
+        onRemoveEndpoint={async (id) => {
+          await removeEndpoint(rig.id, id);
+        }}
         onChangeBoard={async (w, d, style) => {
           await updateBoard(rig.id, w, d, style);
           await clampToRigBounds(
