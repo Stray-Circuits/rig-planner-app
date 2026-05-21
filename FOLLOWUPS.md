@@ -33,6 +33,14 @@ links the phase that originated it so we know roughly when it was set aside.
   manhattan path can cross through other pedals if endpoints geometrically line
   it up that way. A proper router would detour around them.
 
+## Floor styles
+
+- **Real image textures for floors** *(Follow-up feedback)* — the five floor
+  styles (concrete, stage, carpet, wood, sidewalk) are currently pure CSS
+  patterns. Source CC0 / free-license texture images and swap them in via a
+  `backgroundImage` per style. Until then the procedural look is "fine but
+  not photographic".
+
 ## Board presets
 
 - **Real board photography + expanded preset list** *(Phase 2)* — today the
