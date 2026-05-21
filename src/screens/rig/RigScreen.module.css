@@ -162,7 +162,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--surface-floating);
   /* Default icon color: primary blue. Colored FABs (Add/Chain/Active)
      override to white. Gives the neutral Back/Settings FABs a touch of
      color instead of reading as greyscale next to the blue/teal pair. */
@@ -278,7 +278,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--surface-floating);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-pill);
   padding: 6px;

@@ -1,8 +1,14 @@
 :root {
-  /* Palette — derived from the mockups */
+  /* Palette — derived from the mockups (light theme). The dark theme
+     below overrides any token whose value changes between modes; cable
+     colors and sizing tokens stay identical. */
   --bg: #f5f5f5;
   --surface: #ffffff;
   --surface-alt: #f5f5f5;
+  /* Floating panels (FABs, zoom controls) — a translucent layer over the
+     workspace background. The alpha softens contrast against the rig
+     canvas in both themes. */
+  --surface-floating: rgba(255, 255, 255, 0.96);
   --border: #e0e0e0;
   --border-strong: #cccccc;
   --fg: #111111;
@@ -52,10 +58,50 @@
   line-height: 1.4;
   color: var(--fg);
 
+  /* Tells the UA to style form controls / scrollbars in the user's
+     preferred scheme — picks up automatically with the dark overrides
+     below. */
+  color-scheme: light dark;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1014;
+    --surface: #1c1d22;
+    --surface-alt: #262830;
+    --surface-floating: rgba(36, 38, 46, 0.94);
+    --border: #2c2e36;
+    --border-strong: #3d404a;
+    --fg: #e8e9ed;
+    --muted: #9298a3;
+    --muted-soft: #5d6068;
+
+    --primary: #5aa5e8;
+    --primary-strong: #7ebaf0;
+    --primary-bg: rgba(90, 165, 232, 0.16);
+    --primary-fg: #a3c8f0;
+
+    --success: #3bbf91;
+    --success-bg: rgba(59, 191, 145, 0.16);
+    --success-fg: #7ed3b3;
+
+    --warning: #d99543;
+    --warning-bg: rgba(217, 149, 67, 0.16);
+    --warning-fg: #e8b274;
+
+    --danger: #e35454;
+    --danger-bg: rgba(227, 84, 84, 0.16);
+    --danger-fg: #ef8484;
+
+    --midi: #e07ba0;
+    --midi-bg: rgba(224, 123, 160, 0.16);
+    --midi-fg: #ebafc6;
+  }
 }
 
 * {
