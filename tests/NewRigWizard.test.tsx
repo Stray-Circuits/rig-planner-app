@@ -54,13 +54,13 @@ describe('NewRigWizard', () => {
     });
     fireEvent.click(screen.getByText('Continue'));
 
-    expect(await screen.findByText('Choose your board')).toBeInTheDocument();
+    expect(await screen.findByText('Choose Your Board')).toBeInTheDocument();
     // Pedaltrain Nano+ preset card
     fireEvent.click(screen.getByText('Nano+'));
     fireEvent.click(screen.getByText('Continue'));
 
     expect(
-      await screen.findByText("What's outside the board?"),
+      await screen.findByText("What's Outside the Board?"),
     ).toBeInTheDocument();
     const submit = screen.getByText('Create rig');
     expect(submit).not.toBeDisabled();
@@ -99,8 +99,8 @@ describe('NewRigWizard', () => {
       target: { value: 'X' },
     });
     fireEvent.click(screen.getByText('Continue'));
-    expect(await screen.findByText('Choose your board')).toBeInTheDocument();
+    expect(await screen.findByText('Choose Your Board')).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Back'));
-    expect(screen.getByText('Name your rig')).toBeInTheDocument();
+    expect(screen.getByText('Name Your Rig')).toBeInTheDocument();
   });
 });

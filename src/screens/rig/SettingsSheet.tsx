@@ -153,10 +153,10 @@ export function SettingsSheet({
 
   const sheetTitle =
     view === 'main'
-      ? 'Rig settings'
+      ? 'Rig Settings'
       : view === 'board'
-        ? 'Change board'
-        : 'Delete rig?';
+        ? 'Change Board'
+        : 'Delete Rig?';
 
   const handleConfirmDelete = () => {
     setError(null);
@@ -324,7 +324,7 @@ export function SettingsSheet({
               className={styles.deleteRigBtn}
               onClick={() => setView('confirmDelete')}
             >
-              <i className="ti ti-trash" aria-hidden /> Delete rig
+              <i className="ti ti-trash" aria-hidden /> Delete Rig
             </button>
           </div>
         </div>
@@ -376,7 +376,7 @@ export function SettingsSheet({
               onClick={handleConfirmDelete}
               disabled={deleting}
             >
-              {deleting ? 'Deleting…' : 'Delete rig'}
+              {deleting ? 'Deleting…' : 'Delete Rig'}
             </Button>
           </div>
         </div>

@@ -92,7 +92,7 @@ describe('RigList', () => {
 
     fireEvent.click(screen.getByLabelText('Rig actions'));
     fireEvent.click(screen.getByText('Delete'));
-    const confirmTitle = await screen.findByText('Delete rig?');
+    const confirmTitle = await screen.findByText('Delete Rig?');
     // Click the Delete button in the confirm dialog, scoped to that dialog.
     const dialog =
       confirmTitle.closest<HTMLElement>('[role="dialog"]') ?? confirmTitle;

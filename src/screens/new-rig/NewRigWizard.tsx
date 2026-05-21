@@ -84,7 +84,7 @@ export function NewRigWizard({
       <WizardShell
         step={0}
         totalSteps={3}
-        title="Name your rig"
+        title="Name Your Rig"
         subtitle="Give this board a name you'll recognize."
         {...(onCancel ? { onClose: onCancel } : {})}
         footerAction={
@@ -125,7 +125,7 @@ export function NewRigWizard({
       <WizardShell
         step={1}
         totalSteps={3}
-        title="Choose your board"
+        title="Choose Your Board"
         subtitle="Pick a preset or enter custom dimensions."
         onBack={() => setStep(0)}
         {...(onCancel ? { onClose: onCancel } : {})}
@@ -149,7 +149,7 @@ export function NewRigWizard({
     <WizardShell
       step={2}
       totalSteps={3}
-      title="What's outside the board?"
+      title="What's Outside the Board?"
       subtitle="Tells the signal-chain view what to plug into."
       onBack={() => setStep(1)}
       {...(onCancel ? { onClose: onCancel } : {})}

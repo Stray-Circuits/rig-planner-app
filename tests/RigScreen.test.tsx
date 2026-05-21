@@ -83,7 +83,7 @@ describe('RigScreen', () => {
     });
     // Sheet should be closed.
     await waitFor(() => {
-      expect(screen.queryByText('Add a pedal')).not.toBeInTheDocument();
+      expect(screen.queryByText('Add a Pedal')).not.toBeInTheDocument();
     });
   });
 
@@ -111,7 +111,7 @@ describe('RigScreen', () => {
   it('settings sheet shows the current board and renames the rig', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Rig settings'));
-    const dialog = (await screen.findByText('Rig settings')).closest(
+    const dialog = (await screen.findByText('Rig Settings')).closest(
       '[role="dialog"]',
     )!;
     const nameInput = within(dialog as HTMLElement).getByDisplayValue(
@@ -128,7 +128,7 @@ describe('RigScreen', () => {
   it('Change board flow swaps width / depth / style atomically', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Rig settings'));
-    const dialog = (await screen.findByText('Rig settings')).closest(
+    const dialog = (await screen.findByText('Rig Settings')).closest(
       '[role="dialog"]',
     )!;
     fireEvent.click(within(dialog as HTMLElement).getByText('Change'));
@@ -158,10 +158,10 @@ describe('RigScreen', () => {
     );
 
     // Wizard opened.
-    expect(await screen.findByText('Pedal image')).toBeInTheDocument();
+    expect(await screen.findByText('Pedal Image')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Continue'));
 
-    // Name & size.
+    // Name & Size.
     fireEvent.change(screen.getByPlaceholderText('Boss'), {
       target: { value: 'Test' },
     });
@@ -185,7 +185,7 @@ describe('RigScreen', () => {
       ).toBeGreaterThan(0);
     });
     // Wizard closed.
-    expect(screen.queryByText('Pedal image')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pedal Image')).not.toBeInTheDocument();
   });
 
   it('tap-to-connect: arm an output, tap an input → connection created', async () => {
@@ -285,7 +285,7 @@ describe('RigScreen', () => {
       await screen.findByText(/currently placed on 1 rig\. Those placements/i),
     ).toBeInTheDocument();
     const dialog = screen
-      .getByText('Remove pedal?')
+      .getByText('Remove Pedal?')
       .closest('[role="dialog"]')!;
     fireEvent.click(within(dialog as HTMLElement).getByText('Remove'));
 
@@ -340,7 +340,7 @@ describe('RigScreen', () => {
     ).toBe(0);
   });
 
-  it('Delete rig in Settings cascades and routes back', async () => {
+  it('Delete Rig in Settings cascades and routes back', async () => {
     const onBack = vi.fn();
     render(<RigScreen rig={rig} onBack={onBack} />);
     // Seed + place a pedal so we exercise the cascade warning.
@@ -352,22 +352,22 @@ describe('RigScreen', () => {
     });
 
     fireEvent.click(screen.getByLabelText('Rig settings'));
-    const dialog = (await screen.findByText('Rig settings')).closest(
+    const dialog = (await screen.findByText('Rig Settings')).closest(
       '[role="dialog"]',
     )!;
-    fireEvent.click(within(dialog as HTMLElement).getByText('Delete rig'));
+    fireEvent.click(within(dialog as HTMLElement).getByText('Delete Rig'));
 
-    expect(await screen.findByText('Delete rig?')).toBeInTheDocument();
+    expect(await screen.findByText('Delete Rig?')).toBeInTheDocument();
     expect(
       screen.getByText(/1 placed pedal and their signal-chain connections/i),
     ).toBeInTheDocument();
 
     const confirmDialog = screen
-      .getByText('Delete rig?')
+      .getByText('Delete Rig?')
       .closest('[role="dialog"]')!;
     fireEvent.click(
       within(confirmDialog as HTMLElement).getByRole('button', {
-        name: /Delete rig/,
+        name: /Delete Rig/,
       }),
     );
 

@@ -227,11 +227,11 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
 function titleForStep(step: number): string {
   switch (step) {
     case 0:
-      return 'Pedal image';
+      return 'Pedal Image';
     case 1:
-      return 'Name & size';
+      return 'Name & Size';
     case 2:
-      return 'Jack placement';
+      return 'Jack Placement';
     case 3:
       return 'Connections';
     case 4:

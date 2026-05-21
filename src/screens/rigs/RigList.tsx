@@ -48,7 +48,7 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
         </div>
       </header>
       <main className={styles.body}>
-        <h1 className={styles.title}>Your rigs</h1>
+        <h1 className={styles.title}>Your Rigs</h1>
         {status === 'loading' && <p className={styles.empty}>Loading rigs…</p>}
         {status === 'ready' && (
           <ul className={styles.grid}>
@@ -262,7 +262,7 @@ function RigCard({ rig, pedalsById, onOpen }: RigCardProps) {
       <Sheet
         open={renaming}
         onClose={() => setRenaming(false)}
-        title="Rename rig"
+        title="Rename Rig"
       >
         <div className={styles.dialogBody}>
           <TextField
@@ -288,7 +288,7 @@ function RigCard({ rig, pedalsById, onOpen }: RigCardProps) {
       <Sheet
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Delete rig?"
+        title="Delete Rig?"
       >
         <div className={styles.dialogBody}>
           <p className={styles.muted}>

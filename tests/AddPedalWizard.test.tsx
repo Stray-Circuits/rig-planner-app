@@ -32,12 +32,12 @@ describe('AddPedalWizard', () => {
     render(
       <AddPedalWizard onCreated={() => undefined} onCancel={() => undefined} />,
     );
-    expect(screen.getByText('Pedal image')).toBeInTheDocument();
+    expect(screen.getByText('Pedal Image')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Continue'));
-    expect(screen.getByText('Name & size')).toBeInTheDocument();
+    expect(screen.getByText('Name & Size')).toBeInTheDocument();
   });
 
-  it('blocks Continue on Name & size until all fields are valid', () => {
+  it('blocks Continue on Name & Size until all fields are valid', () => {
     render(
       <AddPedalWizard onCreated={() => undefined} onCancel={() => undefined} />,
     );
@@ -84,9 +84,9 @@ describe('AddPedalWizard', () => {
       <AddPedalWizard onCreated={() => undefined} onCancel={() => undefined} />,
     );
     fireEvent.click(screen.getByText('Continue'));
-    expect(screen.getByText('Name & size')).toBeInTheDocument();
+    expect(screen.getByText('Name & Size')).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Back'));
-    expect(screen.getByText('Pedal image')).toBeInTheDocument();
+    expect(screen.getByText('Pedal Image')).toBeInTheDocument();
   });
 
   it('cancel fires onCancel', () => {

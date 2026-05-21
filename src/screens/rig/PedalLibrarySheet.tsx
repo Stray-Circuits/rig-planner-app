@@ -101,7 +101,7 @@ export function PedalLibrarySheet({
       <Sheet
         open={open}
         onClose={onClose}
-        title={mode === 'manage' ? 'Your pedal collection' : 'Add a pedal'}
+        title={mode === 'manage' ? 'Your Pedal Collection' : 'Add a Pedal'}
         floatingActions={
           <button
             type="button"
@@ -170,7 +170,7 @@ export function PedalLibrarySheet({
       <Sheet
         open={confirmDelete !== null}
         onClose={() => setConfirmDelete(null)}
-        title="Remove pedal?"
+        title="Remove Pedal?"
       >
         <div className={styles.confirmBody}>
           <p className={styles.confirmText}>

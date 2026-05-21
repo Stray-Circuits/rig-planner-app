@@ -30,7 +30,7 @@ describe('App boot', () => {
   it('lands on the New Rig wizard when there are no rigs', async () => {
     db.mockSelect(/FROM rigs ORDER BY/, () => []);
     render(<App />);
-    expect(await screen.findByText('Name your rig')).toBeInTheDocument();
+    expect(await screen.findByText('Name Your Rig')).toBeInTheDocument();
   });
 
   it('lands on the last-opened rig when one is set', async () => {
@@ -49,7 +49,7 @@ describe('App boot', () => {
       fakeRow('r2', 'Fly rig'),
     ]);
     render(<App />);
-    expect(await screen.findByText('Your rigs')).toBeInTheDocument();
+    expect(await screen.findByText('Your Rigs')).toBeInTheDocument();
     expect(screen.getByText('Main board')).toBeInTheDocument();
     expect(screen.getByText('Fly rig')).toBeInTheDocument();
   });
@@ -57,7 +57,7 @@ describe('App boot', () => {
   it('opens a rig when its card is clicked', async () => {
     db.mockSelect(/FROM rigs ORDER BY/, () => [fakeRow('r1', 'Main board')]);
     render(<App />);
-    await screen.findByText('Your rigs');
+    await screen.findByText('Your Rigs');
     fireEvent.click(screen.getByText('Main board'));
     await waitFor(() =>
       expect(screen.getByLabelText('Add pedal')).toBeInTheDocument(),
