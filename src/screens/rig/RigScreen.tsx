@@ -97,6 +97,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   }, [notice]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [editingPedal, setEditingPedal] = useState<Pedal | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chainMode, setChainMode] = useState(false);
   const [armedPort, setArmedPort] = useState<{
@@ -430,6 +431,10 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           setLibraryOpen(false);
           setWizardOpen(true);
         }}
+        onStartEditPedal={(pedal) => {
+          setLibraryOpen(false);
+          setEditingPedal(pedal);
+        }}
         onSeed={handleSeed}
       />
 
@@ -462,14 +467,27 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         }}
       />
 
-      {wizardOpen ? (
+      {wizardOpen || editingPedal ? (
         <AddPedalWizard
-          onCancel={() => setWizardOpen(false)}
-          onCreated={(pedal) => {
-            // New pedal lands on the board immediately so the user sees what
-            // they just made; they can drag it from there.
-            handleAddPedal(pedal);
+          {...(editingPedal ? { initialPedal: editingPedal } : {})}
+          onCancel={() => {
             setWizardOpen(false);
+            setEditingPedal(null);
+            // Reopen the library so the user lands back in context.
+            if (editingPedal) setLibraryOpen(true);
+          }}
+          onCreated={(pedal) => {
+            if (editingPedal) {
+              // Edit flow: no auto-add, the pedal is already placed in
+              // some rig(s). Stores reload themselves inside updatePedal.
+              setEditingPedal(null);
+              setLibraryOpen(true);
+            } else {
+              // New pedal lands on the board immediately so the user sees
+              // what they just made; they can drag it from there.
+              handleAddPedal(pedal);
+              setWizardOpen(false);
+            }
           }}
         />
       ) : null}

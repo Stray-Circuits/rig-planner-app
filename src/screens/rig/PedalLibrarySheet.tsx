@@ -14,6 +14,11 @@ interface PedalLibrarySheetProps {
   onAddPedal: (pedal: Pedal) => void;
   /** Opens the New Pedal wizard. The library sheet closes itself first. */
   onStartNewPedal: () => void;
+  /**
+   * Opens the wizard pre-populated with the given pedal so the user can
+   * edit it. Optional — when absent, the Edit action is hidden.
+   */
+  onStartEditPedal?: (pedal: Pedal) => void;
   onSeed: () => Promise<void>;
   /**
    * 'pick' (default) — tapping a row adds the pedal to the active rig.
@@ -31,6 +36,7 @@ export function PedalLibrarySheet({
   onClose,
   onAddPedal,
   onStartNewPedal,
+  onStartEditPedal,
   onSeed,
   mode = 'pick',
 }: PedalLibrarySheetProps) {
@@ -159,6 +165,17 @@ export function PedalLibrarySheet({
         onClose={closeActions}
         title={actionsFor ? `${actionsFor.brand} ${actionsFor.name}` : ''}
       >
+        {onStartEditPedal ? (
+          <SheetItem
+            icon={<i className="ti ti-pencil" aria-hidden />}
+            label="Edit pedal"
+            onClick={() => {
+              const pedal = actionsFor;
+              closeActions();
+              if (pedal) onStartEditPedal(pedal);
+            }}
+          />
+        ) : null}
         <SheetItem
           icon={<i className="ti ti-trash" aria-hidden />}
           label="Remove from collection"

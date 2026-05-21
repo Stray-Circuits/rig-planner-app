@@ -9,7 +9,9 @@ import type {
   Connector,
 } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
-import { createPedal } from '../../data/pedalsRepo';
+import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
+import { useSignalChainStore } from '../../stores/signalChainStore';
+import { createPedal, updatePedal } from '../../data/pedalsRepo';
 import { isQuotaExceededError } from '../../data/memoryAdapter';
 import {
   blobToDataURL,
@@ -31,6 +33,13 @@ import styles from './AddPedalWizard.module.css';
 interface AddPedalWizardProps {
   onCreated: (pedal: Pedal) => void;
   onCancel: () => void;
+  /**
+   * When provided, the wizard opens pre-populated with this pedal's data
+   * and the final Submit calls updatePedal() instead of createPedal().
+   * onCreated still fires with the fresh pedal so the parent can react
+   * the same way for both flows.
+   */
+  initialPedal?: Pedal;
 }
 
 type DraftPort = Omit<Port, 'id' | 'pedalId'>;
@@ -101,14 +110,53 @@ function initialDraft(): WizardDraft {
   };
 }
 
-export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
-  const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<WizardDraft>(initialDraft);
+/**
+ * Hydrate a wizard draft from an existing pedal. Used by the Edit flow
+ * so the user starts with everything pre-filled.
+ *
+ * imagePath strings starting with `color:` are placeholder records — we
+ * convert them back into the color picker's state. Anything else is
+ * treated as a data URL.
+ */
+function draftFromPedal(pedal: Pedal): WizardDraft {
+  const isColorPlaceholder =
+    typeof pedal.imagePath === 'string' && pedal.imagePath.startsWith('color:');
+  return {
+    color: isColorPlaceholder
+      ? pedal.imagePath!.slice('color:'.length)
+      : DEFAULT_COLOR,
+    photoDataUrl: isColorPlaceholder ? null : (pedal.imagePath ?? null),
+    photoSource: null,
+    brand: pedal.brand,
+    name: pedal.name,
+    widthIn: String(pedal.widthIn),
+    depthIn: String(pedal.depthIn),
+    jackSides: { ...pedal.jackSides },
+    powerSide: pedal.powerSide,
+    ports: pedal.ports.map(({ id: _id, pedalId: _pedalId, ...rest }) => rest),
+  };
+}
+
+export function AddPedalWizard({
+  onCreated,
+  onCancel,
+  initialPedal,
+}: AddPedalWizardProps) {
+  const isEdit = !!initialPedal;
+  // Edit flow opens straight at Name & size — the user already has an
+  // image they don't want to re-process. They can still scroll back to
+  // step 0 (Image) if they want to swap the photo.
+  const [step, setStep] = useState(isEdit ? 1 : 0);
+  const [draft, setDraft] = useState<WizardDraft>(() =>
+    initialPedal ? draftFromPedal(initialPedal) : initialDraft(),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // The pedals store needs to know about the newly-created row.
   const reloadPedals = usePedalsStore((s) => s.loadPedals);
+  const reloadPlaced = usePlacedPedalsStore((s) => s.loadForRig);
+  const reloadChain = useSignalChainStore((s) => s.loadForRig);
 
   const widthNum = Number(draft.widthIn);
   const depthNum = Number(draft.depthIn);
@@ -160,7 +208,7 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
     }
     setSubmitting(true);
     try {
-      const created = await createPedal({
+      const payload = {
         brand: trimmedBrand,
         name: trimmedName,
         widthIn: widthNum,
@@ -169,9 +217,27 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
         jackSides: draft.jackSides,
         powerSide: draft.powerSide,
         ports: draft.ports,
-      });
+      };
+      let result: Pedal;
+      if (initialPedal) {
+        const { pedal, removedPortIds } = await updatePedal(
+          initialPedal.id,
+          payload,
+        );
+        result = pedal;
+        // If we removed ports, refresh every rig that had this pedal
+        // placed so the canvas drops the now-orphan cables.
+        if (removedPortIds.length > 0) {
+          const usage = await usePedalsStore.getState().usage(initialPedal.id);
+          await Promise.all(
+            usage.flatMap((rigId) => [reloadPlaced(rigId), reloadChain(rigId)]),
+          );
+        }
+      } else {
+        result = await createPedal(payload);
+      }
       await reloadPedals();
-      onCreated(created);
+      onCreated(result);
     } catch (err) {
       if (isQuotaExceededError(err)) {
         setError(
@@ -206,7 +272,9 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
           {isLastStep
             ? submitting
               ? 'Saving…'
-              : 'Add to library'
+              : isEdit
+                ? 'Save changes'
+                : 'Add to library'
             : 'Continue'}
         </Button>
       }

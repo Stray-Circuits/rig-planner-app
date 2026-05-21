@@ -240,6 +240,130 @@ export async function createPedal(input: CreatePedalInput): Promise<Pedal> {
   return created;
 }
 
+export type UpdatePedalInput = Omit<CreatePedalInput, 'id'>;
+
+/**
+ * Update a pedal in place. Pedal fields are overwritten; ports are
+ * reconciled by matching `(role, label)` between the old and new
+ * lists so existing connections (which reference port_id) survive as
+ * long as the user didn't remove or rename a port.
+ *
+ * Returned: the fresh pedal + the set of port_ids that disappeared.
+ * Callers can use the removed set to clean up cables referencing them.
+ */
+export async function updatePedal(
+  id: string,
+  input: UpdatePedalInput,
+): Promise<{ pedal: Pedal; removedPortIds: string[] }> {
+  const db = await getDb();
+
+  await db.execute(
+    `UPDATE pedals SET
+       brand = ?, name = ?, width_in = ?, depth_in = ?, image_path = ?,
+       jack_top = ?, jack_bottom = ?, jack_left = ?, jack_right = ?,
+       midi_top = ?, midi_bottom = ?, midi_left = ?, midi_right = ?,
+       power_side = ?
+     WHERE id = ?`,
+    [
+      input.brand,
+      input.name,
+      input.widthIn,
+      input.depthIn,
+      input.imagePath ?? null,
+      input.jackSides.top ? 1 : 0,
+      input.jackSides.bottom ? 1 : 0,
+      input.jackSides.left ? 1 : 0,
+      input.jackSides.right ? 1 : 0,
+      input.jackSides.midi_top ? 1 : 0,
+      input.jackSides.midi_bottom ? 1 : 0,
+      input.jackSides.midi_left ? 1 : 0,
+      input.jackSides.midi_right ? 1 : 0,
+      input.powerSide ?? null,
+      id,
+    ],
+  );
+
+  // Pull existing ports and match by (role, label). Anything left over
+  // on the OLD side is deleted; anything new on the INPUT side is
+  // inserted.
+  const existingRows = await db.select<PortRow>(
+    'SELECT * FROM ports WHERE pedal_id = ?',
+    [id],
+  );
+  const oldByKey = new Map<string, PortRow>();
+  for (const row of existingRows) {
+    oldByKey.set(`${row.role}|${row.label}`, row);
+  }
+
+  const matchedIds = new Set<string>();
+  for (const port of input.ports) {
+    const key = `${port.role}|${port.label}`;
+    const existing = oldByKey.get(key);
+    if (existing) {
+      await db.execute(
+        `UPDATE ports SET signal_type = ?, connector = ?, side = ?, side_order = ?, optional = ?
+         WHERE id = ?`,
+        [
+          port.signalType,
+          port.connector,
+          port.side,
+          port.sideOrder,
+          port.optional ? 1 : 0,
+          existing.id,
+        ],
+      );
+      matchedIds.add(existing.id);
+    } else {
+      await db.execute(
+        `INSERT INTO ports (
+          id, pedal_id, label, role, signal_type, connector, side, side_order, optional
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          newId(),
+          id,
+          port.label,
+          port.role,
+          port.signalType,
+          port.connector,
+          port.side,
+          port.sideOrder,
+          port.optional ? 1 : 0,
+        ],
+      );
+    }
+  }
+
+  const removedPortIds: string[] = [];
+  for (const row of existingRows) {
+    if (matchedIds.has(row.id)) continue;
+    await db.execute('DELETE FROM ports WHERE id = ?', [row.id]);
+    removedPortIds.push(row.id);
+  }
+
+  // Drop any cables that referenced the removed ports so the chain
+  // doesn't keep dangling references that can't render.
+  for (const portId of removedPortIds) {
+    const conns = await db.select<{ id: string }>(
+      'SELECT id FROM connections WHERE from_port_id = ?',
+      [portId],
+    );
+    for (const c of conns) {
+      await db.execute('DELETE FROM connections WHERE id = ?', [c.id]);
+    }
+    const conns2 = await db.select<{ id: string }>(
+      'SELECT id FROM connections WHERE to_port_id = ?',
+      [portId],
+    );
+    for (const c of conns2) {
+      await db.execute('DELETE FROM connections WHERE id = ?', [c.id]);
+    }
+  }
+
+  const fresh = await getPedal(id);
+  if (!fresh) throw new Error('updatePedal: row not found after update');
+  return { pedal: fresh, removedPortIds };
+}
+
 /**
  * Returns the set of rig ids that currently have a placed instance of this
  * pedal. Used to warn the user before destroying placements.

@@ -26,6 +26,7 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
 
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [editingPedal, setEditingPedal] = useState<Pedal | null>(null);
 
   // Need the pedal definitions to render thumbnail rectangles at the right
   // size; load them once when the rig list mounts (idempotent).
@@ -106,18 +107,28 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
           setLibraryOpen(false);
           setWizardOpen(true);
         }}
+        onStartEditPedal={(pedal) => {
+          setLibraryOpen(false);
+          setEditingPedal(pedal);
+        }}
         onSeed={async () => {
           await seedSamples();
         }}
       />
 
-      {wizardOpen ? (
+      {wizardOpen || editingPedal ? (
         <AddPedalWizard
-          onCancel={() => setWizardOpen(false)}
+          {...(editingPedal ? { initialPedal: editingPedal } : {})}
+          onCancel={() => {
+            setWizardOpen(false);
+            setEditingPedal(null);
+            setLibraryOpen(true);
+          }}
           onCreated={() => {
             setWizardOpen(false);
+            setEditingPedal(null);
             // Pop back into the collection sheet so the user can see the
-            // pedal they just added land in the list.
+            // pedal they just added (or edited) land in the list.
             setLibraryOpen(true);
           }}
         />
