@@ -6,6 +6,7 @@ import {
   overlappingPlacedIds,
   placedFootprint,
   rectsOverlap,
+  routeCablePath,
 } from '../src/lib/geometry';
 import type { Pedal, PlacedPedal, Rig } from '../src/data/schema';
 
@@ -104,6 +105,41 @@ describe('geometry', () => {
     const c = { xIn: 2, yIn: 0, widthIn: 2, depthIn: 2 };
     expect(rectsOverlap(a, b)).toBe(true);
     expect(rectsOverlap(a, c)).toBe(false);
+  });
+
+  it('routeCablePath detours around a pedal sitting on the natural midpoint', () => {
+    // From port at left edge, to port at right edge with a slight y
+    // offset (real ports rarely line up perfectly). A pedal occupies the
+    // geometric midpoint between them.
+    const from = { xIn: 0, yIn: 5, side: 'right' as const };
+    const to = { xIn: 20, yIn: 3, side: 'left' as const };
+    // Obstacle is a small pedal between the two ports, only blocking the
+    // upper half of the cable's vertical span (y 4–6). A 3-segment elbow
+    // shifted to one side has room to detour around it.
+    const obstacle = { xIn: 9, yIn: 4, widthIn: 2, depthIn: 2 };
+
+    // Without obstacles the default elbow is at midX=10 → cable would
+    // bisect the obstacle.
+    const noObstacles = routeCablePath(from, to);
+    expect(noObstacles[1]).toEqual({ xIn: 10, yIn: 5 });
+
+    // With the obstacle declared, no segment of the chosen path should
+    // cross the obstacle's interior.
+    const path = routeCablePath(from, to, [obstacle]);
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const minX = Math.min(a.xIn, b.xIn);
+      const maxX = Math.max(a.xIn, b.xIn);
+      const minY = Math.min(a.yIn, b.yIn);
+      const maxY = Math.max(a.yIn, b.yIn);
+      const crosses =
+        maxX > obstacle.xIn + 0.05 &&
+        minX < obstacle.xIn + obstacle.widthIn - 0.05 &&
+        maxY > obstacle.yIn + 0.05 &&
+        minY < obstacle.yIn + obstacle.depthIn - 0.05;
+      expect(crosses).toBe(false);
+    }
   });
 
   it('overlappingPlacedIds flags both pedals when their keep-out rects touch', () => {

@@ -189,64 +189,173 @@ export function portPositionOnBoard(
   }
 }
 
+/** Axis-aligned rectangle in board (inch) space. */
+export interface ObstacleRect {
+  xIn: number;
+  yIn: number;
+  widthIn: number;
+  depthIn: number;
+}
+
+/** Footprint rect for a placed pedal — useful as an obstacle for cable routing. */
+export function placedRect(placed: PlacedPedal, pedal: Pedal): ObstacleRect {
+  const { widthIn, depthIn } = placedFootprint(pedal, placed.rotation);
+  return { xIn: placed.xIn, yIn: placed.yIn, widthIn, depthIn };
+}
+
 /**
- * Orthogonal 3-segment cable path between two points. If the points share an
- * X or Y coordinate the cable is a single straight segment; otherwise we
- * choose an intermediate axis based on which side each endpoint anchors to.
+ * Whether the axis-aligned segment (a → b) crosses the interior of `rect`.
+ * Touching the edges is allowed — cables that come off a pedal port and
+ * brush past an adjacent pedal's edge shouldn't trip this. Uses a small
+ * epsilon to give grazes the benefit of the doubt.
+ */
+function segmentHitsRect(
+  a: { xIn: number; yIn: number },
+  b: { xIn: number; yIn: number },
+  rect: ObstacleRect,
+): boolean {
+  const eps = 0.05;
+  const minX = Math.min(a.xIn, b.xIn);
+  const maxX = Math.max(a.xIn, b.xIn);
+  const minY = Math.min(a.yIn, b.yIn);
+  const maxY = Math.max(a.yIn, b.yIn);
+  return (
+    maxX > rect.xIn + eps &&
+    minX < rect.xIn + rect.widthIn - eps &&
+    maxY > rect.yIn + eps &&
+    minY < rect.yIn + rect.depthIn - eps
+  );
+}
+
+function pathHitsAny(
+  path: { xIn: number; yIn: number }[],
+  rects: readonly ObstacleRect[],
+): boolean {
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i]!;
+    const b = path[i + 1]!;
+    for (const r of rects) {
+      if (segmentHitsRect(a, b, r)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Orthogonal 3-segment cable path between two points. Generates several
+ * candidate Manhattan routes (varying the elbow position) and returns the
+ * first one that doesn't cross any obstacle. Falls back to the natural
+ * mid-point route if no candidate is clean.
+ *
+ * `obstacles` should NOT include the pedals owning the from/to ports —
+ * the cable necessarily touches their edges.
  *
  * Returns a polyline as an array of {x, y} in the same units as the inputs.
  */
 export function routeCablePath(
   from: { xIn: number; yIn: number; side: Side },
   to: { xIn: number; yIn: number; side: Side },
+  obstacles: readonly ObstacleRect[] = [],
 ): { xIn: number; yIn: number }[] {
-  // Straight cable if endpoints are essentially colinear.
+  // Straight cable if endpoints are essentially colinear AND the straight
+  // line doesn't cross any obstacle.
   const dx = Math.abs(to.xIn - from.xIn);
   const dy = Math.abs(to.yIn - from.yIn);
   if (dx < 0.05 || dy < 0.05) {
-    return [
+    const straight = [
       { xIn: from.xIn, yIn: from.yIn },
       { xIn: to.xIn, yIn: to.yIn },
     ];
+    if (!pathHitsAny(straight, obstacles)) return straight;
+    // Otherwise fall through to elbowed candidates — note that a perfectly
+    // colinear cable can't truly detour with just a 3-segment Manhattan
+    // path, so the obstacle will still be hit. Real ports rarely line up
+    // exactly so this is an edge case.
   }
-  // Decide whether the elbow runs horizontally first (from side is top/bottom)
-  // or vertically first (left/right). This keeps the cable's first segment
-  // leaving perpendicular to the pedal edge.
+
+  const candidates = generateRouteCandidates(from, to, obstacles);
+  for (const path of candidates) {
+    if (!pathHitsAny(path, obstacles)) return path;
+  }
+  // No clean route — return the first candidate so something draws.
+  return candidates[0]!;
+}
+
+function generateRouteCandidates(
+  from: { xIn: number; yIn: number; side: Side },
+  to: { xIn: number; yIn: number; side: Side },
+  obstacles: readonly ObstacleRect[],
+): { xIn: number; yIn: number }[][] {
   const fromHorizontal = from.side === 'left' || from.side === 'right';
   const toHorizontal = to.side === 'left' || to.side === 'right';
+  const cands: { xIn: number; yIn: number }[][] = [];
 
+  const pHFrom = { xIn: from.xIn, yIn: from.yIn };
+  const pHTo = { xIn: to.xIn, yIn: to.yIn };
+
+  // Same horizontal anchor orientation → elbow varies along X.
   if (fromHorizontal && toHorizontal) {
-    // Both anchors face horizontally → elbow uses two horizontal segments
-    // around a midpoint X.
-    const midX = (from.xIn + to.xIn) / 2;
-    return [
-      { xIn: from.xIn, yIn: from.yIn },
-      { xIn: midX, yIn: from.yIn },
-      { xIn: midX, yIn: to.yIn },
-      { xIn: to.xIn, yIn: to.yIn },
-    ];
+    const elbows = elbowCandidates(from.xIn, to.xIn, obstacles, 'x');
+    for (const eX of elbows) {
+      cands.push([
+        pHFrom,
+        { xIn: eX, yIn: from.yIn },
+        { xIn: eX, yIn: to.yIn },
+        pHTo,
+      ]);
+    }
+    return cands;
   }
+
+  // Same vertical anchor orientation → elbow varies along Y.
   if (!fromHorizontal && !toHorizontal) {
-    const midY = (from.yIn + to.yIn) / 2;
-    return [
-      { xIn: from.xIn, yIn: from.yIn },
-      { xIn: from.xIn, yIn: midY },
-      { xIn: to.xIn, yIn: midY },
-      { xIn: to.xIn, yIn: to.yIn },
-    ];
+    const elbows = elbowCandidates(from.yIn, to.yIn, obstacles, 'y');
+    for (const eY of elbows) {
+      cands.push([
+        pHFrom,
+        { xIn: from.xIn, yIn: eY },
+        { xIn: to.xIn, yIn: eY },
+        pHTo,
+      ]);
+    }
+    return cands;
   }
-  // Mixed: from horizontal anchor leaves horizontally, then turns to meet
-  // the vertical anchor's column.
+
+  // Mixed orientations — two natural L-shapes plus their detour variants.
   if (fromHorizontal) {
-    return [
-      { xIn: from.xIn, yIn: from.yIn },
-      { xIn: to.xIn, yIn: from.yIn },
-      { xIn: to.xIn, yIn: to.yIn },
-    ];
+    // Prefer "horizontal first, then vertical".
+    cands.push([pHFrom, { xIn: to.xIn, yIn: from.yIn }, pHTo]);
+    cands.push([pHFrom, { xIn: from.xIn, yIn: to.yIn }, pHTo]);
+  } else {
+    cands.push([pHFrom, { xIn: from.xIn, yIn: to.yIn }, pHTo]);
+    cands.push([pHFrom, { xIn: to.xIn, yIn: from.yIn }, pHTo]);
   }
-  return [
-    { xIn: from.xIn, yIn: from.yIn },
-    { xIn: from.xIn, yIn: to.yIn },
-    { xIn: to.xIn, yIn: to.yIn },
-  ];
+  return cands;
+}
+
+/**
+ * Suggest elbow positions along a 1D axis between `a` and `b`. Includes the
+ * midpoint plus offsets, plus positions that route just outside each
+ * obstacle's extent on that axis so a cable can sidestep a pedal.
+ */
+function elbowCandidates(
+  a: number,
+  b: number,
+  obstacles: readonly ObstacleRect[],
+  axis: 'x' | 'y',
+): number[] {
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  const out: number[] = [(a + b) / 2, a + (b - a) * 0.25, a + (b - a) * 0.75];
+  const clearance = 0.6;
+  for (const r of obstacles) {
+    const rLo = axis === 'x' ? r.xIn : r.yIn;
+    const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
+    if (rHi >= lo && rLo <= hi) {
+      // Obstacle is in the cable's axial span — try going just outside it.
+      out.push(rLo - clearance);
+      out.push(rHi + clearance);
+    }
+  }
+  return out;
 }

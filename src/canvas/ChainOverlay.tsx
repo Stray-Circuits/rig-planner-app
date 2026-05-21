@@ -9,9 +9,11 @@ import type {
   SignalType,
 } from '../data/schema';
 import {
+  placedRect,
   portPositionOnBoard,
   rotatedSide,
   routeCablePath,
+  type ObstacleRect,
 } from '../lib/geometry';
 import { colorForSignal } from '../lib/signalColors';
 import { sortConnectionsForRender } from '../lib/signalChainWarnings';
@@ -96,6 +98,15 @@ export function ChainOverlay({
     pedalsById,
   );
 
+  // Pre-compute each placed pedal's footprint rect so cable routing can
+  // detour around them. Keyed by placed.id so per-connection obstacle
+  // lists can quickly exclude the source and destination pedals.
+  const obstacleByPlaced = new Map<string, ObstacleRect>();
+  for (const p of placed) {
+    const def = pedalsById.get(p.pedalId);
+    if (def) obstacleByPlaced.set(p.id, placedRect(p, def));
+  }
+
   return (
     <>
       <svg
@@ -130,9 +141,20 @@ export function ChainOverlay({
           );
           const isExternal =
             c.fromNodeKind === 'external' || c.toNodeKind === 'external';
+          // Build an obstacle list for this cable: every placed pedal
+          // EXCEPT the source/destination pedal (the cable necessarily
+          // touches those edges).
+          const fromOwnerId = c.fromNodeKind === 'pedal' ? c.fromNodeId : null;
+          const toOwnerId = c.toNodeKind === 'pedal' ? c.toNodeId : null;
+          const obstacles: ObstacleRect[] = [];
+          for (const [id, rect] of obstacleByPlaced) {
+            if (id === fromOwnerId || id === toOwnerId) continue;
+            obstacles.push(rect);
+          }
           const path = routeCablePath(
             { xIn: from.xIn, yIn: from.yIn, side: from.side },
             { xIn: to.xIn, yIn: to.yIn, side: to.side },
+            obstacles,
           );
           const d = path
             .map((p, i) =>
