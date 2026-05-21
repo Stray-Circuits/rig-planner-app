@@ -38,14 +38,6 @@ links the phase that originated it so we know roughly when it was set aside.
   full pointerDown→pointerMove→pointerUp gesture with a ghost cable still
   needs to be wired up in `BoardCanvas` / `ChainOverlay`.
 
-## Floor styles
-
-- **Real image textures for floors** *(Follow-up feedback)* — the five floor
-  styles (concrete, stage, carpet, wood, sidewalk) are currently pure CSS
-  patterns. Source CC0 / free-license texture images and swap them in via a
-  `backgroundImage` per style. Until then the procedural look is "fine but
-  not photographic".
-
 ## Board presets
 
 - **Real board photography + expanded preset list** *(Phase 2)* — today the

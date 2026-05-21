@@ -50,66 +50,43 @@
 }
 
 /* ---------- Floor styles -------------------------------------------------
-   The user picks the surface their board "sits on" from SettingsSheet. Pure
-   CSS for v1 — image-based textures could come later.                       */
+   The user picks the surface their board "sits on" from SettingsSheet.
+   Backed by CC0 textures from ambientCG (see public/textures/floors/NOTICE.md).
+   Each style still declares a fallback color so the canvas isn't bare
+   while the image is loading or if the file is missing. */
 .floorConcreteGrey {
   background:
-    radial-gradient(
-      circle at 30% 20%,
-      rgba(255, 255, 255, 0.05),
-      transparent 60%
-    ),
+    url('/textures/floors/concrete_grey.jpg') repeat,
     #8a8a8a;
+  background-size: 256px 256px;
 }
 
 .floorStageBlack {
   background:
-    radial-gradient(
-      circle at 20% 10%,
-      rgba(255, 255, 255, 0.04),
-      transparent 55%
-    ),
+    url('/textures/floors/stage_black.jpg') repeat,
     #141416;
+  background-size: 320px 320px;
 }
 
 .floorCarpetBeige {
   background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(0, 0, 0, 0.04) 0 1px,
-      transparent 1px 4px
-    ),
+    url('/textures/floors/carpet_beige.jpg') repeat,
     #c9b58a;
+  background-size: 280px 280px;
 }
 
 .floorWood {
   background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.07) 0 1px,
-      transparent 1px 70px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.03) 0 4px,
-      transparent 4px 22px
-    ),
-    linear-gradient(180deg, #7a4f2a, #5e3a1d);
+    url('/textures/floors/wood.jpg') repeat,
+    #6e4422;
+  background-size: 360px 360px;
 }
 
 .floorSidewalk {
   background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(0, 0, 0, 0.08) 0 1px,
-      transparent 1px 160px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.08) 0 1px,
-      transparent 1px 160px
-    ),
+    url('/textures/floors/sidewalk.jpg') repeat,
     #bcbcb6;
+  background-size: 300px 300px;
 }
 
 .canvasTransform {

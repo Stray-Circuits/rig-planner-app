@@ -181,20 +181,33 @@
   background: #888;
 }
 
+/* Swatches preview the real texture so the picker matches what the user
+   will see on the rig canvas. Background-size keeps a few tiles visible
+   inside the small chip circle. */
 .floorSwatch_concrete_grey .floorSwatch {
-  background: #8a8a8a;
+  background:
+    url('/textures/floors/concrete_grey.jpg') center/120% no-repeat,
+    #8a8a8a;
 }
 .floorSwatch_stage_black .floorSwatch {
-  background: #141416;
+  background:
+    url('/textures/floors/stage_black.jpg') center/120% no-repeat,
+    #141416;
 }
 .floorSwatch_carpet_beige .floorSwatch {
-  background: #c9b58a;
+  background:
+    url('/textures/floors/carpet_beige.jpg') center/120% no-repeat,
+    #c9b58a;
 }
 .floorSwatch_wood .floorSwatch {
-  background: linear-gradient(180deg, #7a4f2a, #5e3a1d);
+  background:
+    url('/textures/floors/wood.jpg') center/120% no-repeat,
+    #6e4422;
 }
 .floorSwatch_sidewalk .floorSwatch {
-  background: #bcbcb6;
+  background:
+    url('/textures/floors/sidewalk.jpg') center/120% no-repeat,
+    #bcbcb6;
 }
 
 .error {
