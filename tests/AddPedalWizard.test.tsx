@@ -162,6 +162,8 @@ describe('AddPedalWizard', () => {
     fireEvent.click(screen.getByText('Continue'));
 
     fireEvent.click(screen.getByText('Add port'));
+    // Category picker is visible. Pick Control (which contains Expression).
+    fireEvent.click(screen.getByText('Control'));
     // Role picker is visible. Click Expression.
     fireEvent.click(screen.getByText('Expression'));
     // Connector picker now visible — pick TRS.

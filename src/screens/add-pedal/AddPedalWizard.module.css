@@ -650,6 +650,16 @@
   overflow: hidden;
 }
 
+/* Internal scroll for the picker option lists. Without this the picker
+   relies on the wizard's outer scroller, which on a short phone viewport
+   can leave the bottom rows unreachable behind the wizard footer. */
+.portPickerList {
+  max-height: 50dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .portPickerHeader {
   display: flex;
   align-items: center;

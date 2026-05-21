@@ -1247,9 +1247,10 @@ function pickDefaultSide(draft: WizardDraft): Side {
 
 function ConnectionsStep({ draft, setDraft }: StepProps) {
   const [pickerStep, setPickerStep] = useState<
-    'closed' | 'role' | 'connector' | 'side'
+    'closed' | 'category' | 'role' | 'connector' | 'side'
   >('closed');
   const [pickedRole, setPickedRole] = useState<RoleOption | null>(null);
+  const [pickedCategory, setPickedCategory] = useState<string | null>(null);
   const [pickedConnector, setPickedConnector] = useState<Connector | null>(
     null,
   );
@@ -1456,16 +1457,24 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
         <button
           type="button"
           className={styles.addPortBtn}
-          onClick={() => setPickerStep('role')}
+          onClick={() => {
+            setPickedCategory(null);
+            setPickerStep('category');
+          }}
         >
           <i className="ti ti-plus" aria-hidden /> Add port
         </button>
       ) : (
         <PortPicker
           step={pickerStep}
+          pickedCategory={pickedCategory}
           pickedRole={pickedRole}
           pickedConnector={pickedConnector}
           defaultSide={pickDefaultSide(draft)}
+          onPickCategory={(heading) => {
+            setPickedCategory(heading);
+            setPickerStep('role');
+          }}
           onPickRole={(role) => {
             setPickedRole(role);
             setPickerStep('connector');
@@ -1485,6 +1494,9 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
             } else if (pickerStep === 'connector') {
               setPickerStep('role');
               setPickedRole(null);
+            } else if (pickerStep === 'role') {
+              setPickerStep('category');
+              setPickedCategory(null);
             } else {
               setPickerStep('closed');
             }
@@ -1496,10 +1508,12 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
 }
 
 interface PortPickerProps {
-  step: 'role' | 'connector' | 'side';
+  step: 'category' | 'role' | 'connector' | 'side';
+  pickedCategory: string | null;
   pickedRole: RoleOption | null;
   pickedConnector: Connector | null;
   defaultSide: Side;
+  onPickCategory: (heading: string) => void;
   onPickRole: (role: RoleOption) => void;
   onPickConnector: (connector: Connector) => void;
   onPickSide: (side: Side) => void;
@@ -1515,20 +1529,25 @@ const SIDE_LABELS: Record<Side, string> = {
 
 function PortPicker({
   step,
+  pickedCategory,
   pickedRole,
   pickedConnector,
   defaultSide,
+  onPickCategory,
   onPickRole,
   onPickConnector,
   onPickSide,
   onBack,
 }: PortPickerProps) {
   const title =
-    step === 'role'
-      ? 'Choose port type'
-      : step === 'connector'
-        ? `Choose connector · ${pickedRole?.label ?? ''}`
-        : `Choose side · ${pickedRole?.label ?? ''}`;
+    step === 'category'
+      ? 'Choose port category'
+      : step === 'role'
+        ? `Choose port type · ${pickedCategory ?? ''}`
+        : step === 'connector'
+          ? `Choose connector · ${pickedRole?.label ?? ''}`
+          : `Choose side · ${pickedRole?.label ?? ''}`;
+  const roleGroup = ROLE_GROUPS.find((g) => g.heading === pickedCategory);
   return (
     <div className={styles.portPicker}>
       <div className={styles.portPickerHeader}>
@@ -1542,30 +1561,46 @@ function PortPicker({
         </button>
         <span className={styles.portPickerTitle}>{title}</span>
       </div>
-      {step === 'role' &&
-        ROLE_GROUPS.map((group) => (
-          <div key={group.heading}>
-            <div className={styles.portPickerSection}>{group.heading}</div>
-            {group.options.map((opt) => (
-              <button
-                key={opt.role}
-                type="button"
-                className={styles.portPickerOpt}
-                onClick={() => onPickRole(opt)}
-              >
-                <span
-                  className={
-                    opt.signalType === 'midi'
-                      ? styles.jackDotMidi
-                      : styles.jackDotAudio
-                  }
-                  aria-hidden
-                />
-                <span className={styles.portPickerOptName}>{opt.label}</span>
-              </button>
-            ))}
-          </div>
-        ))}
+      {step === 'category' && (
+        <div className={styles.portPickerList}>
+          {ROLE_GROUPS.map((group) => (
+            <button
+              key={group.heading}
+              type="button"
+              className={styles.portPickerOpt}
+              onClick={() => onPickCategory(group.heading)}
+            >
+              <span className={styles.portPickerOptName}>{group.heading}</span>
+              <span className={styles.portPickerHint}>
+                {group.options.length} option
+                {group.options.length === 1 ? '' : 's'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {step === 'role' && roleGroup && (
+        <div className={styles.portPickerList}>
+          {roleGroup.options.map((opt) => (
+            <button
+              key={opt.role}
+              type="button"
+              className={styles.portPickerOpt}
+              onClick={() => onPickRole(opt)}
+            >
+              <span
+                className={
+                  opt.signalType === 'midi'
+                    ? styles.jackDotMidi
+                    : styles.jackDotAudio
+                }
+                aria-hidden
+              />
+              <span className={styles.portPickerOptName}>{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {step === 'connector' &&
         pickedRole?.connectors.map((c) => (
           <button
