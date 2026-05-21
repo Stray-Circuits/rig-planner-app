@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyColorThreshold,
+  dominantColor,
   findAlphaBBox,
+  rgbToHex,
   sampleCornerBgColor,
 } from '../src/lib/imageHelpers';
 
@@ -123,5 +125,30 @@ describe('applyColorThreshold', () => {
     applyColorThreshold(data, { r: 128, g: 128, b: 128 }, 1);
     expect(data[3]).toBe(0);
     expect(data[7]).toBe(0);
+  });
+});
+
+describe('dominantColor', () => {
+  it('averages opaque pixels and ignores transparent ones', () => {
+    // 8×8 buffer: left half is red+opaque, right half is white+transparent.
+    const data = buildBuffer(8, 8, (x) =>
+      x < 4 ? [200, 50, 50, 255] : [255, 255, 255, 0],
+    );
+    const rgb = dominantColor(data, 8, 8);
+    expect(rgb).not.toBeNull();
+    // Only the red pixels should contribute; allow small slop.
+    expect(rgb!.r).toBeCloseTo(200, 0);
+    expect(rgb!.g).toBeCloseTo(50, 0);
+    expect(rgb!.b).toBeCloseTo(50, 0);
+  });
+
+  it('returns null when every pixel is below the alpha threshold', () => {
+    const data = buildBuffer(4, 4, () => [255, 0, 0, 8]);
+    expect(dominantColor(data, 4, 4)).toBeNull();
+  });
+
+  it('rgbToHex packs floats into a lowercase #rrggbb string', () => {
+    expect(rgbToHex({ r: 255, g: 0, b: 128 })).toBe('#ff0080');
+    expect(rgbToHex({ r: 200.7, g: 50.3, b: 50 })).toBe('#c93232');
   });
 });

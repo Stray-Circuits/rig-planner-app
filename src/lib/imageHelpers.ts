@@ -70,6 +70,52 @@ export function sampleCornerBgColor(
 }
 
 /**
+ * Average RGB of every pixel whose alpha is above the threshold. Used to
+ * pick a "fallback" tint for a pedal — the color we show on the board
+ * canvas when the user's chosen view doesn't actually load the photo.
+ *
+ * Returns null if no pixel is opaque enough — caller should keep the
+ * existing color in that case.
+ */
+export function dominantColor(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  alphaThreshold = 64,
+): { r: number; g: number; b: number } | null {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let n = 0;
+  // Subsample for speed — every 4th pixel along each axis is plenty for an
+  // average and keeps this O(n/16) on a 1K image.
+  const stride = 4;
+  for (let y = 0; y < height; y += stride) {
+    const row = y * width;
+    for (let x = 0; x < width; x += stride) {
+      const i = (row + x) * 4;
+      const a = data[i + 3] ?? 0;
+      if (a <= alphaThreshold) continue;
+      r += data[i] ?? 0;
+      g += data[i + 1] ?? 0;
+      b += data[i + 2] ?? 0;
+      n += 1;
+    }
+  }
+  if (n === 0) return null;
+  return { r: r / n, g: g / n, b: b / n };
+}
+
+/** Pack an {r,g,b} (0..255) into a lowercase `#rrggbb` hex string. */
+export function rgbToHex(rgb: { r: number; g: number; b: number }): string {
+  const to2 = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${to2(rgb.r)}${to2(rgb.g)}${to2(rgb.b)}`;
+}
+
+/**
  * In-place: zero the alpha channel of any pixel whose RGB distance from
  * `bg` is below `tolerance × max-distance` (max-distance = sqrt(3) × 255).
  *

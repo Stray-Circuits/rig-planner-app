@@ -1,6 +1,8 @@
 import {
   applyColorThreshold,
+  dominantColor,
   findAlphaBBox,
+  rgbToHex,
   sampleCornerBgColor,
 } from './imageHelpers';
 
@@ -167,6 +169,36 @@ export function describeImageError(err: unknown): string {
     return "We couldn't decode that image — try JPEG or PNG. HEIC photos from iOS aren't supported in the browser yet.";
   }
   return msg;
+}
+
+/**
+ * Sample the dominant non-transparent color of a (probably transparent-
+ * background) image as a `#rrggbb` hex string. Used to pick a fallback
+ * tint for a pedal whose image is its primary representation — the
+ * board can then show that tint behind the photo (and as a placeholder
+ * if the photo ever fails to load).
+ *
+ * Returns null if nothing in the image is opaque enough to read.
+ */
+export async function sampleDominantImageColor(
+  blob: Blob,
+): Promise<string | null> {
+  const bitmap = await createImageBitmap(blob);
+  const w = bitmap.width;
+  const h = bitmap.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    bitmap.close?.();
+    return null;
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+  const { data } = ctx.getImageData(0, 0, w, h);
+  const rgb = dominantColor(data, w, h);
+  return rgb ? rgbToHex(rgb) : null;
 }
 
 /** Convert a Blob (e.g. the removeBackground result) to a data: URL. */

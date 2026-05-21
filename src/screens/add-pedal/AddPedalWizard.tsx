@@ -21,6 +21,7 @@ import {
   prefetchBgRemoval,
   removeBackground,
   removeColorThreshold,
+  sampleDominantImageColor,
   shrinkImage,
   type BgRemovalProgress,
 } from '../../lib/bgRemoval';
@@ -214,7 +215,7 @@ export function AddPedalWizard({ onCreated, onCancel }: AddPedalWizardProps) {
       {step === 1 && <NameSizeStep draft={draft} setDraft={setDraft} />}
       {step === 2 && <JacksStep draft={draft} setDraft={setDraft} />}
       {step === 3 && <ConnectionsStep draft={draft} setDraft={setDraft} />}
-      {step === 4 && <ReviewStep draft={draft} />}
+      {step === 4 && <ReviewStep draft={draft} setDraft={setDraft} />}
       {error ? (
         <div className={styles.errorBox} role="alert">
           <i className="ti ti-alert-triangle" aria-hidden /> {error}
@@ -411,7 +412,16 @@ function ImageStep({ draft, setDraft }: StepProps) {
       const cropped = await cropToContent(processed);
       if (controller.signal.aborted) throw abortError();
       const dataUrl = await blobToDataURL(cropped);
-      setDraft((d) => ({ ...d, photoDataUrl: dataUrl }));
+      // Sample the dominant color of the bg-removed image so the rig
+      // canvas has a sensible fallback tint behind the photo (and a
+      // visible placeholder if the photo URL ever 404s). Best effort —
+      // a null result means we keep the user's previous color.
+      const sampled = await sampleDominantImageColor(cropped).catch(() => null);
+      setDraft((d) => ({
+        ...d,
+        photoDataUrl: dataUrl,
+        ...(sampled ? { color: sampled } : {}),
+      }));
     } catch (err) {
       setError(describeImageError(err));
     } finally {
@@ -1755,7 +1765,7 @@ function PortInlineEditor({ port, onChange, onDone }: PortInlineEditorProps) {
   );
 }
 
-function ReviewStep({ draft }: { draft: WizardDraft }) {
+function ReviewStep({ draft, setDraft }: StepProps) {
   const w = Number(draft.widthIn);
   const d = Number(draft.depthIn);
   return (
@@ -1776,17 +1786,21 @@ function ReviewStep({ draft }: { draft: WizardDraft }) {
             : '—'}
         </span>
       </div>
-      <div className={styles.reviewRow}>
-        <span className={styles.reviewKey}>Color</span>
+      <label className={styles.reviewRow}>
+        <span className={styles.reviewKey}>
+          {draft.photoDataUrl ? 'Fallback color' : 'Color'}
+        </span>
         <span className={styles.reviewVal}>
-          <span
-            className={styles.colorSwatch}
-            style={{ background: draft.color }}
-            aria-hidden
+          <input
+            type="color"
+            className={styles.reviewColorPicker}
+            value={isValidHex(draft.color) ? draft.color : DEFAULT_COLOR}
+            onChange={(e) => setDraft((s) => ({ ...s, color: e.target.value }))}
+            aria-label="Fallback color"
           />
           {draft.color}
         </span>
-      </div>
+      </label>
       <div className={styles.reviewRow}>
         <span className={styles.reviewKey}>Ports</span>
         <span className={styles.reviewVal}>
