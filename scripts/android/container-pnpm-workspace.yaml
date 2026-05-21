@@ -1,0 +1,12 @@
+# Container-only override of the repo's pnpm-workspace.yaml.
+#
+# build.sh mounts this on top of /workspace/pnpm-workspace.yaml so the host
+# file stays untouched. We need this because:
+#   1. pnpm 9.15+ rejects a workspace yaml without `packages:` ("packages
+#      field missing or empty"), which kills Tauri's `beforeBuildCommand`
+#      pnpm child process inside the container.
+#   2. The host yaml's `storeDir: ~/Library/pnpm/store` points at a macOS
+#      path that doesn't make sense inside Linux containers — by omitting
+#      it here we let PNPM_STORE_DIR (set in the Dockerfile to
+#      /opt/pnpm/store) win, so the mounted pnpm cache volume is used.
+packages: []

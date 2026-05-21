@@ -1,3 +1,8 @@
+# Not a real workspace — this file exists to carry pnpm config (allowBuilds,
+# storeDir, verifyDepsBeforeRun) for a single-package repo. pnpm 9.15+ rejects
+# a workspace file without `packages:` ("packages field missing or empty"), so
+# we declare an empty list to satisfy it.
+packages: []
 allowBuilds:
   esbuild: true
   # protobufjs's postinstall only generates CLI tools we don't use at runtime.

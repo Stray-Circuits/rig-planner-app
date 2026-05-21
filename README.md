@@ -18,7 +18,7 @@ Pedalboard planner with signal-path overlay. Desktop + mobile (iOS / Android) vi
 - Rust toolchain (`rustup`)
 - For iOS builds: Xcode + iOS targets via `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`
 - For Android builds: either Android Studio + NDK with `ANDROID_HOME` / `NDK_HOME` set,
-  **or** Podman (see [Android via Podman](#android-via-podman) below — no host SDK needed)
+  **or** Docker (see [Android via Docker](#android-via-docker) below — no host SDK needed)
 
 ## Scripts
 
@@ -30,7 +30,7 @@ Pedalboard planner with signal-path overlay. Desktop + mobile (iOS / Android) vi
 | `pnpm tauri:ios:dev` | iOS simulator dev loop |
 | `pnpm tauri:android:init` | One-time Android project init (host toolchain) |
 | `pnpm tauri:android:dev` | Android emulator dev loop |
-| `pnpm android:container:image` | Build the Podman image with all Android toolchains |
+| `pnpm android:container:image` | Build the Docker image with all Android toolchains |
 | `pnpm android:container:init` | One-time Android project init **inside the container** |
 | `pnpm android:container:build` | Build a debug APK inside the container |
 | `pnpm android:container:shell` | Drop into a shell inside the container |
@@ -67,22 +67,28 @@ mockups/          # Original HTML mockups (reference)
 - [x] Phase 6 — Signal-chain overlay
 - [ ] Phase 7 — Mobile polish + native builds *(Android containerized debug build wired up; release signing + iOS still pending)*
 
-## Android via Podman
+## Android via Docker
 
 The Android build runs in a containerized toolchain so the host only needs
-Podman. JDK 17, Node, pnpm, Rust + Android targets, the Android SDK, and the
-NDK all live in the image at pinned versions (see
-[`scripts/android/Containerfile`](scripts/android/Containerfile)).
+Docker. The image layers Node, pnpm, the Android NDK, and Rust + Android
+targets on top of [Cirrus Labs' `android-sdk:34`](https://github.com/cirruslabs/docker-images-android)
+base (multi-arch arm64 + amd64, JDK + SDK preinstalled). See
+[`scripts/android/Dockerfile`](scripts/android/Dockerfile) for pinned
+versions.
+
+In Docker Desktop → Settings → Resources, give the VM at least **8 GiB RAM,
+4 CPUs, and 60 GiB disk image size** before running the first build — the
+toolchain install and Gradle/AGP both need the headroom.
 
 ```bash
-# One-time: build the image (~10–20 min, ~6 GiB).
+# One-time: build the image (~5–10 min, ~5 GiB).
 pnpm android:container:image
 
 # One-time per repo clone: generate src-tauri/gen/android/.
 pnpm android:container:init
 
 # Build a debug APK. Subsequent builds reuse pnpm / cargo / gradle caches
-# via named Podman volumes, so they're significantly faster.
+# via named Docker volumes, so they're significantly faster.
 pnpm android:container:build
 ```
 
@@ -92,5 +98,5 @@ device or emulator with `adb install`. Signed release builds and on-device
 emulator/dev loops are deferred — the wrapper script only covers debug APKs
 today.
 
-The container build defaults to `linux/arm64`. Override with
-`RIG_PLANNER_ANDROID_PLATFORM=linux/amd64` if your host needs it.
+Docker picks the host architecture by default. Override with
+`RIG_PLANNER_ANDROID_PLATFORM=linux/amd64` if you need to cross-build.
