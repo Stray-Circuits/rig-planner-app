@@ -467,6 +467,16 @@ export function ChainOverlay({
  */
 const ENDPOINT_ROW_OFFSET = 36;
 
+/**
+ * Approximate pixel offset above the board of the chip's BOTTOM edge —
+ * = strip top (`-ENDPOINT_ROW_OFFSET`) + chip height (~22px from 11px
+ * font + 6px*2 vertical padding + 0.5px border). Cables terminating at
+ * an external endpoint anchor at this y so the end-cap sits flush with
+ * the chip's underside, matching where a real jack would plug in. If
+ * the chip CSS in ChainOverlay.module.css changes, retune this.
+ */
+const ENDPOINT_CHIP_BOTTOM_PX = ENDPOINT_ROW_OFFSET - 23;
+
 interface EndpointChipProps {
   ep: ExternalEndpoint;
   isSource: boolean;
@@ -525,14 +535,19 @@ function lookupConnectionEnd(
   }
   // External endpoint — anchor at the corresponding endpoint chip in the
   // strip above the board so cables visibly continue off the board edge
-  // and meet the chip. Strip y is ENDPOINT_ROW_OFFSET px above the board;
-  // convert to inches via pxPerInch.
+  // and meet the chip's bottom edge (where a jack would plug in).
+  //
+  // The chip strip's top edge is at y=-ENDPOINT_ROW_OFFSET in board px.
+  // Chip height ≈ 23px (font 11px + 6px*2 vertical padding). The cable's
+  // end-cap should sit roughly at the chip's bottom = strip top + chip
+  // height. We use ENDPOINT_CHIP_BOTTOM_PX for that; it's tuned to match
+  // the actual chip rendering in ChainOverlay.module.css.
   const ep = endpointById.get(nodeId);
   if (!ep) return null;
-  const stripYIn = -ENDPOINT_ROW_OFFSET / pxPerInch;
+  const yIn = -ENDPOINT_CHIP_BOTTOM_PX / pxPerInch;
   // Left cluster contains amp_in / amp_fx_send (chips render at the left
   // edge of the strip via space-between). All other kinds cluster right.
   const isLeftCluster = ep.kind === 'amp_in' || ep.kind === 'amp_fx_send';
   const xIn = isLeftCluster ? 0.75 : rig.widthIn - 0.75;
-  return { xIn, yIn: stripYIn, side: 'bottom' };
+  return { xIn, yIn, side: 'bottom' };
 }

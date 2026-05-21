@@ -322,6 +322,7 @@ export function routeCableWithLeader(
   to: { xIn: number; yIn: number; side: Side },
   obstacles: readonly ObstacleRect[] = [],
   leaderIn = 0.4,
+  obstacleMarginIn = 0.3,
 ): { xIn: number; yIn: number }[] {
   const dFrom = sideOutwardUnit(from.side);
   const dTo = sideOutwardUnit(to.side);
@@ -335,7 +336,15 @@ export function routeCableWithLeader(
     yIn: to.yIn + dTo.y * leaderIn,
     side: to.side,
   };
-  const inner = routeCablePath(fromLeader, toLeader, obstacles);
+  // Inflate obstacles by a margin so cables route AROUND pedals with
+  // breathing room rather than skimming the footprint edge.
+  const inflated = obstacles.map((r) => ({
+    xIn: r.xIn - obstacleMarginIn,
+    yIn: r.yIn - obstacleMarginIn,
+    widthIn: r.widthIn + 2 * obstacleMarginIn,
+    depthIn: r.depthIn + 2 * obstacleMarginIn,
+  }));
+  const inner = routeCablePath(fromLeader, toLeader, inflated);
   // routeCablePath returns inner starting at fromLeader and ending at
   // toLeader — prepend the actual port endpoints to add the leaders.
   return [
@@ -450,16 +459,30 @@ function elbowCandidates(
 ): number[] {
   const lo = Math.min(a, b);
   const hi = Math.max(a, b);
-  const out: number[] = [(a + b) / 2, a + (b - a) * 0.25, a + (b - a) * 0.75];
+  // All elbow positions must stay inside [lo, hi] — an elbow outside
+  // this range would force the cable to fold back on itself, producing
+  // a U-turn (two 90° bends in opposite directions = 180° net), which
+  // looks broken on the canvas. Inside-range elbows always yield a
+  // monotonic Manhattan path with no folds.
+  const inRange = (v: number) => v >= lo && v <= hi;
+  const out: number[] = [];
+  const candidates = [(a + b) / 2, a + (b - a) * 0.25, a + (b - a) * 0.75];
+  for (const c of candidates) if (inRange(c)) out.push(c);
   const clearance = 0.6;
   for (const r of obstacles) {
     const rLo = axis === 'x' ? r.xIn : r.yIn;
     const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
     if (rHi >= lo && rLo <= hi) {
-      // Obstacle is in the cable's axial span — try going just outside it.
-      out.push(rLo - clearance);
-      out.push(rHi + clearance);
+      // Try positions just outside the obstacle's axis range — but only
+      // if they're still within [lo, hi].
+      const before = rLo - clearance;
+      const after = rHi + clearance;
+      if (inRange(before)) out.push(before);
+      if (inRange(after)) out.push(after);
     }
   }
+  // Ensure at least one fallback exists — the midpoint is the safest
+  // default even if every candidate above got rejected.
+  if (out.length === 0) out.push((a + b) / 2);
   return out;
 }
