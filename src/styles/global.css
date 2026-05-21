@@ -36,14 +36,17 @@
   --midi-bg: #fbeaf0;
   --midi-fg: #72243e;
 
-  /* Signal-type cable colors */
-  --cable-instrument: #66bb6a;
-  --cable-line: #42a5f5;
-  --cable-stereo: #ab47bc;
-  --cable-midi: #ec407a;
-  --cable-expression: #ffa726;
-  --cable-cv: #ffee58;
-  --cable-amp-level: #ef5350;
+  /* Signal-type cable colors. Tuned for red/green/brown color-blindness
+     safety; the actual cable rendering reads from src/lib/signalColors.ts
+     — keep these in sync if you tweak. */
+  --cable-instrument: #7fd49a;
+  --cable-line: #7fd49a;
+  --cable-stereo: #56b4e9;
+  --cable-midi: #cc79a7;
+  --cable-expression: #e69f00;
+  --cable-cv: #f0e442;
+  --cable-amp-level: #a36b3a;
+  --cable-audio-r: #d55e00;
 
   /* Sizing */
   --radius-sm: 6px;

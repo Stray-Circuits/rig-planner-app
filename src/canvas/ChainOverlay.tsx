@@ -20,7 +20,7 @@ import {
   routeCablePath,
   type ObstacleRect,
 } from '../lib/geometry';
-import { colorForSignal } from '../lib/signalColors';
+import { colorForPort, colorForSignal } from '../lib/signalColors';
 import { sortConnectionsForRender } from '../lib/signalChainWarnings';
 import styles from './ChainOverlay.module.css';
 
@@ -265,9 +265,13 @@ export function ChainOverlay({
             pxPerInch,
           );
           if (!from || !to) return null;
-          const color = colorForSignal(
-            from.signalType ?? to.signalType ?? 'instrument',
-          );
+          // Color the cable from the pedal-side endpoint when there is
+          // one, so audio L/R variants distinguish in stereo pairs.
+          // External endpoints fall back to the signal type alone.
+          const colorSourcePort = from.port ?? to.port;
+          const color = colorSourcePort
+            ? colorForPort(colorSourcePort)
+            : colorForSignal(from.signalType ?? to.signalType ?? 'instrument');
           const isExternal =
             c.fromNodeKind === 'external' || c.toNodeKind === 'external';
           // Build an obstacle list for this cable: every placed pedal
@@ -354,9 +358,7 @@ export function ChainOverlay({
                 style={{
                   left: resolved.xIn * pxPerInch,
                   top: resolved.yIn * pxPerInch,
-                  background: isWarning
-                    ? 'var(--warning)'
-                    : colorForSignal(port.signalType),
+                  background: isWarning ? 'var(--warning)' : colorForPort(port),
                   touchAction: 'none',
                 }}
                 aria-label={
@@ -468,6 +470,8 @@ interface ConnectionEnd {
   yIn: number;
   side: Side;
   signalType?: SignalType;
+  /** Present only when the end is a pedal port (not an external endpoint). */
+  port?: Port;
 }
 
 function lookupConnectionEnd(
@@ -488,6 +492,7 @@ function lookupConnectionEnd(
       yIn: resolved.yIn,
       side: resolved.visualSide,
       signalType: resolved.port.signalType,
+      port: resolved.port,
     };
   }
   // External endpoint — anchor at the corresponding endpoint chip in the
