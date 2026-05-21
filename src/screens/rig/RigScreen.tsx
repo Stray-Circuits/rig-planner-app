@@ -147,6 +147,48 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     role === 'fx_send' ||
     role === 'midi_out';
 
+  /**
+   * Validate a pair of pedal ports and (if compatible) persist a cable.
+   * Used both by tap-then-tap (handlePortTap) and the new drag-to-connect
+   * gesture. Returns true if a connection was created so callers can clear
+   * any state (e.g. armed port) on success.
+   */
+  const tryConnectPorts = (
+    aPlacedId: string,
+    aPortId: string,
+    bPlacedId: string,
+    bPortId: string,
+  ): boolean => {
+    const aOwner = placed.find((p) => p.id === aPlacedId);
+    const bOwner = placed.find((p) => p.id === bPlacedId);
+    const aPort = aOwner
+      ? pedalsById.get(aOwner.pedalId)?.ports.find((p) => p.id === aPortId)
+      : null;
+    const bPort = bOwner
+      ? pedalsById.get(bOwner.pedalId)?.ports.find((p) => p.id === bPortId)
+      : null;
+    if (!aPort || !bPort) return false;
+    const compat = connectionCompatibility(aPort.signalType, bPort.signalType);
+    if (!compat.ok) {
+      setNotice(compat.reason);
+      return false;
+    }
+    // Outputs become "from", inputs become "to". Swap if needed.
+    const aIsOutput = isOutputRole(aPort.role);
+    const bIsOutput = isOutputRole(bPort.role);
+    const swap = !aIsOutput && bIsOutput;
+    void addConnection({
+      rigId: rig.id,
+      fromNodeKind: 'pedal',
+      fromNodeId: swap ? bPlacedId : aPlacedId,
+      fromPortId: swap ? bPortId : aPortId,
+      toNodeKind: 'pedal',
+      toNodeId: swap ? aPlacedId : bPlacedId,
+      toPortId: swap ? aPortId : bPortId,
+    });
+    return true;
+  };
+
   const handlePortTap = (placedId: string, portId: string) => {
     if (!armedPort) {
       setArmedPort({ placedId, portId });
@@ -156,57 +198,18 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
       setArmedPort(null);
       return;
     }
-    // Determine flow direction by role: outputs become "from", inputs become
-    // "to". If the user tapped input-then-output, swap them so cables point
-    // the right way for the chain view.
-    const armed = placed
-      .map((p) => ({
-        placed: p,
-        pedal: pedalsById.get(p.pedalId),
-      }))
-      .find((x) => x.placed.id === armedPort.placedId);
-    const target = placed
-      .map((p) => ({
-        placed: p,
-        pedal: pedalsById.get(p.pedalId),
-      }))
-      .find((x) => x.placed.id === placedId);
-    const armedPortDef = armed?.pedal?.ports.find(
-      (p) => p.id === armedPort.portId,
-    );
-    const targetPortDef = target?.pedal?.ports.find((p) => p.id === portId);
-    if (!armedPortDef || !targetPortDef) {
-      setArmedPort(null);
-      return;
-    }
-    // Block obvious protocol mismatches (audio↔MIDI, audio↔control, etc.)
-    // — surfaced as a transient notice so the user can see what was wrong.
-    const compat = connectionCompatibility(
-      armedPortDef.signalType,
-      targetPortDef.signalType,
-    );
-    if (!compat.ok) {
-      setNotice(compat.reason);
-      setArmedPort(null);
-      return;
-    }
-    const armedIsOutput = isOutputRole(armedPortDef.role);
-    const targetIsOutput = isOutputRole(targetPortDef.role);
-    const swap = !armedIsOutput && targetIsOutput;
-    const fromPlacedId = swap ? placedId : armedPort.placedId;
-    const fromPortId = swap ? portId : armedPort.portId;
-    const toPlacedId = swap ? armedPort.placedId : placedId;
-    const toPortId = swap ? armedPort.portId : portId;
+    tryConnectPorts(armedPort.placedId, armedPort.portId, placedId, portId);
+    setArmedPort(null);
+  };
 
-    void addConnection({
-      rigId: rig.id,
-      fromNodeKind: 'pedal',
-      fromNodeId: fromPlacedId,
-      fromPortId: fromPortId,
-      toNodeKind: 'pedal',
-      toNodeId: toPlacedId,
-      toPortId: toPortId,
-    });
+  const handlePortConnect = (
+    fromPlacedId: string,
+    fromPortId: string,
+    toPlacedId: string,
+    toPortId: string,
+  ) => {
+    if (fromPlacedId === toPlacedId && fromPortId === toPortId) return;
+    tryConnectPorts(fromPlacedId, fromPortId, toPlacedId, toPortId);
     setArmedPort(null);
   };
 
@@ -339,6 +342,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         armedPort={armedPort}
         unconnectedRequired={unconnectedRequired}
         onPortTap={handlePortTap}
+        onPortConnect={handlePortConnect}
         onCableTap={handleCableTap}
         onEndpointTap={handleEndpointTap}
         onBackgroundTap={handleCanvasBackgroundClick}
@@ -487,6 +491,12 @@ interface CanvasAreaProps {
   armedPort: { placedId: string; portId: string } | null;
   unconnectedRequired: Set<string>;
   onPortTap: (placedId: string, portId: string) => void;
+  onPortConnect: (
+    fromPlacedId: string,
+    fromPortId: string,
+    toPlacedId: string,
+    toPortId: string,
+  ) => void;
   onCableTap: (connectionId: string) => void;
   onEndpointTap: (endpointId: string) => void;
   onBackgroundTap: () => void;
@@ -508,6 +518,7 @@ function CanvasArea({
   armedPort,
   unconnectedRequired,
   onPortTap,
+  onPortConnect,
   onCableTap,
   onEndpointTap,
   onBackgroundTap,
@@ -595,6 +606,7 @@ function CanvasArea({
           armedPort={armedPort}
           unconnectedRequired={unconnectedRequired}
           onPortTap={onPortTap}
+          onPortConnect={onPortConnect}
           onCableTap={onCableTap}
           onEndpointTap={onEndpointTap}
         />

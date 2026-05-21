@@ -1,3 +1,8 @@
+import {
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type {
   Connection,
   ExternalEndpoint,
@@ -29,10 +34,39 @@ interface ChainOverlayProps {
   armedPort: { placedId: string; portId: string } | null;
   /** Set of "${placedId}:${portId}" keys to render as warnings. */
   unconnectedRequired: Set<string>;
+  /** A short tap (no drag) on a port — toggles the armed state. */
   onPortTap?: (placedId: string, portId: string) => void;
+  /**
+   * A drag-to-connect gesture released over a different port. Lets the
+   * parent create the connection directly without the user having to
+   * tap each port in sequence.
+   */
+  onPortConnect?: (
+    fromPlacedId: string,
+    fromPortId: string,
+    toPlacedId: string,
+    toPortId: string,
+  ) => void;
   onCableTap?: (connectionId: string) => void;
   onEndpointTap?: (endpointId: string) => void;
 }
+
+interface DragState {
+  fromPlacedId: string;
+  fromPortId: string;
+  /** Cable origin in board px (already pxPerInch-scaled). */
+  fromX: number;
+  fromY: number;
+  /** Current pointer position in board px relative to the SVG. */
+  pointerX: number;
+  pointerY: number;
+  startClientX: number;
+  startClientY: number;
+  /** Crossed the tap-vs-drag threshold. */
+  moved: boolean;
+}
+
+const DRAG_THRESHOLD_PX = 6;
 
 interface ResolvedPort {
   placed: PlacedPedal;
@@ -70,9 +104,14 @@ export function ChainOverlay({
   armedPort,
   unconnectedRequired,
   onPortTap,
+  onPortConnect,
   onCableTap,
   onEndpointTap,
 }: ChainOverlayProps) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  dragRef.current = drag;
   // Build a {placedId -> {portId -> ResolvedPort}} map for fast lookups.
   const portIndex = new Map<string, Map<string, ResolvedPort>>();
   for (const p of placed) {
@@ -107,9 +146,99 @@ export function ChainOverlay({
     if (def) obstacleByPlaced.set(p.id, placedRect(p, def));
   }
 
+  // ---- Drag-to-connect helpers ------------------------------------------
+  // Convert a client (screen) point to the SVG's local pixel coords. The
+  // SVG is positioned absolutely inside the board wrapper so its
+  // getBoundingClientRect aligns with the board pixel space.
+  const clientToBoardPx = (
+    clientX: number,
+    clientY: number,
+  ): { x: number; y: number } | null => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const handlePortPointerDown = (
+    placedId: string,
+    portId: string,
+    resolved: ResolvedPort,
+    e: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDrag({
+      fromPlacedId: placedId,
+      fromPortId: portId,
+      fromX: resolved.xIn * pxPerInch,
+      fromY: resolved.yIn * pxPerInch,
+      pointerX: resolved.xIn * pxPerInch,
+      pointerY: resolved.yIn * pxPerInch,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      moved: false,
+    });
+  };
+
+  const handlePortPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dx = e.clientX - d.startClientX;
+    const dy = e.clientY - d.startClientY;
+    const moved = d.moved || Math.hypot(dx, dy) > DRAG_THRESHOLD_PX;
+    const local = clientToBoardPx(e.clientX, e.clientY);
+    setDrag({
+      ...d,
+      pointerX: local?.x ?? d.pointerX,
+      pointerY: local?.y ?? d.pointerY,
+      moved,
+    });
+  };
+
+  const handlePortPointerUp = (
+    placedId: string,
+    portId: string,
+    e: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const d = dragRef.current;
+    if (!d) return;
+    // Release pointer capture regardless of outcome.
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    // Treat as a tap if the pointer didn't move far — fire onPortTap so
+    // the existing tap-arm UX still works.
+    if (!d.moved) {
+      setDrag(null);
+      onPortTap?.(placedId, portId);
+      return;
+    }
+    // Hit-test the element under the release point. Pointer capture
+    // routes events to the source button, so the actual drop target
+    // needs elementFromPoint.
+    const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+    const btn = dropTarget?.closest(
+      '[data-placed-id][data-port-id]',
+    ) as HTMLElement | null;
+    setDrag(null);
+    if (!btn) return;
+    const targetPlacedId = btn.dataset.placedId!;
+    const targetPortId = btn.dataset.portId!;
+    if (targetPlacedId === d.fromPlacedId && targetPortId === d.fromPortId) {
+      // Dropped back on the source — treat as cancel.
+      return;
+    }
+    onPortConnect?.(d.fromPlacedId, d.fromPortId, targetPlacedId, targetPortId);
+  };
+
+  const handlePortPointerCancel = () => {
+    setDrag(null);
+  };
+
   return (
     <>
       <svg
+        ref={svgRef}
         className={styles.cableLayer}
         width={widthPx}
         height={heightPx}
@@ -192,6 +321,18 @@ export function ChainOverlay({
             </g>
           );
         })}
+        {drag?.moved ? (
+          <line
+            x1={drag.fromX}
+            y1={drag.fromY}
+            x2={drag.pointerX}
+            y2={drag.pointerY}
+            stroke="var(--primary)"
+            strokeWidth={2}
+            strokeDasharray="6 4"
+            strokeLinecap="round"
+          />
+        ) : null}
       </svg>
       <div className={styles.portsLayer}>
         {placed.map((p) => {
@@ -207,6 +348,8 @@ export function ChainOverlay({
               <button
                 key={`${p.id}-${port.id}`}
                 type="button"
+                data-placed-id={p.id}
+                data-port-id={port.id}
                 className={`${styles.portDot} ${isArmed ? styles.portDotArmed : ''} ${isWarning ? styles.portDotWarning : ''}`}
                 style={{
                   left: resolved.xIn * pxPerInch,
@@ -226,7 +369,19 @@ export function ChainOverlay({
                     ? `${port.label} — required, no cable connected`
                     : `${port.label} (${port.signalType})`
                 }
+                onPointerDown={(e) =>
+                  handlePortPointerDown(p.id, port.id, resolved, e)
+                }
+                onPointerMove={handlePortPointerMove}
+                onPointerUp={(e) => handlePortPointerUp(p.id, port.id, e)}
+                onPointerCancel={handlePortPointerCancel}
                 onClick={(e) => {
+                  // Fallback for environments (tests, some browsers via
+                  // assistive tech) that dispatch click without a pointer
+                  // sequence. The pointer-up handler already fires
+                  // onPortTap for normal taps, so suppress this if a
+                  // drag handshake just occurred.
+                  if (dragRef.current) return;
                   e.stopPropagation();
                   onPortTap?.(p.id, port.id);
                 }}

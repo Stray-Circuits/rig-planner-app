@@ -45,6 +45,13 @@ interface BoardCanvasProps {
   endpoints?: ExternalEndpoint[];
   /** Fired when the user taps a port in chain mode. */
   onPortTap?: (placedId: string, portId: string) => void;
+  /** Fired when the user drag-releases from one port onto another. */
+  onPortConnect?: (
+    fromPlacedId: string,
+    fromPortId: string,
+    toPlacedId: string,
+    toPortId: string,
+  ) => void;
   /** Fired when the user taps an existing cable in chain mode. */
   onCableTap?: (connectionId: string) => void;
   /** Fired when the user taps an external endpoint chip. */
@@ -90,6 +97,7 @@ export function BoardCanvas({
   connections = [],
   endpoints = [],
   onPortTap,
+  onPortConnect,
   onCableTap,
   onEndpointTap,
   armedPort = null,
@@ -321,6 +329,7 @@ export function BoardCanvas({
           armedPort={armedPort}
           unconnectedRequired={warnings}
           {...(onPortTap ? { onPortTap } : {})}
+          {...(onPortConnect ? { onPortConnect } : {})}
           {...(onCableTap ? { onCableTap } : {})}
           {...(onEndpointTap ? { onEndpointTap } : {})}
         />
