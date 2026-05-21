@@ -152,9 +152,50 @@ export function rotatedSide(
 }
 
 /**
+ * Canonical group ordinal for a port's role, used by visual port layout.
+ *   0 = inputs (mono, L, R, stereo)
+ *   1 = outputs (mono, L, R, stereo)
+ *   2 = fx loop (send + return)
+ *   3 = midi (in + out)
+ *   4 = expression / cv / remote
+ * Lower-ordinal ports anchor at the "input end" of a side so a pedal's
+ * sides read consistently regardless of the order ports were created in.
+ */
+export function portLayoutGroup(role: Port['role']): number {
+  switch (role) {
+    case 'input':
+    case 'input_l':
+    case 'input_r':
+    case 'stereo_input':
+      return 0;
+    case 'output':
+    case 'output_l':
+    case 'output_r':
+    case 'stereo_output':
+      return 1;
+    case 'fx_send':
+    case 'fx_return':
+      return 2;
+    case 'midi_in':
+    case 'midi_out':
+      return 3;
+    case 'expression':
+    case 'cv':
+    case 'remote':
+      return 4;
+  }
+}
+
+/**
  * Returns the position (in inches, board coordinates) of a port on a placed
- * pedal. Ports are distributed evenly along the visible side, ordered by the
- * port's `sideOrder` among same-side siblings.
+ * pedal. Ports on the same side are laid out in canonical role order:
+ * inputs → outputs → fx loop → midi → expression. For horizontal sides
+ * (top / bottom) the first group anchors at the right edge — matching the
+ * convention where inputs live on the right side of a pedal. For vertical
+ * sides the first group anchors at the top.
+ *
+ * `sideOrder` is used as a tiebreaker within a group so users can still
+ * nudge two same-category ports relative to each other.
  */
 export function portPositionOnBoard(
   placed: PlacedPedal,
@@ -163,30 +204,38 @@ export function portPositionOnBoard(
 ): { xIn: number; yIn: number } {
   const { widthIn, depthIn } = placedFootprint(pedal, placed.rotation);
   const visualSide = rotatedSide(port.side, placed.rotation);
-  // Find all ports that share this same visual side, sorted by sideOrder.
   const siblings = pedal.ports
     .filter((p) => rotatedSide(p.side, placed.rotation) === visualSide)
-    .sort((a, b) => a.sideOrder - b.sideOrder);
+    .sort((a, b) => {
+      const ag = portLayoutGroup(a.role);
+      const bg = portLayoutGroup(b.role);
+      if (ag !== bg) return ag - bg;
+      return a.sideOrder - b.sideOrder;
+    });
   const idx = Math.max(
     0,
     siblings.findIndex((p) => p.id === port.id),
   );
-  const fraction = (idx + 1) / (siblings.length + 1);
+  // Fraction from 0..1 along the side. For top/bottom we reverse so the
+  // first sibling (inputs) lands at the rightmost x; for left/right we
+  // keep the natural top-down order.
+  const fwd = (idx + 1) / (siblings.length + 1);
+  const rev = 1 - fwd;
 
   switch (visualSide) {
     case 'top':
-      return { xIn: placed.xIn + widthIn * fraction, yIn: placed.yIn };
+      return { xIn: placed.xIn + widthIn * rev, yIn: placed.yIn };
     case 'bottom':
       return {
-        xIn: placed.xIn + widthIn * fraction,
+        xIn: placed.xIn + widthIn * rev,
         yIn: placed.yIn + depthIn,
       };
     case 'left':
-      return { xIn: placed.xIn, yIn: placed.yIn + depthIn * fraction };
+      return { xIn: placed.xIn, yIn: placed.yIn + depthIn * fwd };
     case 'right':
       return {
         xIn: placed.xIn + widthIn,
-        yIn: placed.yIn + depthIn * fraction,
+        yIn: placed.yIn + depthIn * fwd,
       };
   }
 }

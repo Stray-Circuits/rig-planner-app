@@ -70,19 +70,33 @@ describe('rotatedSide', () => {
 });
 
 describe('portPositionOnBoard', () => {
-  const out = mkPort({ id: 'out', label: 'Out', side: 'top', sideOrder: 0 });
-  const inp = mkPort({ id: 'in', label: 'In', side: 'top', sideOrder: 1 });
+  const out = mkPort({
+    id: 'out',
+    label: 'Out',
+    role: 'output',
+    side: 'top',
+    sideOrder: 0,
+  });
+  const inp = mkPort({
+    id: 'in',
+    label: 'In',
+    role: 'input',
+    side: 'top',
+    sideOrder: 1,
+  });
   const pedal = mkPedal([out, inp]);
 
-  it('distributes ports evenly along their visual side', () => {
+  it('places inputs on the right and outputs on the left on a horizontal side', () => {
     const p = placed(0);
     const outPos = portPositionOnBoard(p, pedal, out);
     const inPos = portPositionOnBoard(p, pedal, inp);
-    // 3-inch wide pedal at x=10, two top ports: positions at 1/3 and 2/3
-    expect(outPos.xIn).toBeCloseTo(10 + 1, 4);
-    expect(outPos.yIn).toBe(4);
+    // 3-inch wide pedal at x=10. Input (group 0) anchors at the right
+    // (x=12), output (group 1) at the left (x=11) — even if the user
+    // entered the output first via sideOrder.
     expect(inPos.xIn).toBeCloseTo(10 + 2, 4);
     expect(inPos.yIn).toBe(4);
+    expect(outPos.xIn).toBeCloseTo(10 + 1, 4);
+    expect(outPos.yIn).toBe(4);
   });
 
   it('rotates the visual side with the pedal', () => {
