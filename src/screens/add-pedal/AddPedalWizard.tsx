@@ -288,6 +288,23 @@ const PHASE_LABELS: Record<BgRemovalProgress['phase'], string> = {
   finalizing: 'Cropping silhouette…',
 };
 
+/**
+ * Each phase maps to a [start, end] slice of the overall 0..100% bar so
+ * progress always advances forward — never resets at phase boundaries —
+ * and never reaches 100% before the very last step. Tuned so:
+ *   • the early lightweight phases occupy a thin sliver,
+ *   • inference (the slowest visible step) gets the biggest slice,
+ *   • the bar caps at 96% until finalizing actually starts.
+ */
+const PHASE_RANGES: Record<BgRemovalProgress['phase'], [number, number]> = {
+  'preparing-image': [0, 0.05],
+  'loading-library': [0.05, 0.1],
+  'initializing-runtime': [0.1, 0.25],
+  'fetching-model': [0.1, 0.7],
+  processing: [0.25, 0.96],
+  finalizing: [0.96, 1],
+};
+
 function abortError(): DOMException {
   return new DOMException('Aborted', 'AbortError');
 }
@@ -315,14 +332,16 @@ function rejectUnsupportedImage(file: Blob): string | null {
   return null;
 }
 
+// Playful subtext per phase. Don't reach for accuracy here — the bar
+// already conveys progress. Avoid words like "slow"; the user knows.
 const PHASE_SUBS: Record<BgRemovalProgress['phase'], string | null> = {
-  'preparing-image': 'Downsizing your photo to 512px.',
-  'loading-library': 'Fetching the JS chunk (~110 KB gzipped).',
-  'initializing-runtime':
-    'Spinning up the WebGPU / WASM backend — this is the slow first-run step.',
-  'fetching-model': 'Cached after this. Subsequent uploads are instant.',
-  processing: 'Should only take a few seconds.',
-  finalizing: 'Trimming transparent margins.',
+  'preparing-image': 'Politely asking your photo to sit still.',
+  'loading-library': 'Unpacking the scissors.',
+  'initializing-runtime': 'Stretching before the heavy lifting.',
+  'fetching-model':
+    'Fetching the AI brain (one-time). Future uploads will skip this.',
+  processing: 'Carefully tracing the outline.',
+  finalizing: 'Tidying the edges.',
 };
 
 function ImageStep({ draft, setDraft }: StepProps) {
@@ -589,6 +608,13 @@ function ImageStep({ draft, setDraft }: StepProps) {
   if (progress) {
     const phaseLabel = PHASE_LABELS[progress.phase];
     const phaseSub = PHASE_SUBS[progress.phase];
+    // Map phase + inner fraction into the overall 0..100% bar. Null
+    // inner-fractions sit at the phase's midpoint so the bar still
+    // advances when we switch phases, and we cap below 100% until the
+    // very last phase.
+    const [phaseStart, phaseEnd] = PHASE_RANGES[progress.phase];
+    const inner = progress.fraction ?? 0.5;
+    const overall = phaseStart + (phaseEnd - phaseStart) * inner;
     return (
       <div className={styles.imageStep}>
         <div className={styles.pedalPreview}>
@@ -611,13 +637,7 @@ function ImageStep({ draft, setDraft }: StepProps) {
           >
             <div
               className={styles.progressFill}
-              style={
-                progress.fraction === null
-                  ? undefined
-                  : {
-                      width: `${Math.round(progress.fraction * 100)}%`,
-                    }
-              }
+              style={{ width: `${Math.round(overall * 100)}%` }}
             />
           </div>
           <div className={styles.progressActions}>
