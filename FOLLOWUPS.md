@@ -54,9 +54,15 @@ links the phase that originated it so we know roughly when it was set aside.
 
 ## Mobile / native
 
-- **Tauri iOS + Android dev loop** *(Phase 7)* — never run, prereqs documented
-  in README. First `pnpm tauri:ios:init` / `pnpm tauri:android:init` will need
-  Xcode / Android Studio installed.
+- **Tauri Android live-reload dev loop** *(Phase 7)* — only the containerized
+  debug-APK build is wired up (`pnpm android:container:build`). The
+  emulator/device dev loop (`tauri android dev`) still needs a host-side
+  Android SDK / Studio setup, since the container has no GUI / adb bridge.
+- **Tauri iOS init + dev loop** *(Phase 7)* — never run, prereqs documented in
+  README. First `pnpm tauri:ios:init` will need Xcode installed.
+- **Signed Android release builds** *(Phase 7)* — the container wrapper only
+  covers debug APKs. Release signing needs a keystore + release-key.properties
+  wired into `src-tauri/gen/android/app/build.gradle.kts`.
 - **Pedal library on mobile as a true side panel** *(Original spec)* — Zach's
   original ask suggested the collection might live "on the side" on mobile.
   Today it's a bottom-sheet. Worth re-evaluating once we test on real devices.
