@@ -42,14 +42,27 @@ links the phase that originated it so we know roughly when it was set aside.
 
 ## Board presets
 
-- **Real board photography + expanded preset list** *(Phase 2)* — today the
-  Pedaltrain and Temple Audio presets render as procedural rail/hole textures
-  with hand-entered dimensions. Pull real product photos (or accurate
-  top-down renders) for the existing six presets, then broaden the catalogue
-  (Pedaltrain JR, Novo 24, Duo 17, Trio 28, Templeboard 43, Templeboard 65,
-  plus competitors like Schmidt Array, Vertex Hinge, RockBoard). Each preset
-  should declare an `imagePath` rendered behind the procedural overlay (or
-  replacing it), so users see a recognizable board when they pick it.
+- **Expanded preset list with our own top-down renders** *(Phase 2 / 2026-05
+  feedback)* — the current six PedalTrain / Temple Audio presets are
+  procedural rail/hole textures with hand-entered dimensions. To grow the
+  catalogue (Pedaltrain JR, Novo 24, Duo 17, Trio 28, Templeboard 43,
+  Templeboard 65, plus competitors like Schmidt Array, Vertex Hinge,
+  RockBoard) we need *our own* parameterized renders — not photos.
+  Manufacturer / retailer (Sweetwater, Reverb) product photography is
+  copyrighted and can't be bundled, regardless of the app's AGPLv3 license.
+  Brand *names* are fine to reference (nominative trademark use). Generate
+  the renders from the existing `BOARD_DRAWERS` / boardStyles pipeline,
+  parameterized by rail count + hole spacing per model.
+
+## Pedal seed (deferred indefinitely)
+
+- **Top ~200 pedals via agent** *(other_todos.txt / 2026-05 feedback)* — same
+  copyright bind as boards: we can't ship third-party pedal photos no matter
+  who shot them. Wikimedia Commons coverage isn't dense or consistent enough
+  to be useful. Shelved until either (a) we get explicit licensing from
+  manufacturers / retailers, or (b) we decide to seed with placeholder
+  colors + names only and accept that users will upload their own photos
+  per pedal.
 
 ## Branding
 
