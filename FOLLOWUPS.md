@@ -32,6 +32,11 @@ links the phase that originated it so we know roughly when it was set aside.
 - **Routing isn't aware of pedal obstacles** *(Phase 6e)* — the 3-segment
   manhattan path can cross through other pedals if endpoints geometrically line
   it up that way. A proper router would detour around them.
+- **Drag-to-connect on mobile** *(Follow-up feedback)* — tap-then-drag from
+  an armed port to a target port would feel more natural than tap-tap on
+  small phones. Tap targets have been widened to 44px already, but the
+  full pointerDown→pointerMove→pointerUp gesture with a ghost cable still
+  needs to be wired up in `BoardCanvas` / `ChainOverlay`.
 
 ## Floor styles
 
