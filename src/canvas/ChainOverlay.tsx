@@ -14,10 +14,10 @@ import type {
   SignalType,
 } from '../data/schema';
 import {
-  cableBezierD,
   placedRect,
   portPositionOnBoard,
   rotatedSide,
+  routeCableWithLeader,
   type ObstacleRect,
 } from '../lib/geometry';
 import { colorForPort, colorForSignal } from '../lib/signalColors';
@@ -137,16 +137,14 @@ export function ChainOverlay({
     pedalsById,
   );
 
-  // Pre-compute each placed pedal's footprint rect. Currently unused by
-  // the bezier path renderer — kept for future obstacle-avoidance work
-  // (nudging Bezier control points away from intersecting pedals).
+  // Pre-compute each placed pedal's footprint rect so cable routing can
+  // detour around them. Keyed by placed.id so per-connection obstacle
+  // lists can quickly exclude the source and destination pedals.
   const obstacleByPlaced = new Map<string, ObstacleRect>();
   for (const p of placed) {
     const def = pedalsById.get(p.pedalId);
     if (def) obstacleByPlaced.set(p.id, placedRect(p, def));
   }
-  // Mark as intentionally unused for now.
-  void obstacleByPlaced;
 
   // ---- Drag-to-connect helpers ------------------------------------------
   // Convert a client (screen) point to the SVG's local pixel coords. The
@@ -280,21 +278,29 @@ export function ChainOverlay({
           const cableColor = fromColor;
           const isExternal =
             c.fromNodeKind === 'external' || c.toNodeKind === 'external';
-          // Smooth cubic-Bezier path between the two endpoints. The
-          // `side` of each end pulls the control points perpendicular to
-          // the pedal edge so cables leave each pedal naturally.
-          const d = cableBezierD(
-            {
-              xPx: from.xIn * pxPerInch,
-              yPx: from.yIn * pxPerInch,
-              side: from.side,
-            },
-            {
-              xPx: to.xIn * pxPerInch,
-              yPx: to.yIn * pxPerInch,
-              side: to.side,
-            },
+          // Build a per-cable obstacle list: every other pedal's
+          // footprint EXCEPT the two pedals this cable plugs into.
+          const fromOwnerId = c.fromNodeKind === 'pedal' ? c.fromNodeId : null;
+          const toOwnerId = c.toNodeKind === 'pedal' ? c.toNodeId : null;
+          const obstacles: ObstacleRect[] = [];
+          for (const [id, rect] of obstacleByPlaced) {
+            if (id === fromOwnerId || id === toOwnerId) continue;
+            obstacles.push(rect);
+          }
+          // Manhattan polyline with a leader segment on each end — the
+          // cable exits the pedal perpendicular before any 90° turn so
+          // it visibly plugs into the port.
+          const path = routeCableWithLeader(
+            { xIn: from.xIn, yIn: from.yIn, side: from.side },
+            { xIn: to.xIn, yIn: to.yIn, side: to.side },
+            obstacles,
           );
+          const d = path
+            .map((p, i) => {
+              const cmd = i === 0 ? 'M' : 'L';
+              return `${cmd} ${p.xIn * pxPerInch} ${p.yIn * pxPerInch}`;
+            })
+            .join(' ');
           const fromCx = from.xIn * pxPerInch;
           const fromCy = from.yIn * pxPerInch;
           const toCx = to.xIn * pxPerInch;
@@ -322,6 +328,7 @@ export function ChainOverlay({
                 stroke={cableColor}
                 strokeWidth={2.5}
                 strokeLinecap="round"
+                strokeLinejoin="round"
                 strokeDasharray={isExternal ? '5 3' : undefined}
               />
               {/* End-caps: colored dots at each pedal port. Slightly

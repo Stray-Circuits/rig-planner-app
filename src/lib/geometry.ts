@@ -292,41 +292,8 @@ function pathHitsAny(
   return false;
 }
 
-/**
- * Cubic-Bezier cable path between two points in board px (already
- * scaled by pxPerInch). Each end has a `side` that tells the curve
- * which direction to leave the pedal perpendicular to — so cables
- * naturally bow out of the top/bottom or left/right of a pedal instead
- * of taking weird sharp 90° turns through the pedal body. Returns an
- * SVG path d-string.
- *
- * Used by ChainOverlay for the visible cable strokes; the Manhattan
- * routeCablePath is still used for any callers that need a polyline
- * (e.g. obstacle-avoidance hit-testing if we wire that into the
- * router later).
- */
-export function cableBezierD(
-  from: { xPx: number; yPx: number; side: Side },
-  to: { xPx: number; yPx: number; side: Side },
-): string {
-  const dx = to.xPx - from.xPx;
-  const dy = to.yPx - from.yPx;
-  const dist = Math.hypot(dx, dy);
-  // Curve length grows with cable length but never below 40px — that
-  // keeps very short cables from looking like a straight stub and very
-  // long ones from sagging into a near-line.
-  const curveLen = Math.max(40, dist * 0.4);
-  const dirFrom = sideOutwardUnit(from.side);
-  const dirTo = sideOutwardUnit(to.side);
-  const c1x = from.xPx + dirFrom.x * curveLen;
-  const c1y = from.yPx + dirFrom.y * curveLen;
-  const c2x = to.xPx + dirTo.x * curveLen;
-  const c2y = to.yPx + dirTo.y * curveLen;
-  return `M ${from.xPx} ${from.yPx} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${to.xPx} ${to.yPx}`;
-}
-
 /** Unit vector pointing outward from a pedal edge on the given side. */
-function sideOutwardUnit(side: Side): { x: number; y: number } {
+export function sideOutwardUnit(side: Side): { x: number; y: number } {
   switch (side) {
     case 'top':
       return { x: 0, y: -1 };
@@ -337,6 +304,45 @@ function sideOutwardUnit(side: Side): { x: number; y: number } {
     case 'right':
       return { x: 1, y: 0 };
   }
+}
+
+/**
+ * Manhattan cable path that *always* exits each pedal perpendicular to
+ * its edge for a leader distance before any 90° turn. The leader lets
+ * cables visibly "plug into" a pedal — no cable ever pivots flush with
+ * the pedal body. Internally builds a Manhattan route between the
+ * leader endpoints using the existing routeCablePath obstacle-avoidance
+ * candidates.
+ *
+ * Returns a polyline of points (in the same inch units as the inputs).
+ * The first and last segments of the returned polyline are the leaders.
+ */
+export function routeCableWithLeader(
+  from: { xIn: number; yIn: number; side: Side },
+  to: { xIn: number; yIn: number; side: Side },
+  obstacles: readonly ObstacleRect[] = [],
+  leaderIn = 0.4,
+): { xIn: number; yIn: number }[] {
+  const dFrom = sideOutwardUnit(from.side);
+  const dTo = sideOutwardUnit(to.side);
+  const fromLeader = {
+    xIn: from.xIn + dFrom.x * leaderIn,
+    yIn: from.yIn + dFrom.y * leaderIn,
+    side: from.side,
+  };
+  const toLeader = {
+    xIn: to.xIn + dTo.x * leaderIn,
+    yIn: to.yIn + dTo.y * leaderIn,
+    side: to.side,
+  };
+  const inner = routeCablePath(fromLeader, toLeader, obstacles);
+  // routeCablePath returns inner starting at fromLeader and ending at
+  // toLeader — prepend the actual port endpoints to add the leaders.
+  return [
+    { xIn: from.xIn, yIn: from.yIn },
+    ...inner,
+    { xIn: to.xIn, yIn: to.yIn },
+  ];
 }
 
 /**
