@@ -51,6 +51,14 @@ links the phase that originated it so we know roughly when it was set aside.
   should declare an `imagePath` rendered behind the procedural overlay (or
   replacing it), so users see a recognizable board when they pick it.
 
+## Branding
+
+- **Tauri app icons** *(Follow-up feedback)* — the browser favicon is in
+  `public/favicon.svg` and renders the new pedal mark. The native app
+  icons in `src-tauri/icons/` are still the placeholder ones. Regenerate
+  them from a 1024×1024 PNG export of the same SVG with
+  `pnpm tauri icon path/to/icon.png` once we're ready to ship a build.
+
 ## Mobile / native
 
 - **Tauri Android live-reload dev loop** *(Phase 7)* — only the containerized

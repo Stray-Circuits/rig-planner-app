@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-label="Rig Planner">
+  <!-- App background: primary blue with rounded corners (looks right when
+       browsers / OSes mask the icon into a rounded square). -->
+  <rect width="512" height="512" rx="96" fill="#378add" />
+  <!-- Pedal body. -->
+  <rect x="156" y="96" width="200" height="320" rx="20" fill="#ffffff" />
+  <!-- Knob. -->
+  <circle cx="256" cy="180" r="36" fill="#378add" />
+  <circle cx="256" cy="180" r="6" fill="#ffffff" />
+  <!-- LED indicator (chain-mode green). -->
+  <circle cx="256" cy="252" r="10" fill="#16a34a" />
+  <!-- Footswitch. -->
+  <rect x="216" y="332" width="80" height="48" rx="24" fill="#378add" />
+</svg>
