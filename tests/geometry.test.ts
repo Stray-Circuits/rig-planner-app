@@ -81,12 +81,13 @@ describe('geometry', () => {
       yIn: 4,
       rotation: 0,
     };
-    // The fixture has only top jacks → only the top side should be padded.
+    // The fixture has only top jacks → only the top side should be
+    // padded by KEEP_OUT_INCHES (0.625).
     expect(keepOutRect(placed, pedal)).toEqual({
       xIn: 4,
-      yIn: 3,
+      yIn: 4 - 0.625,
       widthIn: 3,
-      depthIn: 6,
+      depthIn: 5 + 0.625,
     });
     // Rotated 90°: the logical "top" becomes visual "right", so the right
     // side is padded and the footprint flips to 5×3.
@@ -94,7 +95,7 @@ describe('geometry', () => {
     expect(r90).toEqual({
       xIn: 4,
       yIn: 4,
-      widthIn: 6,
+      widthIn: 5 + 0.625,
       depthIn: 3,
     });
   });

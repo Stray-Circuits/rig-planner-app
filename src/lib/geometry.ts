@@ -38,10 +38,12 @@ export function clampToBoard(
  * Returned in board (inch) coordinates. May extend off the board; callers
  * should clip to rig bounds when rendering.
  *
- * 1.0 inches is a conservative estimate for a 1/4" plug barrel + cable
- * bend radius; real-world jacks on heavy cables can push past this.
+ * 0.625" matches the body of a standard 1/4" jack plug — the room a
+ * cable barrel actually needs before it bends. Bigger values (e.g. the
+ * old 1.0") were too pessimistic and produced overlap warnings on tight
+ * but real-world layouts.
  */
-export const KEEP_OUT_INCHES = 1.0;
+export const KEEP_OUT_INCHES = 0.625;
 
 export function keepOutRect(
   placed: PlacedPedal,
