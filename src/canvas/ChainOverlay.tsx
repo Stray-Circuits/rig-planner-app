@@ -113,6 +113,7 @@ export function ChainOverlay({
             portIndex,
             endpointById,
             rig,
+            pxPerInch,
           );
           const to = lookupConnectionEnd(
             c.toNodeKind,
@@ -121,6 +122,7 @@ export function ChainOverlay({
             portIndex,
             endpointById,
             rig,
+            pxPerInch,
           );
           if (!from || !to) return null;
           const color = colorForSignal(
@@ -298,6 +300,7 @@ function lookupConnectionEnd(
   portIndex: Map<string, Map<string, ResolvedPort>>,
   endpointById: Map<string, ExternalEndpoint>,
   rig: Rig,
+  pxPerInch: number,
 ): ConnectionEnd | null {
   if (kind === 'pedal') {
     if (!portId) return null;
@@ -310,26 +313,16 @@ function lookupConnectionEnd(
       signalType: resolved.port.signalType,
     };
   }
-  // External endpoint — anchor near the right edge for sources (guitar/fx_return)
-  // and the left edge for sinks (amp_in, amp_fx_send). Placed half an inch outside
-  // the board so the cable visibly runs off the edge.
+  // External endpoint — anchor at the corresponding endpoint chip in the
+  // strip above the board so cables visibly continue off the board edge
+  // and meet the chip. Strip y is ENDPOINT_ROW_OFFSET px above the board;
+  // convert to inches via pxPerInch.
   const ep = endpointById.get(nodeId);
   if (!ep) return null;
-  const offset = 0.5;
-  switch (ep.kind) {
-    case 'guitar':
-      return { xIn: rig.widthIn + offset, yIn: rig.depthIn / 2, side: 'left' };
-    case 'amp_in':
-      return { xIn: -offset, yIn: rig.depthIn / 2, side: 'right' };
-    case 'amp_fx_send':
-      return { xIn: -offset, yIn: rig.depthIn / 4, side: 'right' };
-    case 'amp_fx_return':
-      return {
-        xIn: -offset,
-        yIn: (rig.depthIn * 3) / 4,
-        side: 'right',
-      };
-    default:
-      return { xIn: rig.widthIn + offset, yIn: rig.depthIn / 2, side: 'left' };
-  }
+  const stripYIn = -ENDPOINT_ROW_OFFSET / pxPerInch;
+  // Left cluster contains amp_in / amp_fx_send (chips render at the left
+  // edge of the strip via space-between). All other kinds cluster right.
+  const isLeftCluster = ep.kind === 'amp_in' || ep.kind === 'amp_fx_send';
+  const xIn = isLeftCluster ? 0.75 : rig.widthIn - 0.75;
+  return { xIn, yIn: stripYIn, side: 'bottom' };
 }
