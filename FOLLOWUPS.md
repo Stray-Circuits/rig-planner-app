@@ -29,9 +29,11 @@ links the phase that originated it so we know roughly when it was set aside.
 - **Stereo cables draw as a single line** *(Phase 6e)* — fine for v1, but the
   signal type warrants visual treatment (two parallel strands or a thicker
   stroke).
-- **Routing isn't aware of pedal obstacles** *(Phase 6e)* — the 3-segment
-  manhattan path can cross through other pedals if endpoints geometrically line
-  it up that way. A proper router would detour around them.
+- **Colinear cables can't fully detour** *(Phase 6e)* — routeCablePath now
+  tries multiple elbow positions and avoids obstacles in the general case,
+  but two ports at near-identical y (or x) can't escape a pedal in their
+  line of sight with only 3 Manhattan segments. A 5-segment "swerve" path
+  (go up/down past the obstacle, across, then back) would close this gap.
 - **Drag-to-connect on mobile** *(Follow-up feedback)* — tap-then-drag from
   an armed port to a target port would feel more natural than tap-tap on
   small phones. Tap targets have been widened to 44px already, but the
