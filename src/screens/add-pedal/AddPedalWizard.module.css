@@ -798,6 +798,33 @@
   border-radius: 3px;
 }
 
+/* Banner shown above non-Image steps when bg removal is still running
+   in the background. The leading ti-loader icon spins to communicate
+   that work is in flight. */
+.bgProcessingBanner {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--primary-bg);
+  color: var(--primary-fg);
+  border: 0.5px solid var(--primary);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bgProcessingBanner i {
+  font-size: 16px;
+  animation: bgProcessingSpin 1.2s linear infinite;
+}
+
+@keyframes bgProcessingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .errorBox {
   margin-top: 16px;
   padding: 10px 12px;

@@ -152,6 +152,10 @@ export function AddPedalWizard({
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True while ImageStep is running bg-removal. Surfaces a banner on
+  // every subsequent step so the user knows it's still going, and
+  // disables Submit on the Review step until the photo lands.
+  const [imageProcessing, setImageProcessing] = useState(false);
 
   // The pedals store needs to know about the newly-created row.
   const reloadPedals = usePedalsStore((s) => s.loadPedals);
@@ -263,7 +267,11 @@ export function AddPedalWizard({
         <Button
           size="lg"
           fullWidth
-          disabled={!canAdvanceFromCurrent || submitting}
+          disabled={
+            !canAdvanceFromCurrent ||
+            submitting ||
+            (isLastStep && imageProcessing)
+          }
           onClick={() => {
             if (isLastStep) void handleSubmit();
             else handleContinue();
@@ -272,14 +280,28 @@ export function AddPedalWizard({
           {isLastStep
             ? submitting
               ? 'Saving…'
-              : isEdit
-                ? 'Save changes'
-                : 'Add to library'
+              : imageProcessing
+                ? 'Waiting for photo…'
+                : isEdit
+                  ? 'Save changes'
+                  : 'Add to library'
             : 'Continue'}
         </Button>
       }
     >
-      {step === 0 && <ImageStep draft={draft} setDraft={setDraft} />}
+      {step > 0 && imageProcessing ? (
+        <div className={styles.bgProcessingBanner} role="status">
+          <i className="ti ti-loader" aria-hidden /> Removing background…
+          we&apos;ll attach the photo as soon as it&apos;s ready.
+        </div>
+      ) : null}
+      {step === 0 && (
+        <ImageStep
+          draft={draft}
+          setDraft={setDraft}
+          onProcessingChange={setImageProcessing}
+        />
+      )}
       {step === 1 && <NameSizeStep draft={draft} setDraft={setDraft} />}
       {step === 2 && <JacksStep draft={draft} setDraft={setDraft} />}
       {step === 3 && <ConnectionsStep draft={draft} setDraft={setDraft} />}
@@ -413,10 +435,21 @@ const PHASE_SUBS: Record<BgRemovalProgress['phase'], string | null> = {
   finalizing: 'Tidying the edges.',
 };
 
-function ImageStep({ draft, setDraft }: StepProps) {
+interface ImageStepProps extends StepProps {
+  /** Notifies the wizard when bg-removal is in flight so it can show a
+   * banner on later steps and disable Submit on Review. */
+  onProcessingChange: (active: boolean) => void;
+}
+
+function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
   const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [progress, setProgress] = useState<BgRemovalProgress | null>(null);
+  // Echo processing state up to the wizard so it can advertise the
+  // background work on later steps and gate Submit on Review.
+  useEffect(() => {
+    onProcessingChange(progress !== null);
+  }, [progress, onProcessingChange]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // When non-null, the wizard is asking the user to confirm a model download
@@ -723,6 +756,11 @@ function ImageStep({ draft, setDraft }: StepProps) {
               Cancel
             </Button>
           </div>
+          <p className={styles.helpMuted}>
+            You can hit <strong>Continue</strong> and fill in the pedal info
+            while this finishes. The photo will attach itself when it&apos;s
+            ready.
+          </p>
         </div>
       </div>
     );
