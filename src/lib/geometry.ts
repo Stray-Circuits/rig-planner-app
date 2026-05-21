@@ -293,6 +293,53 @@ function pathHitsAny(
 }
 
 /**
+ * Cubic-Bezier cable path between two points in board px (already
+ * scaled by pxPerInch). Each end has a `side` that tells the curve
+ * which direction to leave the pedal perpendicular to — so cables
+ * naturally bow out of the top/bottom or left/right of a pedal instead
+ * of taking weird sharp 90° turns through the pedal body. Returns an
+ * SVG path d-string.
+ *
+ * Used by ChainOverlay for the visible cable strokes; the Manhattan
+ * routeCablePath is still used for any callers that need a polyline
+ * (e.g. obstacle-avoidance hit-testing if we wire that into the
+ * router later).
+ */
+export function cableBezierD(
+  from: { xPx: number; yPx: number; side: Side },
+  to: { xPx: number; yPx: number; side: Side },
+): string {
+  const dx = to.xPx - from.xPx;
+  const dy = to.yPx - from.yPx;
+  const dist = Math.hypot(dx, dy);
+  // Curve length grows with cable length but never below 40px — that
+  // keeps very short cables from looking like a straight stub and very
+  // long ones from sagging into a near-line.
+  const curveLen = Math.max(40, dist * 0.4);
+  const dirFrom = sideOutwardUnit(from.side);
+  const dirTo = sideOutwardUnit(to.side);
+  const c1x = from.xPx + dirFrom.x * curveLen;
+  const c1y = from.yPx + dirFrom.y * curveLen;
+  const c2x = to.xPx + dirTo.x * curveLen;
+  const c2y = to.yPx + dirTo.y * curveLen;
+  return `M ${from.xPx} ${from.yPx} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${to.xPx} ${to.yPx}`;
+}
+
+/** Unit vector pointing outward from a pedal edge on the given side. */
+function sideOutwardUnit(side: Side): { x: number; y: number } {
+  switch (side) {
+    case 'top':
+      return { x: 0, y: -1 };
+    case 'bottom':
+      return { x: 0, y: 1 };
+    case 'left':
+      return { x: -1, y: 0 };
+    case 'right':
+      return { x: 1, y: 0 };
+  }
+}
+
+/**
  * Orthogonal 3-segment cable path between two points. Generates several
  * candidate Manhattan routes (varying the elbow position) and returns the
  * first one that doesn't cross any obstacle. Falls back to the natural

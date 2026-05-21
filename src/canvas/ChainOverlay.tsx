@@ -14,10 +14,10 @@ import type {
   SignalType,
 } from '../data/schema';
 import {
+  cableBezierD,
   placedRect,
   portPositionOnBoard,
   rotatedSide,
-  routeCablePath,
   type ObstacleRect,
 } from '../lib/geometry';
 import { colorForPort, colorForSignal } from '../lib/signalColors';
@@ -137,14 +137,16 @@ export function ChainOverlay({
     pedalsById,
   );
 
-  // Pre-compute each placed pedal's footprint rect so cable routing can
-  // detour around them. Keyed by placed.id so per-connection obstacle
-  // lists can quickly exclude the source and destination pedals.
+  // Pre-compute each placed pedal's footprint rect. Currently unused by
+  // the bezier path renderer — kept for future obstacle-avoidance work
+  // (nudging Bezier control points away from intersecting pedals).
   const obstacleByPlaced = new Map<string, ObstacleRect>();
   for (const p of placed) {
     const def = pedalsById.get(p.pedalId);
     if (def) obstacleByPlaced.set(p.id, placedRect(p, def));
   }
+  // Mark as intentionally unused for now.
+  void obstacleByPlaced;
 
   // ---- Drag-to-connect helpers ------------------------------------------
   // Convert a client (screen) point to the SVG's local pixel coords. The
@@ -265,37 +267,38 @@ export function ChainOverlay({
             pxPerInch,
           );
           if (!from || !to) return null;
-          // Color the cable from the pedal-side endpoint when there is
-          // one, so audio L/R variants distinguish in stereo pairs.
-          // External endpoints fall back to the signal type alone.
-          const colorSourcePort = from.port ?? to.port;
-          const color = colorSourcePort
-            ? colorForPort(colorSourcePort)
-            : colorForSignal(from.signalType ?? to.signalType ?? 'instrument');
+          // Color the cable from the from-port when there is one — that
+          // matches what the user "sent" out into the cable. Both end
+          // dots get their own port's color so an audio-L → audio-R
+          // mismatch is visually obvious.
+          const fromColor = from.port
+            ? colorForPort(from.port)
+            : colorForSignal(from.signalType ?? 'instrument');
+          const toColor = to.port
+            ? colorForPort(to.port)
+            : colorForSignal(to.signalType ?? 'instrument');
+          const cableColor = fromColor;
           const isExternal =
             c.fromNodeKind === 'external' || c.toNodeKind === 'external';
-          // Build an obstacle list for this cable: every placed pedal
-          // EXCEPT the source/destination pedal (the cable necessarily
-          // touches those edges).
-          const fromOwnerId = c.fromNodeKind === 'pedal' ? c.fromNodeId : null;
-          const toOwnerId = c.toNodeKind === 'pedal' ? c.toNodeId : null;
-          const obstacles: ObstacleRect[] = [];
-          for (const [id, rect] of obstacleByPlaced) {
-            if (id === fromOwnerId || id === toOwnerId) continue;
-            obstacles.push(rect);
-          }
-          const path = routeCablePath(
-            { xIn: from.xIn, yIn: from.yIn, side: from.side },
-            { xIn: to.xIn, yIn: to.yIn, side: to.side },
-            obstacles,
+          // Smooth cubic-Bezier path between the two endpoints. The
+          // `side` of each end pulls the control points perpendicular to
+          // the pedal edge so cables leave each pedal naturally.
+          const d = cableBezierD(
+            {
+              xPx: from.xIn * pxPerInch,
+              yPx: from.yIn * pxPerInch,
+              side: from.side,
+            },
+            {
+              xPx: to.xIn * pxPerInch,
+              yPx: to.yIn * pxPerInch,
+              side: to.side,
+            },
           );
-          const d = path
-            .map((p, i) =>
-              i === 0
-                ? `M ${p.xIn * pxPerInch} ${p.yIn * pxPerInch}`
-                : `L ${p.xIn * pxPerInch} ${p.yIn * pxPerInch}`,
-            )
-            .join(' ');
+          const fromCx = from.xIn * pxPerInch;
+          const fromCy = from.yIn * pxPerInch;
+          const toCx = to.xIn * pxPerInch;
+          const toCy = to.yIn * pxPerInch;
           return (
             <g key={c.id}>
               {onCableTap ? (
@@ -316,11 +319,29 @@ export function ChainOverlay({
               <path
                 d={d}
                 fill="none"
-                stroke={color}
-                strokeWidth={2}
+                stroke={cableColor}
+                strokeWidth={2.5}
                 strokeLinecap="round"
-                strokeLinejoin="round"
                 strokeDasharray={isExternal ? '5 3' : undefined}
+              />
+              {/* End-caps: colored dots at each pedal port. Slightly
+                  larger than the cable stroke so the connection visibly
+                  "plugs into" the pedal edge. */}
+              <circle
+                cx={fromCx}
+                cy={fromCy}
+                r={4}
+                fill={fromColor}
+                stroke="rgba(255,255,255,0.9)"
+                strokeWidth={1}
+              />
+              <circle
+                cx={toCx}
+                cy={toCy}
+                r={4}
+                fill={toColor}
+                stroke="rgba(255,255,255,0.9)"
+                strokeWidth={1}
               />
             </g>
           );
