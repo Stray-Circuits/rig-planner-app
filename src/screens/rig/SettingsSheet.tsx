@@ -221,7 +221,7 @@ export function SettingsSheet({
           </div>
 
           <div className={styles.field}>
-            <span className={styles.label}>External I/O</span>
+            <span className={styles.label}>Inputs &amp; Outputs</span>
             <ul className={styles.endpointList}>
               {endpoints.map((ep) => (
                 <li key={ep.id} className={styles.endpointRow}>
@@ -281,7 +281,7 @@ export function SettingsSheet({
                 size="sm"
                 onClick={() => setShowAddEndpoint(true)}
               >
-                <i className="ti ti-plus" aria-hidden /> Add endpoint
+                <i className="ti ti-plus" aria-hidden /> Add input or output
               </Button>
             )}
           </div>
