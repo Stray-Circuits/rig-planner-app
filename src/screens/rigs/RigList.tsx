@@ -4,6 +4,8 @@ import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
 import { useRigsStore } from '../../stores/rigsStore';
 import { RigThumb } from '../../canvas/RigThumb';
+import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
+import { PedalLibrarySheet } from '../rig/PedalLibrarySheet';
 import { Button, Sheet, SheetItem, TextField } from '../../ui';
 import styles from './RigList.module.css';
 
@@ -20,6 +22,10 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
   const pedals = usePedalsStore((s) => s.pedals);
   const pedalsStatus = usePedalsStore((s) => s.status);
   const loadPedals = usePedalsStore((s) => s.loadPedals);
+  const seedSamples = usePedalsStore((s) => s.seedSamples);
+
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   // Need the pedal definitions to render thumbnail rectangles at the right
   // size; load them once when the rig list mounts (idempotent).
@@ -75,7 +81,47 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
             </li>
           </ul>
         )}
+        {status === 'ready' ? (
+          <button
+            type="button"
+            className={styles.collectionLink}
+            onClick={() => setLibraryOpen(true)}
+          >
+            <i className="ti ti-list-details" aria-hidden /> Your pedal
+            collection ({pedals.length})
+          </button>
+        ) : null}
       </main>
+
+      <PedalLibrarySheet
+        open={libraryOpen}
+        pedals={pedals}
+        mode="manage"
+        onClose={() => setLibraryOpen(false)}
+        onAddPedal={() => {
+          // No active rig from this entry point — taps open the actions
+          // sheet via `mode="manage"` rather than calling onAddPedal.
+        }}
+        onStartNewPedal={() => {
+          setLibraryOpen(false);
+          setWizardOpen(true);
+        }}
+        onSeed={async () => {
+          await seedSamples();
+        }}
+      />
+
+      {wizardOpen ? (
+        <AddPedalWizard
+          onCancel={() => setWizardOpen(false)}
+          onCreated={() => {
+            setWizardOpen(false);
+            // Pop back into the collection sheet so the user can see the
+            // pedal they just added land in the list.
+            setLibraryOpen(true);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

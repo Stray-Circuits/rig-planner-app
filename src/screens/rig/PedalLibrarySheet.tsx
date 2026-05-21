@@ -10,10 +10,17 @@ interface PedalLibrarySheetProps {
   open: boolean;
   pedals: Pedal[];
   onClose: () => void;
+  /** Called when the user picks a pedal in 'pick' mode. Ignored in 'manage'. */
   onAddPedal: (pedal: Pedal) => void;
   /** Opens the New Pedal wizard. The library sheet closes itself first. */
   onStartNewPedal: () => void;
   onSeed: () => Promise<void>;
+  /**
+   * 'pick' (default) — tapping a row adds the pedal to the active rig.
+   * 'manage' — tapping a row opens the actions menu (delete, etc.) directly,
+   * for browsing the collection from outside a rig.
+   */
+  mode?: 'pick' | 'manage';
 }
 
 const HOLD_MS = 450;
@@ -25,6 +32,7 @@ export function PedalLibrarySheet({
   onAddPedal,
   onStartNewPedal,
   onSeed,
+  mode = 'pick',
 }: PedalLibrarySheetProps) {
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
@@ -93,7 +101,7 @@ export function PedalLibrarySheet({
       <Sheet
         open={open}
         onClose={onClose}
-        title="Add a pedal"
+        title={mode === 'manage' ? 'Your pedal collection' : 'Add a pedal'}
         floatingActions={
           <button
             type="button"
@@ -120,6 +128,7 @@ export function PedalLibrarySheet({
               <PedalRow
                 key={p.id}
                 pedal={p}
+                mode={mode}
                 onAdd={onAddPedal}
                 onOpenActions={openActions}
               />
@@ -201,11 +210,12 @@ export function PedalLibrarySheet({
 
 interface PedalRowProps {
   pedal: Pedal;
+  mode: 'pick' | 'manage';
   onAdd: (pedal: Pedal) => void;
   onOpenActions: (pedal: Pedal) => void;
 }
 
-function PedalRow({ pedal, onAdd, onOpenActions }: PedalRowProps) {
+function PedalRow({ pedal, mode, onAdd, onOpenActions }: PedalRowProps) {
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heldRef = useRef(false);
 
@@ -236,6 +246,13 @@ function PedalRow({ pedal, onAdd, onOpenActions }: PedalRowProps) {
             heldRef.current = false;
             return;
           }
+          // In manage mode there's no "current rig" — tapping the row
+          // opens the per-pedal actions menu (Remove / future Edit) so
+          // users have a meaningful action.
+          if (mode === 'manage') {
+            onOpenActions(pedal);
+            return;
+          }
           onAdd(pedal);
         }}
         onContextMenu={(e) => {
@@ -258,7 +275,9 @@ function PedalRow({ pedal, onAdd, onOpenActions }: PedalRowProps) {
           <div className={styles.name}>{pedal.name}</div>
           <div className={styles.brand}>{pedal.brand}</div>
         </div>
-        <i className={`ti ti-plus ${styles.plusIcon}`} aria-hidden />
+        {mode === 'pick' ? (
+          <i className={`ti ti-plus ${styles.plusIcon}`} aria-hidden />
+        ) : null}
       </button>
       <button
         type="button"
