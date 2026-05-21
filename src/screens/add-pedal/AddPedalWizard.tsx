@@ -1245,6 +1245,56 @@ function pickDefaultSide(draft: WizardDraft): Side {
   return 'top';
 }
 
+/**
+ * Picks the most plausible side for a freshly-added port, so users don't
+ * have to answer the same "which side?" question again that they already
+ * answered in the Jacks step. The convention "input on the right, output
+ * on the left" is the strong default; falls back to the first jack side
+ * the user declared if that direction isn't actually available on this
+ * pedal.
+ */
+function defaultSideForRole(role: PortRole, draft: WizardDraft): Side {
+  const isMidi = role === 'midi_in' || role === 'midi_out';
+  const sideHasJack = (s: Side): boolean =>
+    draft.jackSides[isMidi ? MIDI_SIDE_KEY[s] : AUDIO_SIDE_KEY[s]];
+
+  const prefer = (sides: Side[]): Side | null => {
+    for (const s of sides) if (sideHasJack(s)) return s;
+    return null;
+  };
+
+  const inputRoles: PortRole[] = [
+    'input',
+    'input_l',
+    'input_r',
+    'stereo_input',
+    'fx_return',
+  ];
+  const outputRoles: PortRole[] = [
+    'output',
+    'output_l',
+    'output_r',
+    'stereo_output',
+    'fx_send',
+  ];
+
+  let pref: Side | null = null;
+  if (inputRoles.includes(role)) {
+    pref = prefer(['right', 'top', 'bottom', 'left']);
+  } else if (outputRoles.includes(role)) {
+    pref = prefer(['left', 'top', 'bottom', 'right']);
+  } else if (isMidi) {
+    pref = prefer(['top', 'bottom', 'right', 'left']);
+  } else {
+    // expression / cv / remote — go wherever the user has room.
+    pref = prefer(['right', 'left', 'top', 'bottom']);
+  }
+  if (pref) return pref;
+  // No declared jack-bearing side at all — match the "input on the right"
+  // convention so the port at least lands somewhere sensible.
+  return inputRoles.includes(role) ? 'right' : 'left';
+}
+
 function ConnectionsStep({ draft, setDraft }: StepProps) {
   const [pickerStep, setPickerStep] = useState<
     'closed' | 'category' | 'role' | 'connector' | 'side'
@@ -1480,18 +1530,20 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
             setPickerStep('connector');
           }}
           onPickConnector={(connector) => {
-            setPickedConnector(connector);
-            setPickerStep('side');
+            // Skip the side step: derive it from the role + the user's
+            // already-declared jack sides. They can still nudge a port to
+            // a different side later via the inline editor.
+            if (pickedRole) {
+              const side = defaultSideForRole(pickedRole.role, draft);
+              addCustomPort(pickedRole, connector, side);
+            }
           }}
           onPickSide={(side) => {
             if (pickedRole && pickedConnector)
               addCustomPort(pickedRole, pickedConnector, side);
           }}
           onBack={() => {
-            if (pickerStep === 'side') {
-              setPickerStep('connector');
-              setPickedConnector(null);
-            } else if (pickerStep === 'connector') {
+            if (pickerStep === 'connector') {
               setPickerStep('role');
               setPickedRole(null);
             } else if (pickerStep === 'role') {

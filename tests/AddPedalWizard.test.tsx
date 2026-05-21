@@ -162,14 +162,12 @@ describe('AddPedalWizard', () => {
     fireEvent.click(screen.getByText('Continue'));
 
     fireEvent.click(screen.getByText('Add port'));
-    // Category picker is visible. Pick Control (which contains Expression).
+    // Category picker → Control → Expression → TRS. Side step has been
+    // consolidated away — the new port lands on the default side derived
+    // from the role + the jack sides the user already declared.
     fireEvent.click(screen.getByText('Control'));
-    // Role picker is visible. Click Expression.
     fireEvent.click(screen.getByText('Expression'));
-    // Connector picker now visible — pick TRS.
     fireEvent.click(screen.getByText(/TRS \(stereo \/ balanced\)/));
-    // Side picker now visible — pick Right.
-    fireEvent.click(screen.getByText('Right'));
 
     expect(screen.getByText(/Ports \(3\)/)).toBeInTheDocument();
 
@@ -181,7 +179,9 @@ describe('AddPedalWizard', () => {
     expect(expr).toBeDefined();
     expect(expr?.connector).toBe('trs');
     expect(expr?.signalType).toBe('expression');
-    expect(expr?.side).toBe('right');
+    // Expression has no preferred side — falls back to the first declared
+    // jack side. With default jacks (top only), expression lands on top.
+    expect(expr?.side).toBe('top');
   });
 
   it('Required/Optional chip toggles a port between the two states', async () => {
