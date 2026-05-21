@@ -7,7 +7,7 @@ required, but credit is given here as a matter of practice.
 | File | Source asset | URL |
 |---|---|---|
 | `concrete_grey.jpg` | Concrete 020 | https://ambientcg.com/view?id=Concrete020 |
-| `stage_black.jpg`   | Asphalt 002  | https://ambientcg.com/view?id=Asphalt002  |
+| `stage_black.jpg`   | Paint 005    | https://ambientcg.com/view?id=Paint005    |
 | `carpet_beige.jpg`  | Carpet 016   | https://ambientcg.com/view?id=Carpet016   |
 | `wood.jpg`          | Wood Floor 040 | https://ambientcg.com/view?id=WoodFloor040 |
 | `sidewalk.jpg`      | Concrete 024 | https://ambientcg.com/view?id=Concrete024 |
