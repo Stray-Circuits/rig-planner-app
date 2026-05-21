@@ -31,6 +31,7 @@ import { useSignalChainStore } from '../../stores/signalChainStore';
 import { Sheet, SheetItem } from '../../ui';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from './PedalLibrarySheet';
+import { PortPickerSheet } from './PortPickerSheet';
 import { SettingsSheet } from './SettingsSheet';
 import styles from './RigScreen.module.css';
 
@@ -87,6 +88,8 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   };
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);
+  // Pedal whose port picker is currently open in chain mode.
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
   // Short-lived non-blocking message shown above the canvas (e.g. when we
   // refuse a rotation that wouldn't fit). Auto-dismisses after a few seconds.
   const [notice, setNotice] = useState<string | null>(null);
@@ -124,6 +127,20 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     () => computeUnconnectedRequiredPorts(placed, pedalsById, connections),
     [placed, pedalsById, connections],
   );
+
+  // Set of "${placedId}:${portId}" keys for every port currently
+  // touched by at least one cable. Used by the picker to surface a
+  // "connected" hint per row.
+  const connectedPortKeys = useMemo(() => {
+    const out = new Set<string>();
+    for (const c of connections) {
+      if (c.fromNodeKind === 'pedal' && c.fromPortId)
+        out.add(`${c.fromNodeId}:${c.fromPortId}`);
+      if (c.toNodeKind === 'pedal' && c.toPortId)
+        out.add(`${c.toNodeId}:${c.toPortId}`);
+    }
+    return out;
+  }, [connections]);
 
   const handleAddPedal = (pedal: Pedal) => {
     const { xIn, yIn } = centeredOnRig(pedal, rig);
@@ -343,6 +360,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         armedPort={armedPort}
         unconnectedRequired={unconnectedRequired}
         onPortTap={handlePortTap}
+        onPedalTap={setPickerFor}
         onPortConnect={handlePortConnect}
         onCableTap={handleCableTap}
         onEndpointTap={handleEndpointTap}
@@ -421,6 +439,39 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           onClick={handleRemove}
         />
       </Sheet>
+
+      {(() => {
+        const placedForPicker = pickerFor
+          ? (placed.find((p) => p.id === pickerFor) ?? null)
+          : null;
+        const pedalForPicker = placedForPicker
+          ? (pedalsById.get(placedForPicker.pedalId) ?? null)
+          : null;
+        const armedDetail = (() => {
+          if (!armedPort) return null;
+          const ow = placed.find((p) => p.id === armedPort.placedId);
+          if (!ow) return null;
+          const def = pedalsById.get(ow.pedalId);
+          if (!def) return null;
+          const port = def.ports.find((p) => p.id === armedPort.portId);
+          if (!port) return null;
+          return { placedId: ow.id, pedal: def, port };
+        })();
+        return (
+          <PortPickerSheet
+            open={pickerFor !== null}
+            placed={placedForPicker}
+            pedal={pedalForPicker}
+            armedFromPort={armedDetail}
+            connectedPortIds={connectedPortKeys}
+            onClose={() => setPickerFor(null)}
+            onPickPort={(placedId, portId) => {
+              handlePortTap(placedId, portId);
+              setPickerFor(null);
+            }}
+          />
+        );
+      })()}
 
       <PedalLibrarySheet
         open={libraryOpen}
@@ -509,6 +560,7 @@ interface CanvasAreaProps {
   armedPort: { placedId: string; portId: string } | null;
   unconnectedRequired: Set<string>;
   onPortTap: (placedId: string, portId: string) => void;
+  onPedalTap: (placedId: string) => void;
   onPortConnect: (
     fromPlacedId: string,
     fromPortId: string,
@@ -536,6 +588,7 @@ function CanvasArea({
   armedPort,
   unconnectedRequired,
   onPortTap,
+  onPedalTap,
   onPortConnect,
   onCableTap,
   onEndpointTap,
@@ -624,6 +677,7 @@ function CanvasArea({
           armedPort={armedPort}
           unconnectedRequired={unconnectedRequired}
           onPortTap={onPortTap}
+          onPedalTap={onPedalTap}
           onPortConnect={onPortConnect}
           onCableTap={onCableTap}
           onEndpointTap={onEndpointTap}

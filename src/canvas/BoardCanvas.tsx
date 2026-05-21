@@ -45,6 +45,12 @@ interface BoardCanvasProps {
   endpoints?: ExternalEndpoint[];
   /** Fired when the user taps a port in chain mode. */
   onPortTap?: (placedId: string, portId: string) => void;
+  /**
+   * Fired when the user taps a pedal's body (anywhere on the pedal
+   * sprite) while in chain mode. The parent opens a port-picker sheet
+   * for that pedal — the new tap-then-pick connection grammar.
+   */
+  onPedalTap?: (placedId: string) => void;
   /** Fired when the user drag-releases from one port onto another. */
   onPortConnect?: (
     fromPlacedId: string,
@@ -97,6 +103,7 @@ export function BoardCanvas({
   connections = [],
   endpoints = [],
   onPortTap,
+  onPedalTap,
   onPortConnect,
   onCableTap,
   onEndpointTap,
@@ -308,6 +315,16 @@ export function BoardCanvas({
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
               onContextMenu={(e) => handleContextMenu(e, p)}
+              onClick={(e) => {
+                // In chain mode the pedal body is the connection-pick
+                // tap target — opens the port picker sheet. Stop the
+                // click from bubbling to the canvas-background handler
+                // which would clear an armed port.
+                if (chainMode && onPedalTap) {
+                  e.stopPropagation();
+                  onPedalTap(p.id);
+                }
+              }}
             >
               <PedalSprite
                 pedal={def}
