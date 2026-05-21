@@ -15,8 +15,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Auto-fix formatting | `pnpm exec prettier --write <file>` |
 | Production web build | `pnpm build` |
 | Native installer (Tauri) | `pnpm tauri:build` |
+| Android debug APK (containerized, no host SDK) | `pnpm android:container:build` |
+| Android container shell (debug toolchain) | `pnpm android:container:shell` |
+| Rebuild Android container image | `pnpm android:container:image` |
 
-iOS / Android entry points (`pnpm tauri:ios:dev`, `pnpm tauri:android:dev`) require Xcode / Android Studio installed first; see README for prereqs.
+iOS / Android entry points (`pnpm tauri:ios:dev`, `pnpm tauri:android:dev`) require Xcode / Android Studio installed first; see README for prereqs. For Android, the containerized path (`scripts/android/`) is the supported route and only needs Docker.
 
 ## Architecture
 
@@ -33,6 +36,15 @@ iOS / Android entry points (`pnpm tauri:ios:dev`, `pnpm tauri:android:dev`) requ
 **Background-removal is lazy.** `@imgly/background-removal` (AGPLv3) ships a ~176MB ISNet model and ~110KB JS chunk. `src/lib/bgRemoval.ts` dynamic-imports it from the wizard's Image step (`prefetchBgRemoval()` warms the chunk on mount). Pixel-buffer math (alpha bbox crop, chroma-key threshold) lives in `src/lib/imageHelpers.ts` as pure functions over `Uint8ClampedArray` so it's testable under jsdom. The tests mock `@imgly/background-removal` in `tests/setup.ts`.
 
 **Signal-chain semantics live in `src/lib/signalChainWarnings.ts`.** That's where the "which required ports are unconnected" computation runs. UI (port dots, endpoint chips, cable colors) just renders the result.
+
+**Android builds run inside a Docker container** under `scripts/android/`. The Dockerfile layers Node/pnpm/Rust/NDK on the Cirrus Labs `android-sdk:34` base. Hard constraints learned the hard way:
+
+- The container is forced to `linux/amd64` even on Apple silicon (Docker Desktop uses Rosetta-for-Linux). Google publishes no `linux-aarch64` Android NDK, so an arm64 container can't run the cross-compile toolchain. Override only via `RIG_PLANNER_ANDROID_PLATFORM` if you really know why.
+- The container mounts `scripts/android/container-pnpm-workspace.yaml` over `/workspace/pnpm-workspace.yaml` so the container sees `packages: []` and no host-specific `storeDir`. Don't try to "simplify" by removing this override — both halves matter (pnpm 9.15+ rejects yamls without `packages:`, and the host's macOS-specific storeDir would defeat the container cache volume).
+- `COREPACK_ENABLE_AUTO_PIN=0` is set in the container env. Without it, corepack silently adds a `packageManager` field to the bind-mounted `package.json` and pins host pnpm to whatever version the container ships, which can break host workflows.
+- The repo's `pnpm-workspace.yaml` has `packages: []` *intentionally* — it's not a real workspace, the file exists to carry `allowBuilds`/`storeDir`/`verifyDepsBeforeRun`. pnpm 9.15+ requires `packages:` to parse the file. Don't remove the line.
+
+**Tauri Android requires `version >= 0.0.1`** in `src-tauri/tauri.conf.json`. The default `0.0.0` is rejected at build time.
 
 ## Strict TS — what bites
 
