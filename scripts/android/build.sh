@@ -34,6 +34,7 @@ VOL_PNPM_STORE="rig-planner-pnpm-store"
 VOL_CARGO_REGISTRY="rig-planner-cargo-registry"
 VOL_CARGO_GIT="rig-planner-cargo-git"
 VOL_GRADLE="rig-planner-gradle"
+VOL_ANDROID="rig-planner-android"
 
 # Force linux/amd64 even on Apple silicon: the Android NDK only ships an
 # x86_64 host toolchain (Google publishes no linux-aarch64 NDK), and those
@@ -112,6 +113,7 @@ exec_in_container() {
         -v "${VOL_CARGO_REGISTRY}:/opt/rust/cargo/registry"
         -v "${VOL_CARGO_GIT}:/opt/rust/cargo/git"
         -v "${VOL_GRADLE}:/root/.gradle"
+	-v "${VOL_ANDROID}:/root/.android"
         -w /workspace
     )
     if [ -n "${PLATFORM}" ]; then
@@ -159,7 +161,7 @@ cmd_shell() {
 
 cmd_clean() {
     echo ">> Removing named cache volumes (image untouched)"
-    for vol in "${VOL_NODE_MODULES}" "${VOL_PNPM_STORE}" "${VOL_CARGO_REGISTRY}" "${VOL_CARGO_GIT}" "${VOL_GRADLE}"; do
+    for vol in "${VOL_NODE_MODULES}" "${VOL_PNPM_STORE}" "${VOL_CARGO_REGISTRY}" "${VOL_CARGO_GIT}" "${VOL_GRADLE}" "${VOL_ANDROID}"; do
         docker volume rm "${vol}" 2>/dev/null || true
     done
     echo ">> Done. Re-run 'init' or 'build' to repopulate."
