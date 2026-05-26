@@ -1,4 +1,5 @@
 import {
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -112,6 +113,15 @@ export function ChainOverlay({
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
+  // Measured chip positions (board-px) — the chip strip uses flex so each
+  // chip takes its natural width; we read the rendered position after
+  // layout and use it as the cable termination point for that endpoint.
+  // Falls back to a per-cluster default on the first render (before the
+  // measurement effect fires).
+  const chipRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const [chipCenters, setChipCenters] = useState<
+    Map<string, { x: number; bottomY: number }>
+  >(new Map());
   // Build a {placedId -> {portId -> ResolvedPort}} map for fast lookups.
   const portIndex = new Map<string, Map<string, ResolvedPort>>();
   for (const p of placed) {
@@ -145,6 +155,38 @@ export function ChainOverlay({
     const def = pedalsById.get(p.pedalId);
     if (def) obstacleByPlaced.set(p.id, placedRect(p, def));
   }
+
+  // Read each chip's actual rendered bbox after layout and convert to
+  // board-local px coords. Runs when endpoints, scale, or board size
+  // changes; the `changed` check prevents state-update loops.
+  useLayoutEffect(() => {
+    const svgRect = svgRef.current?.getBoundingClientRect();
+    if (!svgRect) return;
+    const next = new Map<string, { x: number; bottomY: number }>();
+    for (const [id, btn] of chipRefs.current) {
+      if (!btn.isConnected) continue;
+      const r = btn.getBoundingClientRect();
+      next.set(id, {
+        x: r.left + r.width / 2 - svgRect.left,
+        bottomY: r.bottom - svgRect.top,
+      });
+    }
+    let changed = next.size !== chipCenters.size;
+    if (!changed) {
+      for (const [id, pos] of next) {
+        const prev = chipCenters.get(id);
+        if (
+          !prev ||
+          Math.abs(prev.x - pos.x) > 0.5 ||
+          Math.abs(prev.bottomY - pos.bottomY) > 0.5
+        ) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed) setChipCenters(next);
+  }, [endpoints, pxPerInch, widthPx, heightPx, chipCenters]);
 
   // ---- Drag-to-connect helpers ------------------------------------------
   // Convert a client (screen) point to the SVG's local pixel coords. The
@@ -252,6 +294,7 @@ export function ChainOverlay({
             c.fromPortId,
             portIndex,
             endpointById,
+            chipCenters,
             rig,
             pxPerInch,
           );
@@ -261,6 +304,7 @@ export function ChainOverlay({
             c.toPortId,
             portIndex,
             endpointById,
+            chipCenters,
             rig,
             pxPerInch,
           );
@@ -441,6 +485,10 @@ export function ChainOverlay({
                 ep={ep}
                 isSource={false}
                 onTap={onEndpointTap}
+                registerRef={(el) => {
+                  if (el) chipRefs.current.set(ep.id, el);
+                  else chipRefs.current.delete(ep.id);
+                }}
               />
             ))}
         </div>
@@ -453,6 +501,10 @@ export function ChainOverlay({
                 ep={ep}
                 isSource={true}
                 onTap={onEndpointTap}
+                registerRef={(el) => {
+                  if (el) chipRefs.current.set(ep.id, el);
+                  else chipRefs.current.delete(ep.id);
+                }}
               />
             ))}
         </div>
@@ -482,12 +534,14 @@ interface EndpointChipProps {
   ep: ExternalEndpoint;
   isSource: boolean;
   onTap: ((id: string) => void) | undefined;
+  registerRef: (el: HTMLButtonElement | null) => void;
 }
 
-function EndpointChip({ ep, isSource, onTap }: EndpointChipProps) {
+function EndpointChip({ ep, isSource, onTap, registerRef }: EndpointChipProps) {
   const label = isSource ? `From ${ep.label}` : `To ${ep.label}`;
   return (
     <button
+      ref={registerRef}
       type="button"
       className={`${styles.endpointChip} ${
         isSource ? styles.endpointSource : styles.endpointSink
@@ -519,6 +573,7 @@ function lookupConnectionEnd(
   portId: string | null,
   portIndex: Map<string, Map<string, ResolvedPort>>,
   endpointById: Map<string, ExternalEndpoint>,
+  chipCenters: Map<string, { x: number; bottomY: number }>,
   rig: Rig,
   pxPerInch: number,
 ): ConnectionEnd | null {
@@ -534,20 +589,25 @@ function lookupConnectionEnd(
       port: resolved.port,
     };
   }
-  // External endpoint — anchor at the corresponding endpoint chip in the
-  // strip above the board so cables visibly continue off the board edge
-  // and meet the chip's bottom edge (where a jack would plug in).
+  // External endpoint — anchor at the actual rendered chip. The chip
+  // strip is flex-laid-out, so chip widths depend on label text; we
+  // measure each chip's bbox after layout (chipCenters) and terminate
+  // the cable at its center-bottom. Without per-chip measurement,
+  // multiple chips in one cluster collapse to a single cable anchor.
   //
-  // The chip strip's top edge is at y=-ENDPOINT_ROW_OFFSET in board px.
-  // Chip height ≈ 23px (font 11px + 6px*2 vertical padding). The cable's
-  // end-cap should sit roughly at the chip's bottom = strip top + chip
-  // height. We use ENDPOINT_CHIP_BOTTOM_PX for that; it's tuned to match
-  // the actual chip rendering in ChainOverlay.module.css.
+  // First-render fallback (before useLayoutEffect runs): anchor near
+  // the cluster edge so a cable still draws.
   const ep = endpointById.get(nodeId);
   if (!ep) return null;
+  const measured = chipCenters.get(nodeId);
+  if (measured) {
+    return {
+      xIn: measured.x / pxPerInch,
+      yIn: measured.bottomY / pxPerInch,
+      side: 'bottom',
+    };
+  }
   const yIn = -ENDPOINT_CHIP_BOTTOM_PX / pxPerInch;
-  // Left cluster contains amp_in / amp_fx_send (chips render at the left
-  // edge of the strip via space-between). All other kinds cluster right.
   const isLeftCluster = ep.kind === 'amp_in' || ep.kind === 'amp_fx_send';
   const xIn = isLeftCluster ? 0.75 : rig.widthIn - 0.75;
   return { xIn, yIn, side: 'bottom' };
