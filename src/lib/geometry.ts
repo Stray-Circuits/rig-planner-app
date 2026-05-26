@@ -307,6 +307,18 @@ export function sideOutwardUnit(side: Side): { x: number; y: number } {
 }
 
 /**
+ * Routing options that let the caller bias against lanes already used
+ * by previously-routed cables. Encourages visual separation between
+ * cables that would otherwise overlap on identical Manhattan segments.
+ */
+export interface RouteOptions {
+  /** Y-values of horizontal segments already taken by other cables. */
+  claimedY?: readonly number[];
+  /** X-values of vertical segments already taken by other cables. */
+  claimedX?: readonly number[];
+}
+
+/**
  * Manhattan cable path that *always* exits each pedal perpendicular to
  * its edge for a leader distance before any 90° turn. The leader lets
  * cables visibly "plug into" a pedal — no cable ever pivots flush with
@@ -321,6 +333,7 @@ export function routeCableWithLeader(
   from: { xIn: number; yIn: number; side: Side },
   to: { xIn: number; yIn: number; side: Side },
   obstacles: readonly ObstacleRect[] = [],
+  options: RouteOptions = {},
   leaderIn = 0.4,
   obstacleMarginIn = 0.3,
 ): { xIn: number; yIn: number }[] {
@@ -344,14 +357,36 @@ export function routeCableWithLeader(
     widthIn: r.widthIn + 2 * obstacleMarginIn,
     depthIn: r.depthIn + 2 * obstacleMarginIn,
   }));
-  const inner = routeCablePath(fromLeader, toLeader, inflated);
-  // routeCablePath returns inner starting at fromLeader and ending at
-  // toLeader — prepend the actual port endpoints to add the leaders.
+  const inner = routeCablePath(fromLeader, toLeader, inflated, options);
   return [
     { xIn: from.xIn, yIn: from.yIn },
     ...inner,
     { xIn: to.xIn, yIn: to.yIn },
   ];
+}
+
+/**
+ * Extract the lane values (horizontal segment Ys, vertical segment Xs)
+ * a routed cable occupies. Caller threads these into the next cable's
+ * `RouteOptions.claimedY` / `claimedX` so subsequent cables prefer
+ * unclaimed lanes. Only counts segments long enough to be "real" lanes
+ * (skip leader-length stubs).
+ */
+export function pathLanes(path: readonly { xIn: number; yIn: number }[]): {
+  horizontalY: number[];
+  verticalX: number[];
+} {
+  const horizontalY: number[] = [];
+  const verticalX: number[] = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i]!;
+    const b = path[i + 1]!;
+    const dx = Math.abs(b.xIn - a.xIn);
+    const dy = Math.abs(b.yIn - a.yIn);
+    if (dy < 0.001 && dx > 0.5) horizontalY.push(a.yIn);
+    else if (dx < 0.001 && dy > 0.5) verticalX.push(a.xIn);
+  }
+  return { horizontalY, verticalX };
 }
 
 /**
@@ -370,9 +405,8 @@ export function routeCablePath(
   from: { xIn: number; yIn: number; side: Side },
   to: { xIn: number; yIn: number; side: Side },
   obstacles: readonly ObstacleRect[] = [],
+  options: RouteOptions = {},
 ): { xIn: number; yIn: number }[] {
-  // Straight cable if endpoints are essentially colinear AND the straight
-  // line doesn't cross any obstacle.
   const dx = Math.abs(to.xIn - from.xIn);
   const dy = Math.abs(to.yIn - from.yIn);
   if (dx < 0.05 || dy < 0.05) {
@@ -383,17 +417,12 @@ export function routeCablePath(
     if (!pathHitsAny(straight, obstacles)) return straight;
   }
 
-  // Prefer the shortest valid 3-segment route; fall back to the shortest
-  // valid 5-segment "go around" route when no 3-segment is clean. Picking
-  // by length avoids the previous "first-valid-wins" behavior, which
-  // could pick a long outward staple when a short snake-through-the-gap
-  // was available.
   const cand3 = generateRouteCandidates(from, to, obstacles);
-  const best3 = shortestClean(cand3, obstacles);
+  const best3 = shortestClean(cand3, obstacles, options);
   if (best3) return dedupeColinear(best3);
 
   const cand5 = generate5SegCandidates(from, to, obstacles);
-  const best5 = shortestClean(cand5, obstacles);
+  const best5 = shortestClean(cand5, obstacles, options);
   if (best5) return dedupeColinear(best5);
 
   return dedupeColinear(
@@ -415,19 +444,56 @@ function pathLength(path: readonly { xIn: number; yIn: number }[]): number {
   return total;
 }
 
-/** Return the shortest candidate that doesn't hit any obstacle, or null. */
+/**
+ * Score = Manhattan length + lane-reuse penalty. The penalty discourages
+ * (but does not forbid) routing through a Y or X lane another cable
+ * already claimed, so cables visually spread out when there's room and
+ * fall back to overlap only when no alternative is short enough.
+ */
+function pathScore(
+  path: readonly { xIn: number; yIn: number }[],
+  options: RouteOptions,
+): number {
+  let score = pathLength(path);
+  const claimedY = options.claimedY ?? [];
+  const claimedX = options.claimedX ?? [];
+  if (claimedY.length === 0 && claimedX.length === 0) return score;
+  // Tolerance: two lanes count as "the same" when their axis values are
+  // within this many inches. ~2x the cable stroke width at default zoom.
+  const LANE_TOL = 0.15;
+  const LANE_PENALTY = 1.5;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i]!;
+    const b = path[i + 1]!;
+    const dx = Math.abs(b.xIn - a.xIn);
+    const dy = Math.abs(b.yIn - a.yIn);
+    if (dy < 0.001 && dx > 0.5) {
+      for (const y of claimedY) {
+        if (Math.abs(a.yIn - y) < LANE_TOL) score += LANE_PENALTY;
+      }
+    } else if (dx < 0.001 && dy > 0.5) {
+      for (const x of claimedX) {
+        if (Math.abs(a.xIn - x) < LANE_TOL) score += LANE_PENALTY;
+      }
+    }
+  }
+  return score;
+}
+
+/** Return the cheapest candidate that doesn't hit any obstacle, or null. */
 function shortestClean(
   candidates: readonly { xIn: number; yIn: number }[][],
   obstacles: readonly ObstacleRect[],
+  options: RouteOptions = {},
 ): { xIn: number; yIn: number }[] | null {
   let best: { xIn: number; yIn: number }[] | null = null;
-  let bestLen = Infinity;
+  let bestScore = Infinity;
   for (const path of candidates) {
     if (pathHitsAny(path, obstacles)) continue;
-    const len = pathLength(path);
-    if (len < bestLen) {
+    const score = pathScore(path, options);
+    if (score < bestScore) {
       best = path;
-      bestLen = len;
+      bestScore = score;
     }
   }
   return best;

@@ -15,6 +15,7 @@ import type {
   SignalType,
 } from '../data/schema';
 import {
+  pathLanes,
   placedRect,
   portPositionOnBoard,
   rotatedSide,
@@ -277,6 +278,63 @@ export function ChainOverlay({
     setDrag(null);
   };
 
+  // Pre-route every cable in render order so each successive cable can
+  // see which Y/X lanes prior cables took, biasing the router toward
+  // unclaimed lanes (cable-vs-cable visual separation). All pedals are
+  // obstacles; the leader segment provides the only clearance for the
+  // port the cable plugs into.
+  const allObstacles: ObstacleRect[] = [];
+  for (const rect of obstacleByPlaced.values()) {
+    allObstacles.push(rect);
+  }
+  const claimedY: number[] = [];
+  const claimedX: number[] = [];
+  const routedCables = orderedConnections
+    .map((c) => {
+      const from = lookupConnectionEnd(
+        c.fromNodeKind,
+        c.fromNodeId,
+        c.fromPortId,
+        portIndex,
+        endpointById,
+        chipCenters,
+        rig,
+        pxPerInch,
+      );
+      const to = lookupConnectionEnd(
+        c.toNodeKind,
+        c.toNodeId,
+        c.toPortId,
+        portIndex,
+        endpointById,
+        chipCenters,
+        rig,
+        pxPerInch,
+      );
+      if (!from || !to) return null;
+      const fromColor = from.port
+        ? colorForPort(from.port)
+        : colorForSignal(from.signalType ?? 'instrument');
+      const toColor = to.port
+        ? colorForPort(to.port)
+        : colorForSignal(to.signalType ?? 'instrument');
+      const cableColor = fromColor;
+      const isExternal =
+        c.fromNodeKind === 'external' || c.toNodeKind === 'external';
+      const path = routeCableWithLeader(
+        { xIn: from.xIn, yIn: from.yIn, side: from.side },
+        { xIn: to.xIn, yIn: to.yIn, side: to.side },
+        allObstacles,
+        { claimedY, claimedX },
+      );
+      // Claim this cable's primary lanes so later cables route around.
+      const lanes = pathLanes(path);
+      for (const y of lanes.horizontalY) claimedY.push(y);
+      for (const x of lanes.verticalX) claimedX.push(x);
+      return { c, from, to, path, cableColor, fromColor, toColor, isExternal };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
   return (
     <>
       <svg
@@ -287,117 +345,76 @@ export function ChainOverlay({
         viewBox={`0 0 ${widthPx} ${heightPx}`}
         aria-hidden
       >
-        {orderedConnections.map((c) => {
-          const from = lookupConnectionEnd(
-            c.fromNodeKind,
-            c.fromNodeId,
-            c.fromPortId,
-            portIndex,
-            endpointById,
-            chipCenters,
-            rig,
-            pxPerInch,
-          );
-          const to = lookupConnectionEnd(
-            c.toNodeKind,
-            c.toNodeId,
-            c.toPortId,
-            portIndex,
-            endpointById,
-            chipCenters,
-            rig,
-            pxPerInch,
-          );
-          if (!from || !to) return null;
-          // Color the cable from the from-port when there is one — that
-          // matches what the user "sent" out into the cable. Both end
-          // dots get their own port's color so an audio-L → audio-R
-          // mismatch is visually obvious.
-          const fromColor = from.port
-            ? colorForPort(from.port)
-            : colorForSignal(from.signalType ?? 'instrument');
-          const toColor = to.port
-            ? colorForPort(to.port)
-            : colorForSignal(to.signalType ?? 'instrument');
-          const cableColor = fromColor;
-          const isExternal =
-            c.fromNodeKind === 'external' || c.toNodeKind === 'external';
-          // Pass every placed pedal as an obstacle, including the source
-          // and destination. The leader segment puts each port endpoint a
-          // perpendicular `leaderIn` past the inflated pedal edge, so the
-          // inner path doesn't need to skim from/to pedal bodies — and
-          // including them prevents the router from routing THROUGH the
-          // owner pedal before plugging into its port.
-          const obstacles: ObstacleRect[] = [];
-          for (const rect of obstacleByPlaced.values()) {
-            obstacles.push(rect);
-          }
-          // Manhattan polyline with a leader segment on each end — the
-          // cable exits the pedal perpendicular before any 90° turn so
-          // it visibly plugs into the port.
-          const path = routeCableWithLeader(
-            { xIn: from.xIn, yIn: from.yIn, side: from.side },
-            { xIn: to.xIn, yIn: to.yIn, side: to.side },
-            obstacles,
-          );
-          const d = path
-            .map((p, i) => {
-              const cmd = i === 0 ? 'M' : 'L';
-              return `${cmd} ${p.xIn * pxPerInch} ${p.yIn * pxPerInch}`;
-            })
-            .join(' ');
-          const fromCx = from.xIn * pxPerInch;
-          const fromCy = from.yIn * pxPerInch;
-          const toCx = to.xIn * pxPerInch;
-          const toCy = to.yIn * pxPerInch;
-          return (
-            <g key={c.id}>
-              {onCableTap ? (
+        {routedCables.map(
+          ({
+            c,
+            from,
+            to,
+            path,
+            cableColor,
+            fromColor,
+            toColor,
+            isExternal,
+          }) => {
+            const d = path
+              .map((p, i) => {
+                const cmd = i === 0 ? 'M' : 'L';
+                return `${cmd} ${p.xIn * pxPerInch} ${p.yIn * pxPerInch}`;
+              })
+              .join(' ');
+            const fromCx = from.xIn * pxPerInch;
+            const fromCy = from.yIn * pxPerInch;
+            const toCx = to.xIn * pxPerInch;
+            const toCy = to.yIn * pxPerInch;
+            return (
+              <g key={c.id}>
+                {onCableTap ? (
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth={14}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={styles.cableHit}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCableTap(c.id);
+                    }}
+                  />
+                ) : null}
                 <path
                   d={d}
                   fill="none"
-                  stroke="transparent"
-                  strokeWidth={14}
+                  stroke={cableColor}
+                  strokeWidth={2.5}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={styles.cableHit}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCableTap(c.id);
-                  }}
+                  strokeDasharray={isExternal ? '5 3' : undefined}
                 />
-              ) : null}
-              <path
-                d={d}
-                fill="none"
-                stroke={cableColor}
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeDasharray={isExternal ? '5 3' : undefined}
-              />
-              {/* End-caps: colored dots at each pedal port. Slightly
+                {/* End-caps: colored dots at each pedal port. Slightly
                   larger than the cable stroke so the connection visibly
                   "plugs into" the pedal edge. */}
-              <circle
-                cx={fromCx}
-                cy={fromCy}
-                r={4}
-                fill={fromColor}
-                stroke="rgba(255,255,255,0.9)"
-                strokeWidth={1}
-              />
-              <circle
-                cx={toCx}
-                cy={toCy}
-                r={4}
-                fill={toColor}
-                stroke="rgba(255,255,255,0.9)"
-                strokeWidth={1}
-              />
-            </g>
-          );
-        })}
+                <circle
+                  cx={fromCx}
+                  cy={fromCy}
+                  r={4}
+                  fill={fromColor}
+                  stroke="rgba(255,255,255,0.9)"
+                  strokeWidth={1}
+                />
+                <circle
+                  cx={toCx}
+                  cy={toCy}
+                  r={4}
+                  fill={toColor}
+                  stroke="rgba(255,255,255,0.9)"
+                  strokeWidth={1}
+                />
+              </g>
+            );
+          },
+        )}
         {drag?.moved ? (
           <line
             x1={drag.fromX}
