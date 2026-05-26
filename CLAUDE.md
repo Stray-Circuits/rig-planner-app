@@ -37,6 +37,10 @@ iOS / Android entry points (`pnpm tauri:ios:dev`, `pnpm tauri:android:dev`) requ
 
 **Signal-chain semantics live in `src/lib/signalChainWarnings.ts`.** That's where the "which required ports are unconnected" computation runs. UI (port dots, endpoint chips, cable colors) just renders the result.
 
+**Cross-origin fetch goes through `@tauri-apps/plugin-http`.** The pedal photo search (`src/lib/braveSearch.ts`) hits Brave's API + arbitrary image hosts that don't send CORS headers. Under Tauri, requests route through the Rust HTTP plugin (bypassing CORS); in `pnpm dev` we fall back to platform `fetch` which will fail with a network error for most URLs — the UI surfaces that cleanly. The capability in `src-tauri/capabilities/default.json` allows `https://*/*` + `http://*/*` (intentional — search results link anywhere). Future features that need to fetch arbitrary external content can reuse this transport via the `platformFetch()` switch in `braveSearch.ts`.
+
+**Build-time env vars are baked via `import.meta.env`** with the `VITE_` prefix (see `vite.config.ts` envPrefix). `.env.local` is gitignored; set keys there for local dev or in CI secrets for release builds. The currently-used var is `VITE_BRAVE_SEARCH_API_KEY` — when absent the photo-search button is hidden via `isBraveSearchConfigured()`.
+
 **Android builds run inside a Docker container** under `scripts/android/`. The Dockerfile layers Node/pnpm/Rust/NDK on the Cirrus Labs `android-sdk:34` base. Hard constraints learned the hard way:
 
 - The container is forced to `linux/amd64` even on Apple silicon (Docker Desktop uses Rosetta-for-Linux). Google publishes no `linux-aarch64` Android NDK, so an arm64 container can't run the cross-compile toolchain. Override only via `RIG_PLANNER_ANDROID_PLATFORM` if you really know why.
