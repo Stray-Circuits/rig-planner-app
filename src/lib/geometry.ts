@@ -577,15 +577,19 @@ function generateRouteCandidates(
 }
 
 /**
- * Elbow positions along a 1D axis between `a` and `b`. Includes:
- *   1. In-range midpoints (snake-through-gap shape).
- *   2. Just outside each obstacle's axis extent, still in [lo, hi].
- *   3. (Same-side cables only) "staple" extensions OUTSIDE [lo, hi] in the
- *      outward direction, so leaders can be extended to a lane that
- *      clears every pedal between the two ports.
+ * Elbow positions along a 1D axis between leader endpoints `a` and `b`.
  *
- * `outSign` is the outward sign (-1 for top/left, +1 for bottom/right)
- * when the two ports share a side; null for mixed cases.
+ * When `outSign` is null (mixed orientation — one port vertical, one
+ * horizontal), the elbow is free to live anywhere in [lo, hi] including
+ * midpoints and just-outside-obstacle positions.
+ *
+ * When `outSign` is set (both ports share a side — both top, both right,
+ * etc.), the elbow must be on the OUTWARD side of both leader endpoints
+ * (≤ lo for sign=-1, ≥ hi for sign=+1). Any value strictly between fl
+ * and tl would force a U-turn at one end (the leader exits the pedal
+ * outward, then immediately reverses direction to reach the in-range
+ * elbow). This shape is invariant when leader lengths are staggered per
+ * cable for lane assignment.
  */
 function elbowCandidates(
   a: number,
@@ -596,33 +600,37 @@ function elbowCandidates(
 ): number[] {
   const lo = Math.min(a, b);
   const hi = Math.max(a, b);
-  const inRange = (v: number) => v >= lo && v <= hi;
-  const out: number[] = [];
-  const candidates = [(a + b) / 2, a + (b - a) * 0.25, a + (b - a) * 0.75];
-  for (const c of candidates) if (inRange(c)) out.push(c);
   const clearance = 0.3;
-  for (const r of obstacles) {
-    const rLo = axis === 'x' ? r.xIn : r.yIn;
-    const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
-    if (rHi >= lo && rLo <= hi) {
-      const before = rLo - clearance;
-      const after = rHi + clearance;
-      if (inRange(before)) out.push(before);
-      if (inRange(after)) out.push(after);
+  const out: number[] = [];
+
+  if (outSign === null) {
+    const inRange = (v: number) => v >= lo && v <= hi;
+    const candidates = [(a + b) / 2, a + (b - a) * 0.25, a + (b - a) * 0.75];
+    for (const c of candidates) if (inRange(c)) out.push(c);
+    for (const r of obstacles) {
+      const rLo = axis === 'x' ? r.xIn : r.yIn;
+      const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
+      if (rHi >= lo && rLo <= hi) {
+        const before = rLo - clearance;
+        const after = rHi + clearance;
+        if (inRange(before)) out.push(before);
+        if (inRange(after)) out.push(after);
+      }
     }
-  }
-  // Outward "staple" extensions — only valid when both ports face the
-  // same way, otherwise this would reverse one leader's direction.
-  if (outSign === -1) {
+  } else if (outSign === -1) {
+    // Same outward direction (top/left): elbow must be ≤ lo.
+    out.push(lo);
     out.push(lo - 0.4);
     out.push(lo - 0.8);
     out.push(lo - 1.2);
     for (const r of obstacles) {
       const rLo = axis === 'x' ? r.xIn : r.yIn;
       const v = rLo - clearance;
-      if (v < lo) out.push(v);
+      if (v <= lo) out.push(v);
     }
-  } else if (outSign === 1) {
+  } else {
+    // Same outward direction (bottom/right): elbow must be ≥ hi.
+    out.push(hi);
     out.push(hi + 0.4);
     out.push(hi + 0.8);
     out.push(hi + 1.2);
@@ -630,7 +638,7 @@ function elbowCandidates(
       const rLo = axis === 'x' ? r.xIn : r.yIn;
       const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
       const v = rHi + clearance;
-      if (v > hi) out.push(v);
+      if (v >= hi) out.push(v);
     }
   }
   if (out.length === 0) out.push((a + b) / 2);

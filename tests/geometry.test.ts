@@ -177,6 +177,35 @@ describe('geometry', () => {
     }
   });
 
+  it('routeCableWithLeader avoids U-turns when leader lengths are staggered', () => {
+    // Both ports on top sides, leaders deliberately different lengths
+    // (lane staggering). The router must NOT bend within a single
+    // column — i.e. two consecutive vertical segments must travel in
+    // the same direction. Otherwise the cable doubles back on its own
+    // leader, hugging the pedal edge.
+    const fromRect = { xIn: 9.9, yIn: 6.56, widthIn: 2.52, depthIn: 4.7 };
+    const toRect = { xIn: 4.17, yIn: 7.41, widthIn: 4.7, depthIn: 3.7 };
+    const path = routeCableWithLeader(
+      { xIn: 10.74, yIn: 6.56, side: 'top' },
+      { xIn: 7.3, yIn: 7.41, side: 'top' },
+      [fromRect, toRect],
+      { fromLeaderIn: 0.4, toLeaderIn: 0.52 },
+    );
+    for (let i = 1; i < path.length - 1; i++) {
+      const prev = path[i - 1]!;
+      const cur = path[i]!;
+      const next = path[i + 1]!;
+      const xConstIn = Math.abs(cur.xIn - prev.xIn) < 0.001;
+      const xConstOut = Math.abs(next.xIn - cur.xIn) < 0.001;
+      if (xConstIn && xConstOut) {
+        const dyIn = cur.yIn - prev.yIn;
+        const dyOut = next.yIn - cur.yIn;
+        // Same-axis adjacent segments must not reverse direction.
+        expect(dyIn * dyOut).toBeGreaterThanOrEqual(-0.0001);
+      }
+    }
+  });
+
   it('routeCableWithLeader routes around the source pedal when destination column overlaps it', () => {
     // Source pedal (Tortie-like) at top, destination pedal (Tabby-like)
     // below it. Destination port column is INSIDE source pedal's x
