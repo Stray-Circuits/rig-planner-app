@@ -383,22 +383,54 @@ export function routeCablePath(
     if (!pathHitsAny(straight, obstacles)) return straight;
   }
 
+  // Prefer the shortest valid 3-segment route; fall back to the shortest
+  // valid 5-segment "go around" route when no 3-segment is clean. Picking
+  // by length avoids the previous "first-valid-wins" behavior, which
+  // could pick a long outward staple when a short snake-through-the-gap
+  // was available.
   const cand3 = generateRouteCandidates(from, to, obstacles);
-  for (const path of cand3) {
-    if (!pathHitsAny(path, obstacles)) return dedupeColinear(path);
-  }
+  const best3 = shortestClean(cand3, obstacles);
+  if (best3) return dedupeColinear(best3);
+
   const cand5 = generate5SegCandidates(from, to, obstacles);
-  for (const path of cand5) {
-    if (!pathHitsAny(path, obstacles)) return dedupeColinear(path);
-  }
-  // No clean route — best-effort fallback (likely overlaps something, but
-  // at least something draws).
+  const best5 = shortestClean(cand5, obstacles);
+  if (best5) return dedupeColinear(best5);
+
   return dedupeColinear(
     cand3[0] ?? [
       { xIn: from.xIn, yIn: from.yIn },
       { xIn: to.xIn, yIn: to.yIn },
     ],
   );
+}
+
+/** Sum of orthogonal segment lengths along the polyline. */
+function pathLength(path: readonly { xIn: number; yIn: number }[]): number {
+  let total = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i]!;
+    const b = path[i + 1]!;
+    total += Math.abs(b.xIn - a.xIn) + Math.abs(b.yIn - a.yIn);
+  }
+  return total;
+}
+
+/** Return the shortest candidate that doesn't hit any obstacle, or null. */
+function shortestClean(
+  candidates: readonly { xIn: number; yIn: number }[][],
+  obstacles: readonly ObstacleRect[],
+): { xIn: number; yIn: number }[] | null {
+  let best: { xIn: number; yIn: number }[] | null = null;
+  let bestLen = Infinity;
+  for (const path of candidates) {
+    if (pathHitsAny(path, obstacles)) continue;
+    const len = pathLength(path);
+    if (len < bestLen) {
+      best = path;
+      bestLen = len;
+    }
+  }
+  return best;
 }
 
 /** Outward "sign" of a side along its perpendicular axis. */
