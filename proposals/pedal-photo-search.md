@@ -1,7 +1,10 @@
 # Proposal: in-app pedal photo + dimensions search
 
-Status: **deferred** (2026-05). Capturing design + legal context now so a
-future session can pick it up without re-doing the analysis.
+Status: **design resolved 2026-05-25, implementation deferred.** Initial
+design captured 2026-05; API + key-handling resolved in follow-up
+discussion 2026-05-25 (see "API option (photo search)" and "Key handling"
+below). Future session can pick up implementation without redoing the
+analysis.
 
 ## Goal
 
@@ -47,9 +50,10 @@ moves us toward the "iffy" row.
    transmits the image.
 3. **Store the source URL alongside the saved photo.** Gives us a
    DMCA-takedown path and acts as informal attribution.
-4. **Respect robots.txt + ToS.** Query via official APIs (Google
-   Custom Search Engine, Bing Image Search, Wikimedia) — do NOT
-   HTML-scrape Sweetwater / Reverb / manufacturer product pages.
+4. **Respect robots.txt + ToS.** Query via the chosen official API
+   (Brave Search — see below) — do NOT HTML-scrape Sweetwater / Reverb
+   / manufacturer product pages, and do NOT reverse-engineer keyless
+   endpoints (DDG `i.js`, Qwant, SearXNG instances).
 5. **No sharing between users.** The library stays per-user.
 6. **Document the model.** README + an in-wizard note: "Photos found
    via search are subject to their source's terms. You're responsible
@@ -57,24 +61,67 @@ moves us toward the "iffy" row.
 7. **Provide a "Where this came from" affordance** on saved pedals
    that shows the source URL and lets the user replace / remove.
 
-## API options (photo search)
+## API option (photo search): Brave Search API
 
-- **Google Custom Search Engine** — free tier ≈ 100 queries/day. Needs
-  a CSE configured by the project owner. Returns image URLs +
-  attribution + thumbnails.
-- **Bing Image Search API** — paid (Azure). Higher quality, no daily
-  limit, similar shape.
-- **Wikimedia Commons API** — free, no key, results filtered to
-  CC-licensed assets. Coverage of pedals is thin and the photos that
-  exist are inconsistent (random angles, full backgrounds) — Zach
-  reviewed and judged them not good enough. Useful as a *secondary*
-  source mixed with one of the above, or for boards / brand logos.
+**Decision (2026-05-25): Brave Search API, image endpoint, key baked
+at build time via CI secret.**
 
-**API key handling**: keys can't ship in the repo or the client
-bundle. Either (a) the user supplies their own CSE key in Settings,
-(b) we proxy through a tiny serverless endpoint we own (then we eat
-the rate-limit cost), or (c) we run an Edge Function with per-user
-quotas. Picking one is a separate design call.
+Reasoning trail:
+
+- **In-app search UX is non-negotiable** (Zach, 2026-05-25). Rules out
+  patterns that require leaving the wizard (paste-URL primary,
+  embedded webview against a real search engine).
+- **Render results in our own UI grid**, not in a webview chrome —
+  this is what makes the feature feel cohesive with the rest of the
+  app. The chosen API needs to return structured JSON (thumb URL,
+  full URL, source URL, dimensions, mime).
+- **Keyless options were considered and rejected**: DuckDuckGo `i.js`,
+  Qwant, SearXNG public instances all work without keys but are
+  undocumented / reverse-engineered, can break without notice, and
+  live in a ToS gray zone. Fragility unacceptable for a shipped
+  feature.
+- **Bing Image Search is unavailable**: Microsoft retired the Bing
+  Search APIs in August 2025. Do not propose it.
+- **Google Custom Search JSON API** considered: 100 queries/day free,
+  but the daily cap is unforgiving (a busy Saturday can blow the
+  quota and dark the feature until midnight Pacific). Also requires
+  configuring a CSE in image-search mode and calling with
+  `searchType=image` — more setup overhead than Brave.
+- **Brave Search API chosen**: 2,000 queries/month free, 1 qps,
+  first-class `/res/v1/images/search` endpoint built for this exact
+  use case. Returns the clean shape we need. Monthly bucket forgives
+  bursty real-world usage that would hit Google's daily cap. Privacy
+  ethos aligns with the app. No CSE configuration overhead. At ~100
+  users averaging ~5 searches/week the free tier fits (~2,000/month);
+  there's no headroom for growth past that without paying or
+  switching providers.
+
+## Key handling
+
+**Decision (2026-05-25): bake the API key into the shipped build at
+build time via CI secret. No in-app user-supplied-key field.**
+
+- Key lives in CI secrets / build-environment variable; build step
+  injects it into the bundle. Public repo stays clean.
+- **No "use your own Brave API key" field in Settings.** Considered
+  and rejected: most users have no idea what that means, the small
+  fraction who do can rebuild from source with their own key, and
+  carrying the setting forever costs more in UI surface + tests +
+  edit/migration paths than it's worth.
+- **Self-builders from source** get a build with no key (or a build
+  error if the key is required) and must supply their own at
+  build-time to use the feature. Document this in the README's build
+  section.
+- **The key is shipped, so it's extractable.** Treat as obfuscation,
+  not secrecy. Mitigations:
+  - Never enable billing on the key. Brave's free tier hard-stops at
+    quota rather than billing through — verify this is still true at
+    build time.
+  - Monitor usage in Brave's dashboard. A 24h flat-line at quota cap
+    means abuse, not 100 enthusiasts; rotate the key + ship a new
+    build (treat as a normal release).
+  - Re-verify Brave's current ToS before shipping that they don't
+    track API users by default and don't prohibit keys-in-clients.
 
 ## API options (dimensions)
 
@@ -94,23 +141,31 @@ authoritative fallback.
 
 ## Implementation sketch
 
-New wizard step or button on the Image step:
+New "Search the web" button on the wizard's Image step, alongside
+existing "Upload photo" and "Pick a color" affordances.
 
-1. "Search the web" button alongside the existing "Upload photo" and
-   "Pick a color" affordances.
-2. Tapping it surfaces an input prefilled with `{brand} {name}`.
-3. Calls the search API, shows ~6 result thumbnails with source URL
-   shown under each.
-4. User taps one → app fetches that single image client-side → runs
-   through the existing bg-removal + crop + auto-detect-color pipeline
-   → previews → user confirms.
-5. The pedal record stores the source URL in a new
+1. Tap "Search the web" → input prefilled with `{brand} {name}` from
+   prior wizard steps.
+2. Call Brave Image Search via the existing HTTP client. Render
+   results in our own grid (mobile-first sizing, app typography, app
+   tap targets) — **not** in a webview. Source URL shown under each
+   thumbnail.
+3. User taps a thumbnail → app fetches that single image
+   client-side → runs through the existing bg-removal + crop +
+   auto-detect-color pipeline → previews → user confirms.
+4. The pedal record stores the source URL in a new
    `imageSourceUrl?: string` field alongside `imagePath`. Edit Pedal
    surfaces this as "Where this came from" with a "Search again"
    affordance.
-6. For dimensions: a parallel "Find dimensions" button that runs the
+5. For dimensions: parallel "Find dimensions" button that runs the
    spec-page parse + offers the result as a suggestion the user can
-   accept or override (never silently writes).
+   accept or override (never silently writes). See "API options
+   (dimensions)" above — this part of the design is not yet resolved.
+6. Empty / error state: if Brave returns no results, or the request
+   fails (quota exhausted, network error), show a clear empty state
+   in the same grid — "No results" or "Search is temporarily
+   unavailable" — rather than a broken-looking wizard. Falls back to
+   the existing upload / color affordances which always work.
 
 ## Schema impact
 
@@ -140,7 +195,10 @@ Migration #2 (we're at #1 currently). Adds to the `Pedal` interface in
 
 ## Open questions
 
-1. **API key custody** — user-supplies, proxy server, or edge function?
+1. **Dimensions source.** Photo search is resolved (Brave); dimensions
+   approach is not. Leading candidate is JSON-LD scrape of the source
+   page Brave returned, with a bundled common-pedals facts file as
+   fallback. Needs a follow-up design pass.
 2. **Cache policy** — do we re-fetch on every app load, or save the
    actual JPEG bytes in the user's local DB? Saving locally is the
    right answer for offline use but adds storage pressure.
@@ -150,3 +208,6 @@ Migration #2 (we're at #1 currently). Adds to the `Pedal` interface in
 4. **What to do if the source 404s later?** The pedal record keeps
    the cached image bytes; the source URL would just become a dead
    "Where this came from" link. Acceptable.
+5. **Quota headroom.** Brave free tier (2,000/month) fits ~100 users
+   but has no growth headroom. If user count grows past ~150–200,
+   need to revisit: pay Brave, switch providers, or split traffic.
