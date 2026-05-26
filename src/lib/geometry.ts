@@ -308,9 +308,9 @@ export function sideOutwardUnit(side: Side): { x: number; y: number } {
 
 /**
  * Routing options that let the caller bias against lanes already used
- * by previously-routed cables, and stagger leader lengths per cable so
+ * by previously-routed cables, stagger leader lengths per cable so
  * multiple cables touching the same pedal-side stack on parallel Y
- * lanes instead of one shared lane.
+ * lanes, and softly cap how far outside the board the elbow can wander.
  */
 export interface RouteOptions {
   /** Y-values of horizontal segments already taken by other cables. */
@@ -321,6 +321,10 @@ export interface RouteOptions {
   fromLeaderIn?: number;
   /** Override the perpendicular leader length at the TO port. */
   toLeaderIn?: number;
+  /** Board width (inches) — used to discourage off-board elbows. */
+  boardWidthIn?: number;
+  /** Board depth (inches) — used to discourage off-board elbows. */
+  boardDepthIn?: number;
 }
 
 /**
@@ -452,10 +456,18 @@ function pathLength(path: readonly { xIn: number; yIn: number }[]): number {
 }
 
 /**
- * Score = Manhattan length + lane-reuse penalty. The penalty discourages
- * (but does not forbid) routing through a Y or X lane another cable
- * already claimed, so cables visually spread out when there's room and
- * fall back to overlap only when no alternative is short enough.
+ * Score = Manhattan length + lane-reuse penalty + off-board penalty.
+ *
+ * Lane penalty: smooth linear falloff — close to a claimed lane = heavy
+ * penalty, equal-or-past LANE_TOL = none. Encourages cables to spread
+ * onto parallel lanes when there's room, while still picking the best
+ * shared lane when no alternative exists.
+ *
+ * Off-board penalty: discourages elbow positions outside the board
+ * footprint. The chip strip sits ~0.5" above the board (negative y), so
+ * a small leniency is allowed; further out gets quadratic penalty so
+ * the router prefers a longer in-bound path to a short out-of-bounds
+ * one.
  */
 function pathScore(
   path: readonly { xIn: number; yIn: number }[],
@@ -464,11 +476,11 @@ function pathScore(
   let score = pathLength(path);
   const claimedY = options.claimedY ?? [];
   const claimedX = options.claimedX ?? [];
-  if (claimedY.length === 0 && claimedX.length === 0) return score;
-  // Tolerance: two lanes count as "the same" when their axis values are
-  // within this many inches. ~2x the cable stroke width at default zoom.
-  const LANE_TOL = 0.15;
-  const LANE_PENALTY = 1.5;
+  const LANE_TOL = 0.3;
+  const LANE_PENALTY = 3.0;
+  const boardW = options.boardWidthIn;
+  const boardD = options.boardDepthIn;
+  const OFF_BOARD_PENALTY = 10.0;
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i]!;
     const b = path[i + 1]!;
@@ -476,11 +488,28 @@ function pathScore(
     const dy = Math.abs(b.yIn - a.yIn);
     if (dy < 0.001 && dx > 0.5) {
       for (const y of claimedY) {
-        if (Math.abs(a.yIn - y) < LANE_TOL) score += LANE_PENALTY;
+        const d = Math.abs(a.yIn - y);
+        if (d < LANE_TOL) score += LANE_PENALTY * (1 - d / LANE_TOL);
       }
     } else if (dx < 0.001 && dy > 0.5) {
       for (const x of claimedX) {
-        if (Math.abs(a.xIn - x) < LANE_TOL) score += LANE_PENALTY;
+        const d = Math.abs(a.xIn - x);
+        if (d < LANE_TOL) score += LANE_PENALTY * (1 - d / LANE_TOL);
+      }
+    }
+    // Off-board penalty applies to every inner corner. Linear in the
+    // distance off-board so even a 0.2" overshoot costs more than a
+    // moderate lane reuse. Inner paths terminate at leader endpoints
+    // (always on-board), so endpoint-bound cables don't get penalized
+    // for the port itself living above the board.
+    if (boardW !== undefined && boardD !== undefined) {
+      for (const pt of [a, b]) {
+        const overshoot =
+          Math.max(0, -pt.xIn) +
+          Math.max(0, pt.xIn - boardW) +
+          Math.max(0, -pt.yIn) +
+          Math.max(0, pt.yIn - boardD);
+        if (overshoot > 0) score += OFF_BOARD_PENALTY * overshoot;
       }
     }
   }

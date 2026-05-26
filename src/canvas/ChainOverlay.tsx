@@ -419,6 +419,8 @@ export function ChainOverlay({
           claimedX,
           fromLeaderIn: LEADER_BASE_IN + fromLaneIdx * LEADER_LANE_STEP_IN,
           toLeaderIn: LEADER_BASE_IN + toLaneIdx * LEADER_LANE_STEP_IN,
+          boardWidthIn: rig.widthIn,
+          boardDepthIn: rig.depthIn,
         },
       );
       // Claim this cable's primary lanes so later cables route around.
