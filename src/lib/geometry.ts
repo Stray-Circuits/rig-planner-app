@@ -308,14 +308,19 @@ export function sideOutwardUnit(side: Side): { x: number; y: number } {
 
 /**
  * Routing options that let the caller bias against lanes already used
- * by previously-routed cables. Encourages visual separation between
- * cables that would otherwise overlap on identical Manhattan segments.
+ * by previously-routed cables, and stagger leader lengths per cable so
+ * multiple cables touching the same pedal-side stack on parallel Y
+ * lanes instead of one shared lane.
  */
 export interface RouteOptions {
   /** Y-values of horizontal segments already taken by other cables. */
   claimedY?: readonly number[];
   /** X-values of vertical segments already taken by other cables. */
   claimedX?: readonly number[];
+  /** Override the perpendicular leader length at the FROM port. */
+  fromLeaderIn?: number;
+  /** Override the perpendicular leader length at the TO port. */
+  toLeaderIn?: number;
 }
 
 /**
@@ -339,14 +344,16 @@ export function routeCableWithLeader(
 ): { xIn: number; yIn: number }[] {
   const dFrom = sideOutwardUnit(from.side);
   const dTo = sideOutwardUnit(to.side);
+  const fromLeaderLen = options.fromLeaderIn ?? leaderIn;
+  const toLeaderLen = options.toLeaderIn ?? leaderIn;
   const fromLeader = {
-    xIn: from.xIn + dFrom.x * leaderIn,
-    yIn: from.yIn + dFrom.y * leaderIn,
+    xIn: from.xIn + dFrom.x * fromLeaderLen,
+    yIn: from.yIn + dFrom.y * fromLeaderLen,
     side: from.side,
   };
   const toLeader = {
-    xIn: to.xIn + dTo.x * leaderIn,
-    yIn: to.yIn + dTo.y * leaderIn,
+    xIn: to.xIn + dTo.x * toLeaderLen,
+    yIn: to.yIn + dTo.y * toLeaderLen,
     side: to.side,
   };
   // Inflate obstacles by a margin so cables route AROUND pedals with

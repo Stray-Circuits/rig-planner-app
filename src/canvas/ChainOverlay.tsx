@@ -70,6 +70,79 @@ interface DragState {
 
 const DRAG_THRESHOLD_PX = 6;
 
+/** Base perpendicular leader length (inches) before any lane offset. */
+const LEADER_BASE_IN = 0.4;
+/**
+ * Per-lane increment added to the leader length so cables touching the
+ * same pedal-side stack on parallel Y lanes. At default zoom (~50px/in)
+ * each lane is ~6px apart — visibly distinct from the 2.5px cable
+ * stroke while keeping leader extensions modest.
+ */
+const LEADER_LANE_STEP_IN = 0.12;
+
+/**
+ * Assign a lane index to each cable end relative to the other cable
+ * ends touching the same (placedId, visual side). Lanes are ordered by
+ * the port's physical position along the side (left-to-right or
+ * top-to-bottom); cables sharing the same port get sequential lanes via
+ * stable cable-id tiebreak so their final 90° turn into the shared
+ * destination happens at different Y values.
+ *
+ * Returns a map keyed by `${connectionId}:${end}` (end is 'from'|'to').
+ */
+function computeLeaderLanes(
+  connections: readonly Connection[],
+  portIndex: Map<string, Map<string, ResolvedPort>>,
+  pedalsById: Map<string, Pedal>,
+): Map<string, number> {
+  const result = new Map<string, number>();
+  interface SideMember {
+    connectionId: string;
+    end: 'from' | 'to';
+    portAxisCoord: number; // x for top/bottom, y for left/right
+  }
+  const groups = new Map<string, SideMember[]>();
+  const collect = (
+    connectionId: string,
+    end: 'from' | 'to',
+    nodeKind: 'pedal' | 'external',
+    nodeId: string,
+    portId: string | null,
+  ) => {
+    if (nodeKind !== 'pedal' || !portId) return;
+    const resolved = portIndex.get(nodeId)?.get(portId);
+    if (!resolved) return;
+    // Don't bother looking up the pedal twice — we already have the
+    // resolved port + its visual side.
+    const def = pedalsById.get(resolved.placed.pedalId);
+    if (!def) return;
+    const side = resolved.visualSide;
+    const key = `${nodeId}:${side}`;
+    const axisCoord =
+      side === 'top' || side === 'bottom' ? resolved.xIn : resolved.yIn;
+    const list = groups.get(key) ?? [];
+    list.push({ connectionId, end, portAxisCoord: axisCoord });
+    groups.set(key, list);
+  };
+  for (const c of connections) {
+    collect(c.id, 'from', c.fromNodeKind, c.fromNodeId, c.fromPortId);
+    collect(c.id, 'to', c.toNodeKind, c.toNodeId, c.toPortId);
+  }
+  for (const members of groups.values()) {
+    members.sort((a, b) => {
+      if (a.portAxisCoord !== b.portAxisCoord) {
+        return a.portAxisCoord - b.portAxisCoord;
+      }
+      // Same port → tiebreak by connection id for a stable order.
+      return a.connectionId.localeCompare(b.connectionId);
+    });
+    members.forEach((m, idx) => {
+      result.set(`${m.connectionId}:${m.end}`, idx);
+    });
+  }
+  return result;
+}
+
 interface ResolvedPort {
   placed: PlacedPedal;
   pedal: Pedal;
@@ -287,6 +360,20 @@ export function ChainOverlay({
   for (const rect of obstacleByPlaced.values()) {
     allObstacles.push(rect);
   }
+  // Assign each cable-END (from / to) a "leader lane" index relative to
+  // the other cables touching the same (placed pedal, visual side). The
+  // lane index inflates the perpendicular leader length, so cables
+  // exiting/entering the same pedal-side stack on parallel Y lanes
+  // outside the pedal rather than sharing a single lane.
+  //
+  // Cables sharing a destination port get *different* lane indices via
+  // the cable-id tiebreak below, so their final 90° turn into the port
+  // happens at a different Y per cable — only the port itself is shared.
+  const leaderLanes = computeLeaderLanes(
+    orderedConnections,
+    portIndex,
+    pedalsById,
+  );
   const claimedY: number[] = [];
   const claimedX: number[] = [];
   const routedCables = orderedConnections
@@ -321,11 +408,18 @@ export function ChainOverlay({
       const cableColor = fromColor;
       const isExternal =
         c.fromNodeKind === 'external' || c.toNodeKind === 'external';
+      const fromLaneIdx = leaderLanes.get(`${c.id}:from`) ?? 0;
+      const toLaneIdx = leaderLanes.get(`${c.id}:to`) ?? 0;
       const path = routeCableWithLeader(
         { xIn: from.xIn, yIn: from.yIn, side: from.side },
         { xIn: to.xIn, yIn: to.yIn, side: to.side },
         allObstacles,
-        { claimedY, claimedX },
+        {
+          claimedY,
+          claimedX,
+          fromLeaderIn: LEADER_BASE_IN + fromLaneIdx * LEADER_LANE_STEP_IN,
+          toLeaderIn: LEADER_BASE_IN + toLaneIdx * LEADER_LANE_STEP_IN,
+        },
       );
       // Claim this cable's primary lanes so later cables route around.
       const lanes = pathLanes(path);
