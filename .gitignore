@@ -58,4 +58,5 @@ coverage/
 # Browser dev artifact — localStorage mirror written when the host persists
 # it to disk (some test runners / sandboxed environments). Never source.
 rig-planner-memory-db.json
+debug-rig-planner-memory-db.json
 other_todos.txt

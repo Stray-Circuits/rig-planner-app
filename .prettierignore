@@ -7,3 +7,5 @@ src-tauri/Cargo.lock
 coverage
 mockups
 *.md
+rig-planner-memory-db.json
+debug-rig-planner-memory-db.json

@@ -7,6 +7,7 @@ import {
   placedFootprint,
   rectsOverlap,
   routeCablePath,
+  routeCableWithLeader,
 } from '../src/lib/geometry';
 import type { Pedal, PlacedPedal, Rig } from '../src/data/schema';
 
@@ -140,6 +141,68 @@ describe('geometry', () => {
         maxY > obstacle.yIn + 0.05 &&
         minY < obstacle.yIn + obstacle.depthIn - 0.05;
       expect(crosses).toBe(false);
+    }
+  });
+
+  it('routeCableWithLeader routes a staple above two adjacent top-port pedals', () => {
+    // Two pedals side by side, ports on top. The "from" pedal owns the
+    // port at its top-right; the "to" pedal owns a port at its top-left.
+    // Both pedals must be passed as obstacles so the inner path can't
+    // route through either body.
+    const fromPedalRect = { xIn: 0, yIn: 2, widthIn: 3, depthIn: 4 };
+    const toPedalRect = { xIn: 4, yIn: 2, widthIn: 3, depthIn: 4 };
+    const path = routeCableWithLeader(
+      { xIn: 2, yIn: 2, side: 'top' },
+      { xIn: 5, yIn: 2, side: 'top' },
+      [fromPedalRect, toPedalRect],
+    );
+    // No INNER segment (anything between first and last) should cross
+    // either pedal's interior.
+    for (let i = 1; i < path.length - 2; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      for (const rect of [fromPedalRect, toPedalRect]) {
+        const minX = Math.min(a.xIn, b.xIn);
+        const maxX = Math.max(a.xIn, b.xIn);
+        const minY = Math.min(a.yIn, b.yIn);
+        const maxY = Math.max(a.yIn, b.yIn);
+        const crosses =
+          maxX > rect.xIn + 0.05 &&
+          minX < rect.xIn + rect.widthIn - 0.05 &&
+          maxY > rect.yIn + 0.05 &&
+          minY < rect.yIn + rect.depthIn - 0.05;
+        expect(crosses).toBe(false);
+      }
+    }
+  });
+
+  it('routeCableWithLeader routes around the source pedal when destination column overlaps it', () => {
+    // Source pedal (Tortie-like) at top, destination pedal (Tabby-like)
+    // below it. Destination port column is INSIDE source pedal's x
+    // range, so the naive Z-shape through-the-middle hits the source.
+    // The 5-segment fallback must route around.
+    const fromRect = { xIn: 12.89, yIn: 0.83, widthIn: 2.6, depthIn: 4.7 };
+    const toRect = { xIn: 13.43, yIn: 6.65, widthIn: 2.6, depthIn: 4.7 };
+    const path = routeCableWithLeader(
+      { xIn: 13.76, yIn: 0.83, side: 'top' },
+      { xIn: 15.16, yIn: 6.65, side: 'top' },
+      [fromRect, toRect],
+    );
+    for (let i = 1; i < path.length - 2; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      for (const rect of [fromRect, toRect]) {
+        const minX = Math.min(a.xIn, b.xIn);
+        const maxX = Math.max(a.xIn, b.xIn);
+        const minY = Math.min(a.yIn, b.yIn);
+        const maxY = Math.max(a.yIn, b.yIn);
+        const crosses =
+          maxX > rect.xIn + 0.05 &&
+          minX < rect.xIn + rect.widthIn - 0.05 &&
+          maxY > rect.yIn + 0.05 &&
+          minY < rect.yIn + rect.depthIn - 0.05;
+        expect(crosses).toBe(false);
+      }
     }
   });
 

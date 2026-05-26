@@ -355,13 +355,14 @@ export function routeCableWithLeader(
 }
 
 /**
- * Orthogonal 3-segment cable path between two points. Generates several
- * candidate Manhattan routes (varying the elbow position) and returns the
- * first one that doesn't cross any obstacle. Falls back to the natural
- * mid-point route if no candidate is clean.
+ * Orthogonal cable path between two points. Tries 3-segment Manhattan
+ * candidates first (varying the elbow position); if every 3-segment path
+ * crosses an obstacle, falls back to 5-segment "go around" detours that
+ * bend twice more to wrap one pedal.
  *
- * `obstacles` should NOT include the pedals owning the from/to ports —
- * the cable necessarily touches their edges.
+ * `obstacles` MAY include the pedals owning the from/to ports — the
+ * caller of `routeCableWithLeader` will arrange that the leader endpoints
+ * lie just outside the pedals' inflated rects.
  *
  * Returns a polyline as an array of {x, y} in the same units as the inputs.
  */
@@ -380,18 +381,29 @@ export function routeCablePath(
       { xIn: to.xIn, yIn: to.yIn },
     ];
     if (!pathHitsAny(straight, obstacles)) return straight;
-    // Otherwise fall through to elbowed candidates — note that a perfectly
-    // colinear cable can't truly detour with just a 3-segment Manhattan
-    // path, so the obstacle will still be hit. Real ports rarely line up
-    // exactly so this is an edge case.
   }
 
-  const candidates = generateRouteCandidates(from, to, obstacles);
-  for (const path of candidates) {
-    if (!pathHitsAny(path, obstacles)) return path;
+  const cand3 = generateRouteCandidates(from, to, obstacles);
+  for (const path of cand3) {
+    if (!pathHitsAny(path, obstacles)) return dedupeColinear(path);
   }
-  // No clean route — return the first candidate so something draws.
-  return candidates[0]!;
+  const cand5 = generate5SegCandidates(from, to, obstacles);
+  for (const path of cand5) {
+    if (!pathHitsAny(path, obstacles)) return dedupeColinear(path);
+  }
+  // No clean route — best-effort fallback (likely overlaps something, but
+  // at least something draws).
+  return dedupeColinear(
+    cand3[0] ?? [
+      { xIn: from.xIn, yIn: from.yIn },
+      { xIn: to.xIn, yIn: to.yIn },
+    ],
+  );
+}
+
+/** Outward "sign" of a side along its perpendicular axis. */
+function outwardSign(side: Side): -1 | 1 {
+  return side === 'top' || side === 'left' ? -1 : 1;
 }
 
 function generateRouteCandidates(
@@ -408,7 +420,14 @@ function generateRouteCandidates(
 
   // Same horizontal anchor orientation → elbow varies along X.
   if (fromHorizontal && toHorizontal) {
-    const elbows = elbowCandidates(from.xIn, to.xIn, obstacles, 'x');
+    const matchedSign = from.side === to.side ? outwardSign(from.side) : null;
+    const elbows = elbowCandidates(
+      from.xIn,
+      to.xIn,
+      obstacles,
+      'x',
+      matchedSign,
+    );
     for (const eX of elbows) {
       cands.push([
         pHFrom,
@@ -422,7 +441,14 @@ function generateRouteCandidates(
 
   // Same vertical anchor orientation → elbow varies along Y.
   if (!fromHorizontal && !toHorizontal) {
-    const elbows = elbowCandidates(from.yIn, to.yIn, obstacles, 'y');
+    const matchedSign = from.side === to.side ? outwardSign(from.side) : null;
+    const elbows = elbowCandidates(
+      from.yIn,
+      to.yIn,
+      obstacles,
+      'y',
+      matchedSign,
+    );
     for (const eY of elbows) {
       cands.push([
         pHFrom,
@@ -434,9 +460,8 @@ function generateRouteCandidates(
     return cands;
   }
 
-  // Mixed orientations — two natural L-shapes plus their detour variants.
+  // Mixed orientations — two natural L-shapes.
   if (fromHorizontal) {
-    // Prefer "horizontal first, then vertical".
     cands.push([pHFrom, { xIn: to.xIn, yIn: from.yIn }, pHTo]);
     cands.push([pHFrom, { xIn: from.xIn, yIn: to.yIn }, pHTo]);
   } else {
@@ -447,11 +472,207 @@ function generateRouteCandidates(
 }
 
 /**
- * Suggest elbow positions along a 1D axis between `a` and `b`. Includes the
- * midpoint plus offsets, plus positions that route just outside each
- * obstacle's extent on that axis so a cable can sidestep a pedal.
+ * Elbow positions along a 1D axis between `a` and `b`. Includes:
+ *   1. In-range midpoints (snake-through-gap shape).
+ *   2. Just outside each obstacle's axis extent, still in [lo, hi].
+ *   3. (Same-side cables only) "staple" extensions OUTSIDE [lo, hi] in the
+ *      outward direction, so leaders can be extended to a lane that
+ *      clears every pedal between the two ports.
+ *
+ * `outSign` is the outward sign (-1 for top/left, +1 for bottom/right)
+ * when the two ports share a side; null for mixed cases.
  */
 function elbowCandidates(
+  a: number,
+  b: number,
+  obstacles: readonly ObstacleRect[],
+  axis: 'x' | 'y',
+  outSign: -1 | 1 | null,
+): number[] {
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  const inRange = (v: number) => v >= lo && v <= hi;
+  const out: number[] = [];
+  const candidates = [(a + b) / 2, a + (b - a) * 0.25, a + (b - a) * 0.75];
+  for (const c of candidates) if (inRange(c)) out.push(c);
+  const clearance = 0.3;
+  for (const r of obstacles) {
+    const rLo = axis === 'x' ? r.xIn : r.yIn;
+    const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
+    if (rHi >= lo && rLo <= hi) {
+      const before = rLo - clearance;
+      const after = rHi + clearance;
+      if (inRange(before)) out.push(before);
+      if (inRange(after)) out.push(after);
+    }
+  }
+  // Outward "staple" extensions — only valid when both ports face the
+  // same way, otherwise this would reverse one leader's direction.
+  if (outSign === -1) {
+    out.push(lo - 0.4);
+    out.push(lo - 0.8);
+    out.push(lo - 1.2);
+    for (const r of obstacles) {
+      const rLo = axis === 'x' ? r.xIn : r.yIn;
+      const v = rLo - clearance;
+      if (v < lo) out.push(v);
+    }
+  } else if (outSign === 1) {
+    out.push(hi + 0.4);
+    out.push(hi + 0.8);
+    out.push(hi + 1.2);
+    for (const r of obstacles) {
+      const rLo = axis === 'x' ? r.xIn : r.yIn;
+      const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
+      const v = rHi + clearance;
+      if (v > hi) out.push(v);
+    }
+  }
+  if (out.length === 0) out.push((a + b) / 2);
+  return out;
+}
+
+/**
+ * 5-segment "go around" candidates. Used when no 3-segment Manhattan
+ * works — typically when one of the endpoints' approach column passes
+ * through the OTHER endpoint's pedal body.
+ *
+ * For same-vertical-side ports (both top / both bottom), the shape is:
+ *   from → (a, from.y) → (a, b) → (c, b) → (c, to.y) → to
+ * For same-horizontal-side (both left / both right), the X/Y roles flip.
+ * For mixed orientation (one vertical, one horizontal), only one mid
+ * coordinate is free; structure: from → (?, ?) → (?, ?) → (?, ?) → to
+ * with directions matched to each leader.
+ */
+function generate5SegCandidates(
+  from: { xIn: number; yIn: number; side: Side },
+  to: { xIn: number; yIn: number; side: Side },
+  obstacles: readonly ObstacleRect[],
+): { xIn: number; yIn: number }[][] {
+  const fh = from.side === 'left' || from.side === 'right';
+  const th = to.side === 'left' || to.side === 'right';
+  const pf = { xIn: from.xIn, yIn: from.yIn };
+  const pt = { xIn: to.xIn, yIn: to.yIn };
+  const cands: { xIn: number; yIn: number }[][] = [];
+  const epsZero = 0.05;
+  if (!fh && !th) {
+    // Both vertical (top/bottom) — inner direction sequence X-Y-X-Y-X.
+    const xEscapes = obstacleEdgeCandidates(obstacles, 'x');
+    const yTransits = transitCandidates(from.yIn, to.yIn, obstacles, 'y');
+    for (const a of xEscapes) {
+      if (Math.abs(a - from.xIn) < epsZero) continue;
+      for (const c of xEscapes) {
+        if (Math.abs(c - to.xIn) < epsZero) continue;
+        for (const b of yTransits) {
+          if (Math.abs(b - from.yIn) < epsZero) continue;
+          if (Math.abs(b - to.yIn) < epsZero) continue;
+          cands.push([
+            pf,
+            { xIn: a, yIn: from.yIn },
+            { xIn: a, yIn: b },
+            { xIn: c, yIn: b },
+            { xIn: c, yIn: to.yIn },
+            pt,
+          ]);
+        }
+      }
+    }
+    return cands;
+  }
+  if (fh && th) {
+    // Both horizontal (left/right) — inner direction Y-X-Y-X-Y.
+    const yEscapes = obstacleEdgeCandidates(obstacles, 'y');
+    const xTransits = transitCandidates(from.xIn, to.xIn, obstacles, 'x');
+    for (const a of yEscapes) {
+      if (Math.abs(a - from.yIn) < epsZero) continue;
+      for (const c of yEscapes) {
+        if (Math.abs(c - to.yIn) < epsZero) continue;
+        for (const b of xTransits) {
+          if (Math.abs(b - from.xIn) < epsZero) continue;
+          if (Math.abs(b - to.xIn) < epsZero) continue;
+          cands.push([
+            pf,
+            { xIn: from.xIn, yIn: a },
+            { xIn: b, yIn: a },
+            { xIn: b, yIn: c },
+            { xIn: to.xIn, yIn: c },
+            pt,
+          ]);
+        }
+      }
+    }
+    return cands;
+  }
+  // Mixed orientation. 4-inner-segment path with 2 free parameters.
+  if (fh) {
+    // from is horizontal (leader along X), to is vertical (leader along Y).
+    // Inner direction: Y-X-Y-X.
+    const yTransits = transitCandidates(from.yIn, to.yIn, obstacles, 'y');
+    const xTransits = transitCandidates(from.xIn, to.xIn, obstacles, 'x');
+    for (const a of yTransits) {
+      if (Math.abs(a - from.yIn) < epsZero) continue;
+      if (Math.abs(a - to.yIn) < epsZero) continue;
+      for (const b of xTransits) {
+        if (Math.abs(b - from.xIn) < epsZero) continue;
+        if (Math.abs(b - to.xIn) < epsZero) continue;
+        cands.push([
+          pf,
+          { xIn: from.xIn, yIn: a },
+          { xIn: b, yIn: a },
+          { xIn: b, yIn: to.yIn },
+          pt,
+        ]);
+      }
+    }
+    return cands;
+  }
+  // from vertical, to horizontal — inner direction X-Y-X-Y.
+  const yTransits = transitCandidates(from.yIn, to.yIn, obstacles, 'y');
+  const xTransits = transitCandidates(from.xIn, to.xIn, obstacles, 'x');
+  for (const a of xTransits) {
+    if (Math.abs(a - from.xIn) < epsZero) continue;
+    if (Math.abs(a - to.xIn) < epsZero) continue;
+    for (const b of yTransits) {
+      if (Math.abs(b - from.yIn) < epsZero) continue;
+      if (Math.abs(b - to.yIn) < epsZero) continue;
+      cands.push([
+        pf,
+        { xIn: a, yIn: from.yIn },
+        { xIn: a, yIn: b },
+        { xIn: to.xIn, yIn: b },
+        pt,
+      ]);
+    }
+  }
+  return cands;
+}
+
+/** Candidate coordinates just outside each obstacle's axis extent. */
+function obstacleEdgeCandidates(
+  obstacles: readonly ObstacleRect[],
+  axis: 'x' | 'y',
+): number[] {
+  const clearance = 0.3;
+  const out: number[] = [];
+  for (const r of obstacles) {
+    if (axis === 'x') {
+      out.push(r.xIn - clearance);
+      out.push(r.xIn + r.widthIn + clearance);
+    } else {
+      out.push(r.yIn - clearance);
+      out.push(r.yIn + r.depthIn + clearance);
+    }
+  }
+  return out;
+}
+
+/**
+ * Candidate "transit" coordinates: positions that traverse the gap
+ * between two endpoints along one axis. Used for the middle segment of
+ * a 5-segment detour. Includes positions just inside/outside obstacle
+ * edges along the axis, plus outward extensions past the endpoint span.
+ */
+function transitCandidates(
   a: number,
   b: number,
   obstacles: readonly ObstacleRect[],
@@ -459,30 +680,52 @@ function elbowCandidates(
 ): number[] {
   const lo = Math.min(a, b);
   const hi = Math.max(a, b);
-  // All elbow positions must stay inside [lo, hi] — an elbow outside
-  // this range would force the cable to fold back on itself, producing
-  // a U-turn (two 90° bends in opposite directions = 180° net), which
-  // looks broken on the canvas. Inside-range elbows always yield a
-  // monotonic Manhattan path with no folds.
-  const inRange = (v: number) => v >= lo && v <= hi;
-  const out: number[] = [];
-  const candidates = [(a + b) / 2, a + (b - a) * 0.25, a + (b - a) * 0.75];
-  for (const c of candidates) if (inRange(c)) out.push(c);
-  const clearance = 0.6;
+  const clearance = 0.3;
+  const out: number[] = [(a + b) / 2];
   for (const r of obstacles) {
     const rLo = axis === 'x' ? r.xIn : r.yIn;
     const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
-    if (rHi >= lo && rLo <= hi) {
-      // Try positions just outside the obstacle's axis range — but only
-      // if they're still within [lo, hi].
-      const before = rLo - clearance;
-      const after = rHi + clearance;
-      if (inRange(before)) out.push(before);
-      if (inRange(after)) out.push(after);
-    }
+    out.push(rLo - clearance);
+    out.push(rHi + clearance);
   }
-  // Ensure at least one fallback exists — the midpoint is the safest
-  // default even if every candidate above got rejected.
-  if (out.length === 0) out.push((a + b) / 2);
+  for (const d of [0.4, 0.8, 1.2]) {
+    out.push(lo - d);
+    out.push(hi + d);
+  }
+  return out;
+}
+
+/**
+ * Remove consecutive colinear / zero-length points so 5-segment paths
+ * that degenerate to 3-segment shapes don't carry vestigial corners.
+ */
+function dedupeColinear(
+  pts: readonly { xIn: number; yIn: number }[],
+): { xIn: number; yIn: number }[] {
+  if (pts.length < 3) return pts.slice();
+  const out: { xIn: number; yIn: number }[] = [pts[0]!];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = out[out.length - 1]!;
+    const cur = pts[i]!;
+    if (
+      Math.abs(cur.xIn - prev.xIn) < 0.001 &&
+      Math.abs(cur.yIn - prev.yIn) < 0.001
+    ) {
+      continue; // zero-length
+    }
+    if (out.length >= 2) {
+      const a = out[out.length - 2]!;
+      const b = prev;
+      const c = cur;
+      const colinear =
+        (Math.abs(a.xIn - b.xIn) < 0.001 && Math.abs(b.xIn - c.xIn) < 0.001) ||
+        (Math.abs(a.yIn - b.yIn) < 0.001 && Math.abs(b.yIn - c.yIn) < 0.001);
+      if (colinear) {
+        out[out.length - 1] = cur;
+        continue;
+      }
+    }
+    out.push(cur);
+  }
   return out;
 }

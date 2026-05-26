@@ -278,13 +278,14 @@ export function ChainOverlay({
           const cableColor = fromColor;
           const isExternal =
             c.fromNodeKind === 'external' || c.toNodeKind === 'external';
-          // Build a per-cable obstacle list: every other pedal's
-          // footprint EXCEPT the two pedals this cable plugs into.
-          const fromOwnerId = c.fromNodeKind === 'pedal' ? c.fromNodeId : null;
-          const toOwnerId = c.toNodeKind === 'pedal' ? c.toNodeId : null;
+          // Pass every placed pedal as an obstacle, including the source
+          // and destination. The leader segment puts each port endpoint a
+          // perpendicular `leaderIn` past the inflated pedal edge, so the
+          // inner path doesn't need to skim from/to pedal bodies — and
+          // including them prevents the router from routing THROUGH the
+          // owner pedal before plugging into its port.
           const obstacles: ObstacleRect[] = [];
-          for (const [id, rect] of obstacleByPlaced) {
-            if (id === fromOwnerId || id === toOwnerId) continue;
+          for (const rect of obstacleByPlaced.values()) {
             obstacles.push(rect);
           }
           // Manhattan polyline with a leader segment on each end — the
