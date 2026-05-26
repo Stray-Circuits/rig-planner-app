@@ -233,10 +233,93 @@ export async function searchPedalImages(
 }
 
 /**
+ * Map common image extensions to MIME types. Brave returns image URLs from
+ * arbitrary hosts; some serve images via paths without extensions
+ * (`?id=…&fmt=…`) but the dominant case is a well-formed file path. Only
+ * formats that `createImageBitmap` + the imgly model accept are listed —
+ * if we can't recognize an extension we fall through to the magic-byte
+ * sniff below so we don't reject otherwise-valid blobs.
+ */
+const EXT_TO_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+};
+
+function mimeFromUrl(url: string): string | null {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    const dot = path.lastIndexOf('.');
+    if (dot < 0) return null;
+    const ext = path.slice(dot + 1);
+    return EXT_TO_MIME[ext] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sniff a few common image formats from the first bytes. Lets us recover
+ * when neither the response header nor the URL extension tells us the
+ * format — for example, when an image host serves a JPEG behind a
+ * `?id=…` path with no extension and `Content-Type: application/octet-stream`.
+ */
+function mimeFromMagic(bytes: Uint8Array): string | null {
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  ) {
+    return 'image/jpeg';
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38
+  ) {
+    return 'image/gif';
+  }
+  return null;
+}
+
+/**
  * Fetch a single image URL the user picked from the results grid and return
- * it as a Blob ready to feed into the bg-removal pipeline. Same transport
- * caveat as `searchPedalImages` — direct fetches to third-party image
- * hosts may hit CORS.
+ * it as a Blob ready to feed into the bg-removal pipeline.
+ *
+ * The returned blob always carries a recognized `image/*` MIME type — the
+ * bg-removal pipeline calls `createImageBitmap` + imgly, both of which
+ * reject blobs without a proper image type ("Invalid format" being the
+ * imgly variant). The Tauri HTTP plugin can pass blobs through with an
+ * empty `type` for hosts that omit Content-Type, so we re-wrap with a
+ * sniffed type if needed.
  *
  * Failures resolve to `null` so callers can surface a generic "couldn't
  * download — try a different image" message rather than throwing.
@@ -251,9 +334,34 @@ export async function fetchImageAsBlob(
       ...(options.signal ? { signal: options.signal } : {}),
     });
     if (!response.ok) return null;
-    const blob = await response.blob();
-    if (blob.size === 0) return null;
-    return blob;
+    // Pull bytes off the Response itself rather than via blob.arrayBuffer().
+    // Older runtimes (jsdom) lack Blob.arrayBuffer; the Response variant is
+    // universal — and we always need the bytes anyway to pick a MIME type.
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength === 0) return null;
+
+    const headerType =
+      response.headers
+        .get('content-type')
+        ?.split(';')[0]
+        ?.trim()
+        .toLowerCase() ?? '';
+
+    // Best signal: a well-formed `image/*` header. Use it.
+    if (headerType.startsWith('image/')) {
+      return new Blob([bytes], { type: headerType });
+    }
+
+    // Header missing or non-image (some hosts send octet-stream). Try the
+    // URL extension first, then magic bytes. If nothing matches, bail —
+    // feeding random bytes to the bg-removal model just throws later.
+    const urlType = mimeFromUrl(url);
+    if (urlType) return new Blob([bytes], { type: urlType });
+
+    const magicType = mimeFromMagic(bytes);
+    if (magicType) return new Blob([bytes], { type: magicType });
+
+    return null;
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
     return null;

@@ -222,10 +222,15 @@ describe('searchPedalImages', () => {
 });
 
 describe('fetchImageAsBlob', () => {
-  it('returns the blob on success', async () => {
-    const bytes = new Uint8Array([1, 2, 3]);
+  /** Three bytes of a valid JPEG header so magic-byte sniff has something to bite. */
+  const JPEG_HEAD = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
+  const PNG_HEAD = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0,
+  ]);
+
+  it('returns the blob with its existing image/* type when header matches', async () => {
     const fetchImpl = fetchReturning(
-      new Response(bytes, {
+      new Response(JPEG_HEAD, {
         status: 200,
         headers: { 'Content-Type': 'image/jpeg' },
       }),
@@ -234,7 +239,62 @@ describe('fetchImageAsBlob', () => {
       fetchImpl,
     });
     expect(result).not.toBeNull();
-    expect(result?.size).toBe(3);
+    expect(result?.size).toBe(JPEG_HEAD.byteLength);
+    expect(result?.type).toBe('image/jpeg');
+  });
+
+  it('re-wraps with header MIME when the blob lacks one', async () => {
+    // Response sets Content-Type but the underlying body has no .type —
+    // mimics what the Tauri HTTP plugin can do for some hosts.
+    const fetchImpl = fetchReturning(
+      new Response(JPEG_HEAD, {
+        status: 200,
+        headers: { 'Content-Type': 'image/webp' },
+      }),
+    );
+    const result = await fetchImageAsBlob('https://example.com/no-ext', {
+      fetchImpl,
+    });
+    expect(result?.type).toBe('image/webp');
+  });
+
+  it('falls back to URL extension when Content-Type is octet-stream', async () => {
+    const fetchImpl = fetchReturning(
+      new Response(PNG_HEAD, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      }),
+    );
+    const result = await fetchImageAsBlob('https://example.com/pic.png', {
+      fetchImpl,
+    });
+    expect(result?.type).toBe('image/png');
+  });
+
+  it('falls back to magic-byte sniff when header AND URL give nothing', async () => {
+    const fetchImpl = fetchReturning(
+      new Response(JPEG_HEAD, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      }),
+    );
+    const result = await fetchImageAsBlob('https://example.com/no-ext-here', {
+      fetchImpl,
+    });
+    expect(result?.type).toBe('image/jpeg');
+  });
+
+  it('returns null when nothing identifies the bytes as an image', async () => {
+    const fetchImpl = fetchReturning(
+      new Response(new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      }),
+    );
+    const result = await fetchImageAsBlob('https://example.com/mystery', {
+      fetchImpl,
+    });
+    expect(result).toBeNull();
   });
 
   it('returns null on non-2xx status', async () => {
