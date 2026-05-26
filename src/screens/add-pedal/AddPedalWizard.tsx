@@ -27,6 +27,13 @@ import {
   shrinkImage,
   type BgRemovalProgress,
 } from '../../lib/bgRemoval';
+import {
+  fetchImageAsBlob,
+  isBraveSearchConfigured,
+  searchPedalImages,
+  type BraveImageResult,
+  type BraveSearchOutcome,
+} from '../../lib/braveSearch';
 import { Button, TextField, WizardShell } from '../../ui';
 import styles from './AddPedalWizard.module.css';
 
@@ -50,6 +57,12 @@ interface WizardDraft {
   photoDataUrl: string | null;
   /** Raw user upload kept across step navigation so "Re-process" can retry. */
   photoSource: Blob | null;
+  /**
+   * Where the current `photoDataUrl` came from when it was fetched from the
+   * web (Brave Search result). Null for color placeholders and for photos
+   * uploaded directly from the device.
+   */
+  photoSourceUrl: string | null;
   brand: string;
   name: string;
   widthIn: string;
@@ -100,6 +113,7 @@ function initialDraft(): WizardDraft {
     color: DEFAULT_COLOR,
     photoDataUrl: null,
     photoSource: null,
+    photoSourceUrl: null,
     brand: '',
     name: '',
     widthIn: '',
@@ -127,6 +141,7 @@ function draftFromPedal(pedal: Pedal): WizardDraft {
       : DEFAULT_COLOR,
     photoDataUrl: isColorPlaceholder ? null : (pedal.imagePath ?? null),
     photoSource: null,
+    photoSourceUrl: pedal.imageSourceUrl ?? null,
     brand: pedal.brand,
     name: pedal.name,
     widthIn: String(pedal.widthIn),
@@ -218,6 +233,9 @@ export function AddPedalWizard({
         widthIn: widthNum,
         depthIn: depthNum,
         imagePath: draft.photoDataUrl ?? `color:${draft.color}`,
+        // Only persist a source URL when we actually have a photo to point
+        // back at. Color placeholders drop the URL.
+        imageSourceUrl: draft.photoDataUrl ? draft.photoSourceUrl : null,
         jackSides: draft.jackSides,
         powerSide: draft.powerSide,
         ports: draft.ports,
@@ -441,6 +459,192 @@ interface ImageStepProps extends StepProps {
   onProcessingChange: (active: boolean) => void;
 }
 
+/**
+ * Search sub-mode state. `idle` is the initial input-only view; `searching`
+ * is in-flight; `ok` shows results (with optional `error` overlay if the
+ * user picked a result that failed to download); `error` covers
+ * key/quota/network problems we couldn't render results for.
+ */
+interface SearchState {
+  query: string;
+  status: 'idle' | 'searching' | 'ok' | 'error' | 'fetching';
+  results: BraveImageResult[];
+  error: string | null;
+  /** Set while fetching the user-picked image so we can show a spinner over it. */
+  pickedUrl?: string;
+}
+
+function outcomeToState(
+  query: string,
+  outcome: BraveSearchOutcome,
+): SearchState {
+  switch (outcome.kind) {
+    case 'ok':
+      return {
+        query,
+        status: 'ok',
+        results: outcome.results,
+        error:
+          outcome.results.length === 0
+            ? 'No results. Try a more specific query or upload a photo instead.'
+            : null,
+      };
+    case 'rate_limited':
+      return {
+        query,
+        status: 'error',
+        results: [],
+        error:
+          'Search is temporarily unavailable (rate limit). Try again in a few minutes.',
+      };
+    case 'unauthorized':
+      return {
+        query,
+        status: 'error',
+        results: [],
+        error:
+          'Search is unavailable — the built-in API key is invalid. Upload a photo or pick a color for now.',
+      };
+    case 'server_error':
+      return {
+        query,
+        status: 'error',
+        results: [],
+        error: `Search failed (status ${outcome.status}). Try again later.`,
+      };
+    case 'network_error':
+      return {
+        query,
+        status: 'error',
+        results: [],
+        error:
+          "Couldn't reach the search service. The browser dev build can't make cross-origin search requests — try the desktop or mobile build.",
+      };
+    case 'disabled':
+      return {
+        query,
+        status: 'error',
+        results: [],
+        error: 'Search is disabled in this build.',
+      };
+    case 'empty_query':
+      return { query, status: 'idle', results: [], error: null };
+  }
+}
+
+interface SearchViewProps {
+  search: SearchState;
+  onQueryChange: (q: string) => void;
+  onSubmit: () => void;
+  onPick: (result: BraveImageResult) => void;
+  onCancel: () => void;
+}
+
+function SearchView({
+  search,
+  onQueryChange,
+  onSubmit,
+  onPick,
+  onCancel,
+}: SearchViewProps) {
+  const busy = search.status === 'searching' || search.status === 'fetching';
+  return (
+    <div className={styles.imageStep}>
+      <form
+        className={styles.searchForm}
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit();
+        }}
+      >
+        <TextField
+          inputSize="md"
+          autoFocus
+          placeholder="Boss DS-1"
+          value={search.query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          aria-label="Pedal name to search for"
+        />
+        <Button
+          type="submit"
+          disabled={busy || search.query.trim().length === 0}
+        >
+          {search.status === 'searching' ? 'Searching…' : 'Search'}
+        </Button>
+      </form>
+
+      {search.error ? (
+        <div className={styles.errorBox} role="alert">
+          <i className="ti ti-alert-triangle" aria-hidden /> {search.error}
+        </div>
+      ) : null}
+
+      {search.status === 'searching' ? (
+        <div className={styles.searchPlaceholder} role="status">
+          Searching the web…
+        </div>
+      ) : null}
+
+      {search.results.length > 0 ? (
+        <ul className={styles.searchResults} aria-label="Search results">
+          {search.results.map((r) => {
+            const isPicking =
+              search.status === 'fetching' && search.pickedUrl === r.imageUrl;
+            return (
+              <li key={r.imageUrl}>
+                <button
+                  type="button"
+                  className={styles.searchResultTile}
+                  onClick={() => onPick(r)}
+                  disabled={busy}
+                  aria-label={r.title || 'Search result'}
+                >
+                  <img
+                    src={r.thumbnailUrl}
+                    alt=""
+                    className={styles.searchResultThumb}
+                    loading="lazy"
+                  />
+                  <span className={styles.searchResultMeta}>
+                    {hostnameOf(r.sourceUrl)}
+                    {r.width && r.height ? ` · ${r.width}×${r.height}` : ''}
+                  </span>
+                  {isPicking ? (
+                    <span className={styles.searchResultOverlay}>
+                      <i className="ti ti-loader" aria-hidden /> Downloading…
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      <p className={styles.helpMuted}>
+        Tap a result and we&apos;ll download it, remove the background, and save
+        where it came from so you can credit the source later. Photos are
+        subject to their source&apos;s terms — make sure any photo you save is
+        OK for your personal use.
+      </p>
+
+      <div className={styles.photoActions}>
+        <Button variant="ghost" onClick={onCancel}>
+          Back
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
   const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -467,6 +671,13 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
     previewDataUrl: string | null;
     busy: boolean;
   } | null>(null);
+
+  // When non-null, the wizard is in "search the web" sub-mode. status drives
+  // which render branch we show (input vs. results vs. error). The Brave
+  // search affordance is gated on a key being baked in — if not, hide it
+  // entirely so the user doesn't see a button that always errors.
+  const searchEnabled = isBraveSearchConfigured();
+  const [search, setSearch] = useState<SearchState | null>(null);
 
   // Warm the bg-removal chunk so it's ready by the time the user clicks
   // "Use a photo". Best-effort, no UI feedback for the prefetch itself.
@@ -539,6 +750,9 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    // A device upload has no source URL — clear any URL carried over from a
+    // prior search-picked photo.
+    setDraft((d) => ({ ...d, photoSourceUrl: null }));
     // Warn before kicking off the ~176MB model fetch on a metered connection.
     if (isMeteredConnection() && !hasDownloadedModel()) {
       setMeteredPrompt({ file });
@@ -570,7 +784,12 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
   };
 
   const handleUseColor = () => {
-    setDraft((d) => ({ ...d, photoDataUrl: null, photoSource: null }));
+    setDraft((d) => ({
+      ...d,
+      photoDataUrl: null,
+      photoSource: null,
+      photoSourceUrl: null,
+    }));
     setError(null);
   };
 
@@ -620,6 +839,84 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
   };
 
   const cancelThreshold = () => setThreshold(null);
+
+  // ---------- Search sub-mode ----------
+  const openSearch = () => {
+    const prefill = [draft.brand, draft.name]
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .join(' ');
+    setSearch({ query: prefill, status: 'idle', results: [], error: null });
+  };
+
+  const closeSearch = () => setSearch(null);
+
+  const updateSearchQuery = (query: string) =>
+    setSearch((s) => (s ? { ...s, query } : null));
+
+  const runSearch = async () => {
+    if (!search) return;
+    const query = search.query.trim();
+    if (query.length === 0) return;
+    setSearch({ query, status: 'searching', results: [], error: null });
+    try {
+      const outcome = await searchPedalImages(query);
+      setSearch((current) => {
+        // Bail if the user closed/changed the search since we kicked off.
+        if (current?.query !== query) return current;
+        return outcomeToState(query, outcome);
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setSearch((current) =>
+        current
+          ? {
+              ...current,
+              status: 'error',
+              error: err instanceof Error ? err.message : String(err),
+            }
+          : null,
+      );
+    }
+  };
+
+  const pickResult = async (result: BraveImageResult) => {
+    setSearch((s) =>
+      s ? { ...s, status: 'fetching', pickedUrl: result.imageUrl } : null,
+    );
+    const blob = await fetchImageAsBlob(result.imageUrl).catch(() => null);
+    if (!blob) {
+      setSearch((s) =>
+        s
+          ? {
+              ...s,
+              status: 'ok',
+              error:
+                "Couldn't download that image — try a different result, or upload one yourself.",
+            }
+          : null,
+      );
+      return;
+    }
+    // Close the search panel and stamp the source URL on the draft. The
+    // existing bg-removal pipeline will land the dataURL on draft.photoDataUrl.
+    setSearch(null);
+    setDraft((d) => ({ ...d, photoSourceUrl: result.sourceUrl }));
+    void processFile(blob, true).then(() => markModelDownloaded());
+  };
+
+  // ---------- Web search ----------
+  if (search) {
+    return (
+      <SearchView
+        search={search}
+        onQueryChange={updateSearchQuery}
+        onSubmit={() => void runSearch()}
+        onPick={(r) => void pickResult(r)}
+        onCancel={closeSearch}
+      />
+    );
+  }
 
   // ---------- Threshold tuning ----------
   if (threshold) {
@@ -692,7 +989,28 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
             />
           </div>
         </div>
+        {draft.photoSourceUrl ? (
+          <div className={styles.photoSource}>
+            <span className={styles.photoSourceLabel}>
+              Where this came from
+            </span>
+            <a
+              className={styles.photoSourceLink}
+              href={draft.photoSourceUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              title={draft.photoSourceUrl}
+            >
+              {hostnameOf(draft.photoSourceUrl)}
+            </a>
+          </div>
+        ) : null}
         <div className={styles.photoActions}>
+          {searchEnabled ? (
+            <Button variant="secondary" onClick={openSearch}>
+              <i className="ti ti-photo-search" aria-hidden /> Search again
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={handleReprocess}>
             <i className="ti ti-refresh" aria-hidden /> Re-process
           </Button>
@@ -815,6 +1133,16 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
           Background removed automatically
         </span>
       </button>
+
+      {searchEnabled ? (
+        <button type="button" className={styles.uploadCta} onClick={openSearch}>
+          <i className="ti ti-photo-search" aria-hidden />
+          <span className={styles.uploadCtaTitle}>Search the web</span>
+          <span className={styles.uploadCtaSub}>
+            Find a product photo and we&apos;ll remove the background
+          </span>
+        </button>
+      ) : null}
 
       {error ? (
         <div className={styles.errorBox} role="alert">

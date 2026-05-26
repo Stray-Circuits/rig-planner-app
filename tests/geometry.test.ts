@@ -18,6 +18,7 @@ const pedal: Pedal = {
   widthIn: 3,
   depthIn: 5,
   imagePath: null,
+  imageSourceUrl: null,
   jackSides: {
     top: true,
     bottom: false,

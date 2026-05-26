@@ -17,6 +17,7 @@ interface PedalRow {
   width_in: number;
   depth_in: number;
   image_path: string | null;
+  image_source_url: string | null;
   jack_top: number;
   jack_bottom: number;
   jack_left: number;
@@ -114,6 +115,7 @@ function pedalFromRow(row: PedalRow, ports: Port[]): Pedal {
     widthIn: row.width_in,
     depthIn: row.depth_in,
     imagePath: row.image_path,
+    imageSourceUrl: row.image_source_url ?? null,
     jackSides,
     powerSide: row.power_side ? assertSide(row.power_side) : null,
     ports,
@@ -143,6 +145,7 @@ export interface CreatePedalInput {
   widthIn: number;
   depthIn: number;
   imagePath?: string | null;
+  imageSourceUrl?: string | null;
   jackSides: JackSides;
   powerSide?: Side | null;
   ports: Omit<Port, 'id' | 'pedalId'>[];
@@ -194,11 +197,11 @@ export async function createPedal(input: CreatePedalInput): Promise<Pedal> {
   const db = await getDb();
   await db.execute(
     `INSERT INTO pedals (
-      id, brand, name, width_in, depth_in, image_path,
+      id, brand, name, width_in, depth_in, image_path, image_source_url,
       jack_top, jack_bottom, jack_left, jack_right,
       midi_top, midi_bottom, midi_left, midi_right,
       power_side
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.brand,
@@ -206,6 +209,7 @@ export async function createPedal(input: CreatePedalInput): Promise<Pedal> {
       input.widthIn,
       input.depthIn,
       input.imagePath ?? null,
+      input.imageSourceUrl ?? null,
       input.jackSides.top ? 1 : 0,
       input.jackSides.bottom ? 1 : 0,
       input.jackSides.left ? 1 : 0,
@@ -259,7 +263,7 @@ export async function updatePedal(
 
   await db.execute(
     `UPDATE pedals SET
-       brand = ?, name = ?, width_in = ?, depth_in = ?, image_path = ?,
+       brand = ?, name = ?, width_in = ?, depth_in = ?, image_path = ?, image_source_url = ?,
        jack_top = ?, jack_bottom = ?, jack_left = ?, jack_right = ?,
        midi_top = ?, midi_bottom = ?, midi_left = ?, midi_right = ?,
        power_side = ?
@@ -270,6 +274,7 @@ export async function updatePedal(
       input.widthIn,
       input.depthIn,
       input.imagePath ?? null,
+      input.imageSourceUrl ?? null,
       input.jackSides.top ? 1 : 0,
       input.jackSides.bottom ? 1 : 0,
       input.jackSides.left ? 1 : 0,

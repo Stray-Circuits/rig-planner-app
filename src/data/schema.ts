@@ -76,6 +76,13 @@ export interface Pedal {
   widthIn: number;
   depthIn: number;
   imagePath: string | null;
+  /**
+   * Where the photo came from when it was fetched from the web (Brave Search
+   * → user-picked thumbnail). Null for color placeholders and for photos the
+   * user uploaded from their device. Surfaced as "Where this came from" on
+   * Edit Pedal so users have a DMCA path back to the source.
+   */
+  imageSourceUrl: string | null;
   jackSides: JackSides;
   powerSide: Side | null;
   ports: Port[];

@@ -99,4 +99,9 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 2,
+    description: 'pedals: track source URL for searched/fetched photos',
+    statements: [`ALTER TABLE pedals ADD COLUMN image_source_url TEXT`],
+  },
 ];

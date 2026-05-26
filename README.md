@@ -41,6 +41,15 @@ Pedalboard planner with signal-path overlay. Desktop + mobile (iOS / Android) vi
 | `pnpm test:run` | Vitest one-shot |
 | `pnpm typecheck` | TypeScript strict check |
 
+## Build-time environment
+
+Optional env vars baked into the bundle at build time. Set them in your local
+`.env.local` (gitignored) or CI secrets before `pnpm build` / `pnpm tauri:build`.
+
+| Var | What it does |
+| --- | --- |
+| `VITE_BRAVE_SEARCH_API_KEY` | Enables the "Search the web" affordance on the Add Pedal wizard. When unset, the button is hidden and search is silently disabled. Get a free key at search.brave.com/app/api (2,000 queries/month). Self-builders need their own key; never enable billing on the key, since it ships inside the binary. See `proposals/pedal-photo-search.md` for the full design + key-handling rationale. |
+
 ## Layout
 
 ```

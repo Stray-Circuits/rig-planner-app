@@ -12,6 +12,7 @@ function fakePedal(id: string, widthIn: number, depthIn: number): Pedal {
     widthIn,
     depthIn,
     imagePath: null,
+    imageSourceUrl: null,
     jackSides: {
       top: true,
       bottom: false,

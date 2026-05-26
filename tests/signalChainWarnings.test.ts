@@ -27,6 +27,7 @@ function mkPedal(): Pedal {
     widthIn: 3,
     depthIn: 5,
     imagePath: null,
+    imageSourceUrl: null,
     jackSides: blankJacks,
     powerSide: 'top',
     ports: [
