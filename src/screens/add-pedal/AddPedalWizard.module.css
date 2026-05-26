@@ -295,6 +295,11 @@
   white-space: nowrap;
 }
 
+.searchShowMore {
+  display: flex;
+  justify-content: center;
+}
+
 .searchResultOverlay {
   position: absolute;
   inset: 0;

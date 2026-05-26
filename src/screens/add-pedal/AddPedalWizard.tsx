@@ -465,10 +465,20 @@ interface ImageStepProps extends StepProps {
  * user picked a result that failed to download); `error` covers
  * key/quota/network problems we couldn't render results for.
  */
+/**
+ * How many result thumbnails to render at once. We always pull the API max
+ * (100) in a single query and append SEARCH_PAGE_SIZE more on each "Show
+ * more" tap — burning one quota token per search no matter how deep the
+ * user scrolls.
+ */
+const SEARCH_PAGE_SIZE = 20;
+
 interface SearchState {
   query: string;
   status: 'idle' | 'searching' | 'ok' | 'error' | 'fetching';
   results: BraveImageResult[];
+  /** How many of `results` to render. Grows by SEARCH_PAGE_SIZE on "Show more". */
+  visibleCount: number;
   error: string | null;
   /** Set while fetching the user-picked image so we can show a spinner over it. */
   pickedUrl?: string;
@@ -478,10 +488,11 @@ function outcomeToState(
   query: string,
   outcome: BraveSearchOutcome,
 ): SearchState {
+  const base = { query, visibleCount: SEARCH_PAGE_SIZE };
   switch (outcome.kind) {
     case 'ok':
       return {
-        query,
+        ...base,
         status: 'ok',
         results: outcome.results,
         error:
@@ -491,7 +502,7 @@ function outcomeToState(
       };
     case 'rate_limited':
       return {
-        query,
+        ...base,
         status: 'error',
         results: [],
         error:
@@ -499,7 +510,7 @@ function outcomeToState(
       };
     case 'unauthorized':
       return {
-        query,
+        ...base,
         status: 'error',
         results: [],
         error:
@@ -507,14 +518,14 @@ function outcomeToState(
       };
     case 'server_error':
       return {
-        query,
+        ...base,
         status: 'error',
         results: [],
         error: `Search failed (status ${outcome.status}). Try again later.`,
       };
     case 'network_error':
       return {
-        query,
+        ...base,
         status: 'error',
         results: [],
         error:
@@ -522,13 +533,13 @@ function outcomeToState(
       };
     case 'disabled':
       return {
-        query,
+        ...base,
         status: 'error',
         results: [],
         error: 'Search is disabled in this build.',
       };
     case 'empty_query':
-      return { query, status: 'idle', results: [], error: null };
+      return { ...base, status: 'idle', results: [], error: null };
   }
 }
 
@@ -537,6 +548,7 @@ interface SearchViewProps {
   onQueryChange: (q: string) => void;
   onSubmit: () => void;
   onPick: (result: BraveImageResult) => void;
+  onShowMore: () => void;
   onCancel: () => void;
 }
 
@@ -545,9 +557,12 @@ function SearchView({
   onQueryChange,
   onSubmit,
   onPick,
+  onShowMore,
   onCancel,
 }: SearchViewProps) {
   const busy = search.status === 'searching' || search.status === 'fetching';
+  const shownResults = search.results.slice(0, search.visibleCount);
+  const remaining = search.results.length - shownResults.length;
   return (
     <div className={styles.imageStep}>
       <form
@@ -591,9 +606,9 @@ function SearchView({
         </div>
       ) : null}
 
-      {search.results.length > 0 ? (
+      {shownResults.length > 0 ? (
         <ul className={styles.searchResults} aria-label="Search results">
-          {search.results.map((r) => {
+          {shownResults.map((r) => {
             const isPicking =
               search.status === 'fetching' && search.pickedUrl === r.imageUrl;
             return (
@@ -625,6 +640,18 @@ function SearchView({
             );
           })}
         </ul>
+      ) : null}
+
+      {remaining > 0 ? (
+        <div className={styles.searchShowMore}>
+          <Button variant="secondary" onClick={onShowMore} disabled={busy}>
+            Show more ({remaining} left)
+          </Button>
+        </div>
+      ) : search.results.length > SEARCH_PAGE_SIZE ? (
+        <p className={styles.helpMuted}>
+          You&apos;ve seen all {search.results.length} results.
+        </p>
       ) : null}
 
       <p className={styles.helpMuted}>
@@ -852,7 +879,13 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
       .join(' ');
-    setSearch({ query: prefill, status: 'idle', results: [], error: null });
+    setSearch({
+      query: prefill,
+      status: 'idle',
+      results: [],
+      visibleCount: SEARCH_PAGE_SIZE,
+      error: null,
+    });
   };
 
   const closeSearch = () => setSearch(null);
@@ -860,11 +893,30 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
   const updateSearchQuery = (query: string) =>
     setSearch((s) => (s ? { ...s, query } : null));
 
+  const showMoreSearchResults = () =>
+    setSearch((s) =>
+      s
+        ? {
+            ...s,
+            visibleCount: Math.min(
+              s.results.length,
+              s.visibleCount + SEARCH_PAGE_SIZE,
+            ),
+          }
+        : null,
+    );
+
   const runSearch = async () => {
     if (!search) return;
     const query = search.query.trim();
     if (query.length === 0) return;
-    setSearch({ query, status: 'searching', results: [], error: null });
+    setSearch({
+      query,
+      status: 'searching',
+      results: [],
+      visibleCount: SEARCH_PAGE_SIZE,
+      error: null,
+    });
     try {
       const outcome = await searchPedalImages(query);
       setSearch((current) => {
@@ -919,6 +971,7 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
         onQueryChange={updateSearchQuery}
         onSubmit={() => void runSearch()}
         onPick={(r) => void pickResult(r)}
+        onShowMore={showMoreSearchResults}
         onCancel={closeSearch}
       />
     );

@@ -19,7 +19,9 @@
  */
 
 const ENDPOINT = 'https://api.search.brave.com/res/v1/images/search';
-const DEFAULT_COUNT = 20;
+// Brave bills per query, not per result, so we always ask for the API max
+// (100) and let the UI paginate client-side. One token, 100 candidates.
+const DEFAULT_COUNT = 100;
 
 /**
  * Pick the right `fetch` for the current environment. Under Tauri, lazy-load
