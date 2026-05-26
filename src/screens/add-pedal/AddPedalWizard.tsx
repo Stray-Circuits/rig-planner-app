@@ -573,6 +573,12 @@ function SearchView({
         </Button>
       </form>
 
+      <p className={styles.helpMuted}>
+        Pick a top-down shot — pedal flat, knobs facing up, brand right-side up.
+        Angled or 3/4-view shots will sit crooked on your board (we don&apos;t
+        rotate the photo for you).
+      </p>
+
       {search.error ? (
         <div className={styles.errorBox} role="alert">
           <i className="ti ti-alert-triangle" aria-hidden /> {search.error}
