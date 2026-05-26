@@ -1122,6 +1122,16 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
         onChange={handleFile}
         className={styles.hiddenFileInput}
       />
+      {searchEnabled ? (
+        <button type="button" className={styles.uploadCta} onClick={openSearch}>
+          <i className="ti ti-photo-search" aria-hidden />
+          <span className={styles.uploadCtaTitle}>Search the web</span>
+          <span className={styles.uploadCtaSub}>
+            Find a product photo and we&apos;ll remove the background
+          </span>
+        </button>
+      ) : null}
+
       <button
         type="button"
         className={styles.uploadCta}
@@ -1133,16 +1143,6 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
           Background removed automatically
         </span>
       </button>
-
-      {searchEnabled ? (
-        <button type="button" className={styles.uploadCta} onClick={openSearch}>
-          <i className="ti ti-photo-search" aria-hidden />
-          <span className={styles.uploadCtaTitle}>Search the web</span>
-          <span className={styles.uploadCtaSub}>
-            Find a product photo and we&apos;ll remove the background
-          </span>
-        </button>
-      ) : null}
 
       {error ? (
         <div className={styles.errorBox} role="alert">
