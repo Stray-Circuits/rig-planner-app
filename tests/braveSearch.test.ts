@@ -22,12 +22,16 @@ const VALID_RESPONSE = {
       thumbnail: {
         src: 'https://imgs.search.brave.com/abc/thumb.jpg',
         original: 'https://imgs.search.brave.com/abc/orig.jpg',
+        width: 500,
+        height: 667,
       },
+      // Pixel dims live UNDER properties, not at the top level — caught
+      // live against the real API. See properties.width / properties.height.
       properties: {
         url: 'https://reverb.com/images/ds1-full.jpg',
+        width: 1200,
+        height: 900,
       },
-      width: 1200,
-      height: 900,
     },
     {
       type: 'image_result',
@@ -106,13 +110,17 @@ describe('searchPedalImages', () => {
   });
 
   it('returns disabled when no API key is configured', async () => {
-    const fetchImpl = fetchReturning(jsonResponse({ results: [] }));
-    // We explicitly want to test "no apiKey supplied AND no env var set."
-    // The test runner doesn't bake the key in, so omitting it falls through
-    // to readBraveApiKey() returning undefined.
-    const outcome = await searchPedalImages('foo', { fetchImpl });
-    expect(outcome).toEqual({ kind: 'disabled' });
-    expect(fetchImpl).not.toHaveBeenCalled();
+    // Stub the env so this test is deterministic whether or not the
+    // contributor has a real key in their .env.local.
+    vi.stubEnv('VITE_BRAVE_SEARCH_API_KEY', '');
+    try {
+      const fetchImpl = fetchReturning(jsonResponse({ results: [] }));
+      const outcome = await searchPedalImages('foo', { fetchImpl });
+      expect(outcome).toEqual({ kind: 'disabled' });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('returns empty_query without hitting the API for blank input', async () => {

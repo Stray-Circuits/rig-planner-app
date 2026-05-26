@@ -9,6 +9,14 @@
     "sql:allow-load",
     "sql:allow-execute",
     "sql:allow-select",
-    "sql:allow-close"
+    "sql:allow-close",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.search.brave.com/*" },
+        { "url": "https://*/*" },
+        { "url": "http://*/*" }
+      ]
+    }
   ]
 }

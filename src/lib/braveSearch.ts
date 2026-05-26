@@ -10,16 +10,37 @@
  * without `.env.local`) `searchPedalImages` returns `{ kind: 'disabled' }`
  * so callers can hide the affordance gracefully instead of erroring.
  *
- * Transport note: this module uses the platform's `fetch`. Brave's API does
- * not advertise CORS headers, so direct calls from a webview will fail with
- * a network error in both browser-dev and the default Tauri webview. The
- * planned long-term fix is to route through the Tauri HTTP plugin from the
- * Rust side (which bypasses CORS); until that's wired, the UI surfaces the
- * `network_error` outcome with a clear message.
+ * Transport: under Tauri, requests are routed through `@tauri-apps/plugin-http`
+ * which proxies through Rust and bypasses CORS — required because Brave's API
+ * doesn't advertise CORS headers and most image hosts don't either. In plain
+ * browser dev (`pnpm dev`) we fall back to the platform `fetch`, which will
+ * fail with a CORS-shaped network error for most URLs; the UI surfaces that
+ * cleanly so the user knows search isn't available outside the Tauri build.
  */
 
 const ENDPOINT = 'https://api.search.brave.com/res/v1/images/search';
 const DEFAULT_COUNT = 20;
+
+/**
+ * Pick the right `fetch` for the current environment. Under Tauri, lazy-load
+ * the HTTP plugin so the import isn't pulled into the bundle for browser
+ * builds that can't use it. The result is cached because the dynamic import
+ * is cheap on hits but isn't free, and we'll call this on every search +
+ * image fetch.
+ */
+let cachedTauriFetch: typeof fetch | null = null;
+
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+async function platformFetch(): Promise<typeof fetch> {
+  if (!isTauri()) return fetch.bind(globalThis);
+  if (cachedTauriFetch) return cachedTauriFetch;
+  const mod = await import('@tauri-apps/plugin-http');
+  cachedTauriFetch = mod.fetch;
+  return cachedTauriFetch;
+}
 
 export interface BraveImageResult {
   /** Page title from Brave's index — useful as accessible alt text. */
@@ -94,6 +115,8 @@ interface RawThumbnail {
 
 interface RawProperties {
   url?: unknown;
+  width?: unknown;
+  height?: unknown;
 }
 
 interface RawResult {
@@ -102,8 +125,6 @@ interface RawResult {
   thumbnail?: RawThumbnail | null;
   properties?: RawProperties | null;
   source?: unknown;
-  width?: unknown;
-  height?: unknown;
 }
 
 interface RawResponse {
@@ -129,7 +150,9 @@ function asPositiveInt(value: unknown): number | null {
 function parseResult(raw: RawResult): BraveImageResult | null {
   // Brave puts the full image at `properties.url` and the brave-cached
   // thumbnail at `thumbnail.src`. We need both. The page URL is the
-  // top-level `url` — that's what we save as `imageSourceUrl`.
+  // top-level `url` — that's what we save as `imageSourceUrl`. Full-image
+  // pixel dimensions live under `properties.width/height`, NOT at the top
+  // level (that mistake bit us once already — see live response fixture).
   const imageUrl = asString(raw.properties?.url);
   const thumbnailUrl =
     asString(raw.thumbnail?.src) ?? asString(raw.thumbnail?.original);
@@ -140,8 +163,8 @@ function parseResult(raw: RawResult): BraveImageResult | null {
     imageUrl,
     thumbnailUrl,
     sourceUrl,
-    width: asPositiveInt(raw.width),
-    height: asPositiveInt(raw.height),
+    width: asPositiveInt(raw.properties?.width),
+    height: asPositiveInt(raw.properties?.height),
   };
 }
 
@@ -162,7 +185,7 @@ export async function searchPedalImages(
   if (apiKey === undefined) return { kind: 'disabled' };
 
   const count = options.count ?? DEFAULT_COUNT;
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl ?? (await platformFetch());
   const url = `${ENDPOINT}?q=${encodeURIComponent(trimmed)}&count=${count}&safesearch=strict`;
 
   let response: Response;
@@ -222,7 +245,7 @@ export async function fetchImageAsBlob(
   url: string,
   options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
 ): Promise<Blob | null> {
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl ?? (await platformFetch());
   try {
     const response = await fetchImpl(url, {
       ...(options.signal ? { signal: options.signal } : {}),

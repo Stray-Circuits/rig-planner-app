@@ -33,6 +33,7 @@
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
     "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-http": "^2.5.9",
     "@tauri-apps/plugin-sql": "^2.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
