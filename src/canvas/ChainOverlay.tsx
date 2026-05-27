@@ -146,10 +146,12 @@ function computeLeaderLanes(
 /**
  * Two segments count as living in the same lane when their axis values
  * are within this many inches AND their perpendicular-range overlaps.
- * Picked so cables that visually crowd each other (within ~3x cable
- * stroke width at default zoom) get pulled apart.
+ * Picked so cables that visually crowd each other (within ~4x cable
+ * stroke width at default zoom) get pulled apart. Wider than the
+ * route-time LANE_TOL so render-time offset catches what the router
+ * couldn't separate.
  */
-const LANE_RENDER_TOL_IN = 0.25;
+const LANE_RENDER_TOL_IN = 0.35;
 /**
  * Perpendicular nudge per cable slot. With a 2-cable group, this is the
  * full gap between the two cables (~10px at default zoom 50 px/in,

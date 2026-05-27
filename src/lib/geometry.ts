@@ -429,11 +429,11 @@ export function routeCablePath(
   }
 
   const cand3 = generateRouteCandidates(from, to, obstacles);
-  const best3 = shortestClean(cand3, obstacles, options);
+  const best3 = shortestClean(cand3, obstacles, options, from.side, to.side);
   if (best3) return dedupeColinear(best3);
 
   const cand5 = generate5SegCandidates(from, to, obstacles);
-  const best5 = shortestClean(cand5, obstacles, options);
+  const best5 = shortestClean(cand5, obstacles, options, from.side, to.side);
   if (best5) return dedupeColinear(best5);
 
   return dedupeColinear(
@@ -516,16 +516,61 @@ function pathScore(
   return score;
 }
 
+/**
+ * Whether the path U-turns at either leader endpoint. The path's first
+ * segment must not reverse direction relative to the from-port's outward
+ * leader (which pointed AWAY from the pedal), and the path's last segment
+ * must not reverse direction relative to the to-port's inward leader
+ * (which points INTO the pedal). Perpendicular turns are fine — that's
+ * the normal 90° bend at a leader endpoint. Only 180° reversals get
+ * flagged.
+ *
+ * Catches cases the per-generator constraints miss — notably the
+ * mixed-orientation 3-segment L-shapes, where one of the two L-shapes
+ * inherently U-turns when the destination is on the "wrong side" of the
+ * source's leader axis.
+ */
+function hasEndpointUTurn(
+  path: readonly { xIn: number; yIn: number }[],
+  fromSide: Side,
+  toSide: Side,
+): boolean {
+  if (path.length < 2) return false;
+  const fromOut = sideOutwardUnit(fromSide);
+  const toOut = sideOutwardUnit(toSide);
+  const p0 = path[0]!;
+  const p1 = path[1]!;
+  // First inner segment vs leader-1 (which went in +fromOut). For no
+  // reversal: first-segment direction · fromOut ≥ 0.
+  const d1x = p1.xIn - p0.xIn;
+  const d1y = p1.yIn - p0.yIn;
+  if (d1x * fromOut.x + d1y * fromOut.y < -0.001) return true;
+  const n = path.length;
+  const pNm2 = path[n - 2]!;
+  const pNm1 = path[n - 1]!;
+  // Last inner segment vs leader-2 (which goes in -toOut, inward). For
+  // no reversal: last-segment direction · (-toOut) ≥ 0, equivalently
+  // direction · toOut ≤ 0.
+  const dNx = pNm1.xIn - pNm2.xIn;
+  const dNy = pNm1.yIn - pNm2.yIn;
+  if (dNx * toOut.x + dNy * toOut.y > 0.001) return true;
+  return false;
+}
+
 /** Return the cheapest candidate that doesn't hit any obstacle, or null. */
 function shortestClean(
   candidates: readonly { xIn: number; yIn: number }[][],
   obstacles: readonly ObstacleRect[],
   options: RouteOptions = {},
+  fromSide?: Side,
+  toSide?: Side,
 ): { xIn: number; yIn: number }[] | null {
   let best: { xIn: number; yIn: number }[] | null = null;
   let bestScore = Infinity;
   for (const path of candidates) {
     if (pathHitsAny(path, obstacles)) continue;
+    if (fromSide && toSide && hasEndpointUTurn(path, fromSide, toSide))
+      continue;
     const score = pathScore(path, options);
     if (score < bestScore) {
       best = path;
