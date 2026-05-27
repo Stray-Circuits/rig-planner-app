@@ -323,14 +323,32 @@
 }
 
 .pedalPhotoPreview {
-  width: 120px;
-  height: 120px;
+  /* Mobile-first: fill the wrapper width so the threshold-tune preview
+     and post-bg-removal preview are actually usable on a phone. The
+     wrapping .pedalPreview adds 24px padding on each side, so this comes
+     out to ~viewport - 88px (body padding + wrapper padding) on portrait
+     mobile. Square via aspect-ratio. */
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1 / 1;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   padding: 8px;
+}
+
+@media (min-width: 720px) {
+  .pedalPhotoPreview {
+    /* Desktop has plenty of horizontal room and the wizard is capped at
+       480px wide; step DOWN to a fixed size so the preview doesn't
+       dominate. */
+    width: 240px;
+    max-width: 240px;
+    aspect-ratio: auto;
+    height: 240px;
+  }
 }
 
 .pedalPhoto {
