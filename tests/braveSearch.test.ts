@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   fetchImageAsBlob,
   searchPedalImages,
+  searchPedalWeb,
   type BraveSearchOutcome,
 } from '../src/lib/braveSearch';
 
@@ -327,6 +328,88 @@ describe('fetchImageAsBlob', () => {
     const fetchImpl = fetchThrowing(new DOMException('Aborted', 'AbortError'));
     await expect(
       fetchImageAsBlob('https://example.com/x.jpg', { fetchImpl }),
+    ).rejects.toThrow('Aborted');
+  });
+});
+
+describe('searchPedalWeb', () => {
+  const WEB_RESPONSE = {
+    web: {
+      results: [
+        {
+          title: 'Boss DS-1 — Sweetwater',
+          url: 'https://www.sweetwater.com/store/detail/DS1',
+          description: 'Classic distortion pedal',
+          meta_url: { hostname: 'www.sweetwater.com' },
+        },
+        {
+          title: 'Boss DS-1 listing on Reverb',
+          url: 'https://reverb.com/p/boss-ds-1',
+          description: 'Used pedals starting at $40',
+          meta_url: { hostname: 'reverb.com' },
+        },
+        {
+          // No URL — must be dropped.
+          title: 'orphan',
+          meta_url: { hostname: 'example.com' },
+        },
+      ],
+    },
+  };
+
+  it('parses web results and drops rows with no URL', async () => {
+    const fetchImpl = fetchReturning(jsonResponse(WEB_RESPONSE));
+    const outcome = await searchPedalWeb('Boss DS-1 dimensions', {
+      apiKey: FIXTURE_KEY,
+      fetchImpl,
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.results).toHaveLength(2);
+    expect(outcome.results[0]?.hostname).toBe('www.sweetwater.com');
+    expect(outcome.results[1]?.url).toBe('https://reverb.com/p/boss-ds-1');
+  });
+
+  it('hits the web endpoint (not the image endpoint)', async () => {
+    const fetchImpl = fetchReturning(jsonResponse(WEB_RESPONSE));
+    await searchPedalWeb('anything', { apiKey: FIXTURE_KEY, fetchImpl });
+    const { url } = firstCall(fetchImpl);
+    expect(url).toContain('/res/v1/web/search');
+  });
+
+  it('returns disabled when no API key is configured', async () => {
+    vi.stubEnv('VITE_BRAVE_SEARCH_API_KEY', '');
+    try {
+      const fetchImpl = vi.fn();
+      const outcome = await searchPedalWeb('q', { fetchImpl });
+      expect(outcome).toEqual({ kind: 'disabled' });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('short-circuits on empty query', async () => {
+    const outcome = await searchPedalWeb('   ', {
+      apiKey: FIXTURE_KEY,
+      fetchImpl: vi.fn(),
+    });
+    expect(outcome.kind).toBe('empty_query');
+  });
+
+  it('maps 429 → rate_limited', async () => {
+    const fetchImpl = fetchReturning(jsonResponse({}, 429));
+    const outcome = await searchPedalWeb('q', {
+      apiKey: FIXTURE_KEY,
+      fetchImpl,
+    });
+    expect(outcome.kind).toBe('rate_limited');
+  });
+
+  it('re-throws AbortError', async () => {
+    const fetchImpl = fetchThrowing(new DOMException('Aborted', 'AbortError'));
+    await expect(
+      searchPedalWeb('q', { apiKey: FIXTURE_KEY, fetchImpl }),
     ).rejects.toThrow('Aborted');
   });
 });

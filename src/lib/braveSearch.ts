@@ -18,10 +18,14 @@
  * cleanly so the user knows search isn't available outside the Tauri build.
  */
 
-const ENDPOINT = 'https://api.search.brave.com/res/v1/images/search';
+const IMAGE_ENDPOINT = 'https://api.search.brave.com/res/v1/images/search';
+const WEB_ENDPOINT = 'https://api.search.brave.com/res/v1/web/search';
 // Brave bills per query, not per result, so we always ask for the API max
 // (100) and let the UI paginate client-side. One token, 100 candidates.
 const DEFAULT_COUNT = 100;
+// Web search results are used for follow-up spec scraping; we only need
+// the top handful, so don't burn extra response bandwidth.
+const DEFAULT_WEB_COUNT = 10;
 
 /**
  * Pick the right `fetch` for the current environment. Under Tauri, lazy-load
@@ -188,7 +192,7 @@ export async function searchPedalImages(
 
   const count = options.count ?? DEFAULT_COUNT;
   const fetchImpl = options.fetchImpl ?? (await platformFetch());
-  const url = `${ENDPOINT}?q=${encodeURIComponent(trimmed)}&count=${count}&safesearch=strict`;
+  const url = `${IMAGE_ENDPOINT}?q=${encodeURIComponent(trimmed)}&count=${count}&safesearch=strict`;
 
   let response: Response;
   try {
@@ -368,4 +372,128 @@ export async function fetchImageAsBlob(
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
     return null;
   }
+}
+
+// ---------- Web search ----------
+//
+// Distinct from the image search above. Used by the pedal metadata pipeline
+// to follow up an image pick with a targeted spec lookup (e.g.
+// "Boss DS-1 dimensions"), since most images come from retailer / forum
+// pages whose source page has no usable specs but where a separate web
+// search will surface a manufacturer or spec-rich retailer page that does.
+
+export interface BraveWebResult {
+  /** Page title from Brave's index. */
+  title: string;
+  /** Page URL — feed to `extractPedalMetadata` to scrape. */
+  url: string;
+  /** Snippet from the SERP — handy for debugging, not currently displayed. */
+  description: string;
+  /** Bare hostname (`reverb.com`, `www.sweetwater.com`) when Brave reports it. */
+  hostname: string | null;
+}
+
+export type BraveWebOutcome =
+  | { kind: 'ok'; results: BraveWebResult[] }
+  | { kind: 'disabled' }
+  | { kind: 'empty_query' }
+  | { kind: 'rate_limited' }
+  | { kind: 'unauthorized' }
+  | { kind: 'server_error'; status: number }
+  | { kind: 'network_error'; message: string };
+
+export interface SearchPedalWebOptions {
+  signal?: AbortSignal;
+  /** Max results to ask Brave for. Defaults to a small number — see DEFAULT_WEB_COUNT. */
+  count?: number;
+  fetchImpl?: typeof fetch;
+  apiKey?: string;
+}
+
+interface RawWebMetaUrl {
+  hostname?: unknown;
+}
+
+interface RawWebResult {
+  title?: unknown;
+  url?: unknown;
+  description?: unknown;
+  meta_url?: RawWebMetaUrl | null;
+}
+
+interface RawWebResponse {
+  web?: { results?: RawWebResult[] } | null;
+}
+
+function parseWebResult(raw: RawWebResult): BraveWebResult | null {
+  const url = asString(raw.url);
+  if (!url) return null;
+  return {
+    title: asString(raw.title) ?? '',
+    url,
+    description: asString(raw.description) ?? '',
+    hostname: asString(raw.meta_url?.hostname),
+  };
+}
+
+/**
+ * Hit Brave's Web Search API. Same auth + failure-mode shape as
+ * `searchPedalImages`. Always resolves; `AbortError` is re-thrown.
+ */
+export async function searchPedalWeb(
+  query: string,
+  options: SearchPedalWebOptions = {},
+): Promise<BraveWebOutcome> {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) return { kind: 'empty_query' };
+
+  const apiKey = options.apiKey ?? readBraveApiKey();
+  if (apiKey === undefined) return { kind: 'disabled' };
+
+  const count = options.count ?? DEFAULT_WEB_COUNT;
+  const fetchImpl = options.fetchImpl ?? (await platformFetch());
+  const url = `${WEB_ENDPOINT}?q=${encodeURIComponent(trimmed)}&count=${count}&safesearch=strict`;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Accept-Encoding': 'gzip',
+        'X-Subscription-Token': apiKey,
+      },
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    return {
+      kind: 'network_error',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  if (response.status === 429) return { kind: 'rate_limited' };
+  if (response.status === 401 || response.status === 403) {
+    return { kind: 'unauthorized' };
+  }
+  if (!response.ok) return { kind: 'server_error', status: response.status };
+
+  let parsed: RawWebResponse;
+  try {
+    parsed = (await response.json()) as RawWebResponse;
+  } catch (err) {
+    return {
+      kind: 'server_error',
+      status: response.status,
+      ...{ message: err instanceof Error ? err.message : String(err) },
+    };
+  }
+
+  const results: BraveWebResult[] = [];
+  for (const raw of parsed.web?.results ?? []) {
+    const mapped = parseWebResult(raw);
+    if (mapped) results.push(mapped);
+  }
+  return { kind: 'ok', results };
 }

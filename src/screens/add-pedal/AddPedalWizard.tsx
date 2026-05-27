@@ -34,6 +34,11 @@ import {
   type BraveImageResult,
   type BraveSearchOutcome,
 } from '../../lib/braveSearch';
+import {
+  extractPedalMetadata,
+  findPedalDimensionsByQuery,
+  type ExtractedPedalMetadata,
+} from '../../lib/pedalMetadata';
 import { Button, TextField, WizardShell } from '../../ui';
 import styles from './AddPedalWizard.module.css';
 
@@ -678,6 +683,46 @@ function hostnameOf(url: string): string {
   }
 }
 
+/**
+ * Apply two metadata sources to the draft, with the first source winning
+ * per-field. Both promises run in parallel; only the writes are sequenced.
+ * Each apply uses an "only fill empty" guard so the user's typed values
+ * take precedence over everything, and the second source can only fill
+ * fields the first source left null.
+ */
+async function applyMetadataInOrder(
+  first: Promise<ExtractedPedalMetadata | null>,
+  second: Promise<ExtractedPedalMetadata | null>,
+  setDraft: (
+    next: WizardDraft | ((current: WizardDraft) => WizardDraft),
+  ) => void,
+): Promise<void> {
+  const apply = (m: ExtractedPedalMetadata | null): void => {
+    if (!m) return;
+    setDraft((d) => ({
+      ...d,
+      ...(d.brand.trim() === '' && m.brand ? { brand: m.brand } : {}),
+      ...(d.name.trim() === '' && m.name ? { name: m.name } : {}),
+      ...(d.widthIn.trim() === '' && m.widthIn !== null
+        ? { widthIn: String(m.widthIn) }
+        : {}),
+      ...(d.depthIn.trim() === '' && m.depthIn !== null
+        ? { depthIn: String(m.depthIn) }
+        : {}),
+    }));
+  };
+  try {
+    apply(await first);
+  } catch {
+    // Best effort — both branches are purely additive.
+  }
+  try {
+    apply(await second);
+  } catch {
+    // Same.
+  }
+}
+
 function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
   const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -958,9 +1003,32 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
     }
     // Close the search panel and stamp the source URL on the draft. The
     // existing bg-removal pipeline will land the dataURL on draft.photoDataUrl.
+    // Capture the query NOW — `setSearch(null)` below clears the state we'd
+    // otherwise read from when firing the dimension search.
+    const query = search?.query.trim() ?? '';
     setSearch(null);
     setDraft((d) => ({ ...d, photoSourceUrl: result.sourceUrl }));
     void processFile(blob, true).then(() => markModelDownloaded());
+    // Two metadata branches, fired in parallel with bg-removal:
+    //   1. The page that hosts the picked image — best signal for
+    //      brand/name when it's a retailer / manufacturer page.
+    //   2. A separate Brave web search for "{query} dimensions" that
+    //      scrapes the top spec-host hits — necessary because most
+    //      picked images come from eBay / Reddit / blogs whose source
+    //      pages have no specs.
+    // Writes are sequenced (source first, dim-search second) so the
+    // user-picked page wins per-field. The "only fill empty" guard
+    // preserves anything the user has typed in the meantime AND keeps
+    // the dim-search from clobbering source-page values.
+    void applyMetadataInOrder(
+      extractPedalMetadata(result.sourceUrl).then((o) =>
+        o.kind === 'ok' ? o.metadata : null,
+      ),
+      query.length > 0
+        ? findPedalDimensionsByQuery(query)
+        : Promise.resolve(null),
+      setDraft,
+    );
   };
 
   // ---------- Web search ----------
