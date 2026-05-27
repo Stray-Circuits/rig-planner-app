@@ -145,16 +145,17 @@ function computeLeaderLanes(
 
 /**
  * Two segments count as living in the same lane when their axis values
- * are within this many inches. Picked so a 5px-stroke cable at default
- * zoom (~50 px/in) is comfortably separated when offset by SHIFT_PER_SLOT.
+ * are within this many inches AND their perpendicular-range overlaps.
+ * Picked so cables that visually crowd each other (within ~3x cable
+ * stroke width at default zoom) get pulled apart.
  */
-const LANE_RENDER_BUCKET_IN = 0.3;
+const LANE_RENDER_TOL_IN = 0.25;
 /**
- * Perpendicular nudge per cable in a shared lane. ~9px at default zoom
- * (50 px/in) gives two parallel cables a 3.5x cable-stroke gap, clearly
- * distinct without pushing cables far from their natural lane.
+ * Perpendicular nudge per cable slot. With a 2-cable group, this is the
+ * full gap between the two cables (~10px at default zoom 50 px/in,
+ * ~4x cable stroke width — comfortably distinct).
  */
-const LANE_RENDER_SHIFT_IN = 0.18;
+const LANE_RENDER_SHIFT_IN = 0.2;
 
 interface RoutedCable {
   path: { xIn: number; yIn: number }[];
@@ -179,10 +180,9 @@ interface SegRef {
 }
 
 function applyLaneRenderOffsets(cables: RoutedCable[]): void {
-  // Bucket segments by their lane axis value. Round to nearest bucket
-  // so segments within ~LANE_RENDER_BUCKET_IN share a group.
-  const hBuckets = new Map<number, SegRef[]>();
-  const vBuckets = new Map<number, SegRef[]>();
+  // Collect all eligible inner segments (skipping leaders).
+  const hSegs: SegRef[] = [];
+  const vSegs: SegRef[] = [];
   for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
     const path = cables[cableIdx]!.path;
     if (path.length < 4) continue; // need at least port + leader endpoints
@@ -192,71 +192,71 @@ function applyLaneRenderOffsets(cables: RoutedCable[]): void {
       const dx = Math.abs(b.xIn - a.xIn);
       const dy = Math.abs(b.yIn - a.yIn);
       if (dy < 0.001 && dx > 0.3) {
-        const bucket = Math.round(a.yIn / LANE_RENDER_BUCKET_IN);
-        const arr = hBuckets.get(bucket) ?? [];
-        arr.push({
+        hSegs.push({
           cableIdx,
           segIdx: i,
           lo: Math.min(a.xIn, b.xIn),
           hi: Math.max(a.xIn, b.xIn),
           axisValue: a.yIn,
         });
-        hBuckets.set(bucket, arr);
       } else if (dx < 0.001 && dy > 0.3) {
-        const bucket = Math.round(a.xIn / LANE_RENDER_BUCKET_IN);
-        const arr = vBuckets.get(bucket) ?? [];
-        arr.push({
+        vSegs.push({
           cableIdx,
           segIdx: i,
           lo: Math.min(a.yIn, b.yIn),
           hi: Math.max(a.yIn, b.yIn),
           axisValue: a.xIn,
         });
-        vBuckets.set(bucket, arr);
       }
     }
   }
-  // For each bucket, find groups of overlapping segments and assign
-  // each an offset slot. A group is a maximal cluster where every
-  // segment range-overlaps at least one other.
-  const segShiftY = new Map<string, number>(); // "cableIdx:segIdx" -> shift
+  // Union-find grouping: two segments belong to the same lane group iff
+  // their axis values are within LANE_RENDER_TOL_IN AND their lengthwise
+  // ranges overlap. Pair-wise pass — N is small (one segment per cable
+  // per axis at most a few times), so O(N²) is fine.
+  const segShiftY = new Map<string, number>();
   const segShiftX = new Map<string, number>();
-  const processBucket = (
-    bucket: SegRef[],
+  const processGroup = (
+    segs: SegRef[],
     shiftMap: Map<string, number>,
   ): void => {
-    if (bucket.length < 2) return;
-    // Greedy clustering by range overlap.
-    const used = new Set<number>();
-    for (let i = 0; i < bucket.length; i++) {
-      if (used.has(i)) continue;
-      const group: SegRef[] = [bucket[i]!];
-      used.add(i);
-      // Expand greedily — add any segment that overlaps any member.
-      let expanded = true;
-      while (expanded) {
-        expanded = false;
-        for (let j = 0; j < bucket.length; j++) {
-          if (used.has(j)) continue;
-          const candidate = bucket[j]!;
-          for (const member of group) {
-            if (
-              candidate.lo < member.hi - 0.05 &&
-              candidate.hi > member.lo + 0.05
-            ) {
-              group.push(candidate);
-              used.add(j);
-              expanded = true;
-              break;
-            }
-          }
-        }
+    if (segs.length < 2) return;
+    const parent: number[] = segs.map((_, i) => i);
+    const find = (i: number): number => {
+      while (parent[i] !== i) {
+        parent[i] = parent[parent[i]!]!;
+        i = parent[i]!;
       }
-      if (group.length < 2) continue;
-      group.sort((a, b) => a.axisValue - b.axisValue);
-      const center = (group.length - 1) / 2;
-      for (let k = 0; k < group.length; k++) {
-        const seg = group[k]!;
+      return i;
+    };
+    const union = (a: number, b: number): void => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent[ra] = rb;
+    };
+    for (let i = 0; i < segs.length; i++) {
+      for (let j = i + 1; j < segs.length; j++) {
+        const a = segs[i]!;
+        const b = segs[j]!;
+        if (Math.abs(a.axisValue - b.axisValue) >= LANE_RENDER_TOL_IN) continue;
+        if (a.lo >= b.hi - 0.05 || a.hi <= b.lo + 0.05) continue;
+        union(i, j);
+      }
+    }
+    // Bucket members by root.
+    const groups = new Map<number, number[]>();
+    for (let i = 0; i < segs.length; i++) {
+      const root = find(i);
+      const arr = groups.get(root) ?? [];
+      arr.push(i);
+      groups.set(root, arr);
+    }
+    for (const members of groups.values()) {
+      if (members.length < 2) continue;
+      members.sort((a, b) => segs[a]!.axisValue - segs[b]!.axisValue);
+      const center = (members.length - 1) / 2;
+      for (let k = 0; k < members.length; k++) {
+        const seg = segs[members[k]!]!;
         shiftMap.set(
           `${seg.cableIdx}:${seg.segIdx}`,
           (k - center) * LANE_RENDER_SHIFT_IN,
@@ -264,8 +264,8 @@ function applyLaneRenderOffsets(cables: RoutedCable[]): void {
       }
     }
   };
-  for (const list of hBuckets.values()) processBucket(list, segShiftY);
-  for (const list of vBuckets.values()) processBucket(list, segShiftX);
+  processGroup(hSegs, segShiftY);
+  processGroup(vSegs, segShiftX);
   // Apply shifts to path points. Shift BOTH endpoints of each affected
   // segment so the segment itself moves; the connecting (perpendicular)
   // segments stretch slightly to follow, which is fine.
