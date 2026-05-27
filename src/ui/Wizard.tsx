@@ -18,6 +18,13 @@ interface WizardShellProps {
   onBack?: () => void;
   /** Close (X) handler — when omitted, the close button is hidden */
   onClose?: () => void;
+  /**
+   * Whether a backdrop click dismisses the modal. Defaults true. Set false
+   * once the user has invested work in the flow — the X button remains the
+   * deliberate way out. Prevents accidental dismissal from stray desktop
+   * clicks (e.g. mid-search, mid-form-fill).
+   */
+  dismissOnBackdrop?: boolean;
 }
 
 export function WizardShell({
@@ -30,6 +37,7 @@ export function WizardShell({
   footerSecondary,
   onBack,
   onClose,
+  dismissOnBackdrop = true,
 }: WizardShellProps) {
   return (
     <div
@@ -37,7 +45,7 @@ export function WizardShell({
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
-        // Desktop modal: clicking the backdrop closes (if onClose available).
+        if (!dismissOnBackdrop) return;
         if (onClose && e.target === e.currentTarget) onClose();
       }}
     >

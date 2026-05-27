@@ -176,6 +176,10 @@ export function AddPedalWizard({
   // every subsequent step so the user knows it's still going, and
   // disables Submit on the Review step until the photo lands.
   const [imageProcessing, setImageProcessing] = useState(false);
+  // True while ImageStep is in a sub-mode (web search panel open or
+  // threshold tuning open). Combined with the dirty checks below to
+  // decide whether a backdrop click can dismiss the wizard.
+  const [imageStepEngaged, setImageStepEngaged] = useState(false);
 
   // The pedals store needs to know about the newly-created row.
   const reloadPedals = usePedalsStore((s) => s.loadPedals);
@@ -186,6 +190,21 @@ export function AddPedalWizard({
   const depthNum = Number(draft.depthIn);
   const trimmedName = draft.name.trim();
   const trimmedBrand = draft.brand.trim();
+
+  // Backdrop click dismisses only when the user hasn't invested any work
+  // in this wizard session — initial Image step, no photo, no typed fields,
+  // no sub-mode open. The X button stays available regardless so the user
+  // always has a deliberate way out.
+  const isDirty =
+    step > 0 ||
+    draft.photoSource !== null ||
+    draft.photoDataUrl !== null ||
+    trimmedBrand !== '' ||
+    trimmedName !== '' ||
+    draft.widthIn.trim() !== '' ||
+    draft.depthIn.trim() !== '' ||
+    imageProcessing ||
+    imageStepEngaged;
 
   const canAdvanceFromCurrent = (() => {
     if (step === 0) {
@@ -285,6 +304,7 @@ export function AddPedalWizard({
       title={titleForStep(step)}
       subtitle={subtitleForStep(step)}
       onClose={onCancel}
+      dismissOnBackdrop={!isDirty}
       {...(step > 0 ? { onBack: handleBack } : {})}
       footerAction={
         <Button
@@ -323,6 +343,7 @@ export function AddPedalWizard({
           draft={draft}
           setDraft={setDraft}
           onProcessingChange={setImageProcessing}
+          onEngagementChange={setImageStepEngaged}
         />
       )}
       {step === 1 && <NameSizeStep draft={draft} setDraft={setDraft} />}
@@ -462,6 +483,13 @@ interface ImageStepProps extends StepProps {
   /** Notifies the wizard when bg-removal is in flight so it can show a
    * banner on later steps and disable Submit on Review. */
   onProcessingChange: (active: boolean) => void;
+  /**
+   * Notifies the wizard when the user is in an Image-step sub-mode — search
+   * panel open, threshold tuning open. The wizard combines this with its
+   * own dirty signals to lock backdrop dismissal so accidental clicks
+   * outside the modal don't burn through search quota mid-flow.
+   */
+  onEngagementChange: (engaged: boolean) => void;
 }
 
 /**
@@ -723,7 +751,12 @@ async function applyMetadataInOrder(
   }
 }
 
-function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
+function ImageStep({
+  draft,
+  setDraft,
+  onProcessingChange,
+  onEngagementChange,
+}: ImageStepProps) {
   const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [progress, setProgress] = useState<BgRemovalProgress | null>(null);
@@ -756,6 +789,13 @@ function ImageStep({ draft, setDraft, onProcessingChange }: ImageStepProps) {
   // entirely so the user doesn't see a button that always errors.
   const searchEnabled = isBraveSearchConfigured();
   const [search, setSearch] = useState<SearchState | null>(null);
+
+  // Echo sub-mode engagement up to the wizard so it can lock backdrop
+  // dismissal — a stray click outside the modal during search wastes a
+  // Brave API call AND drops the user back to square one.
+  useEffect(() => {
+    onEngagementChange(search !== null || threshold !== null);
+  }, [search, threshold, onEngagementChange]);
 
   // Warm the bg-removal chunk so it's ready by the time the user clicks
   // "Use a photo". Best-effort, no UI feedback for the prefetch itself.
