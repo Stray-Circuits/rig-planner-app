@@ -436,6 +436,25 @@ export function routeCablePath(
   const best5 = shortestClean(cand5, obstacles, options, from.side, to.side);
   if (best5) return dedupeColinear(best5);
 
+  // No candidate avoids obstacles. Still prefer a U-turn-free topology
+  // over a clean-looking U-turn — a cable that crosses a pedal edge
+  // reads as a routing problem, but a cable that doubles back on its own
+  // leader reads as broken. Among candidates with no endpoint U-turn,
+  // pick the shortest; only if every candidate U-turns do we fall back
+  // to the first 3-seg candidate.
+  const allCands = [...cand3, ...cand5];
+  let bestFallback: { xIn: number; yIn: number }[] | null = null;
+  let bestFallbackLen = Infinity;
+  for (const path of allCands) {
+    if (hasEndpointUTurn(path, from.side, to.side)) continue;
+    const len = pathLength(path);
+    if (len < bestFallbackLen) {
+      bestFallback = path;
+      bestFallbackLen = len;
+    }
+  }
+  if (bestFallback) return dedupeColinear(bestFallback);
+
   return dedupeColinear(
     cand3[0] ?? [
       { xIn: from.xIn, yIn: from.yIn },
