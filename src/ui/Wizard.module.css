@@ -22,6 +22,11 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  /* Flex item default `min-height: auto` lets children push this past the
+     overlay height on mobile (no explicit max-height like desktop has),
+     which then defeats the body's overflow-y: auto. Pin to 0 so flex
+     actually constrains. */
+  min-height: 0;
   width: 100%;
   background: var(--surface);
   color: var(--fg);
@@ -123,6 +128,10 @@
 
 .body {
   flex: 1;
+  /* See .shell — without min-height: 0 the body grows to fit content
+     (search-results grid, etc.) instead of staying within the flex parent,
+     which is what was preventing mobile scroll. */
+  min-height: 0;
   overflow-y: auto;
   padding: 0 20px 16px;
 }
