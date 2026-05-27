@@ -319,10 +319,12 @@
 .chainStatusPill {
   position: fixed;
   left: 50%;
-  /* Top-center — stays clear of the bottom-left zoom controls and the
-     bottom-right action cluster. Passive status, so reachability isn't
-     a concern. Sits below the top-row FABs (Back / Settings). */
-  top: calc(76px + env(safe-area-inset-top));
+  /* Bottom-center — clears the endpoint chip strip and the top-of-board
+     cable lanes (where multiple cables run when the chain is busy).
+     Sits above the bottom-right action cluster vertically but is offset
+     horizontally so it doesn't overlap. Passive status, so reachability
+     isn't a concern. */
+  bottom: calc(28px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   background: var(--warning-bg);
   color: var(--warning-fg);

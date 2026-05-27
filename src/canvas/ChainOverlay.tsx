@@ -143,6 +143,151 @@ function computeLeaderLanes(
   return result;
 }
 
+/**
+ * Two segments count as living in the same lane when their axis values
+ * are within this many inches. Picked so a 5px-stroke cable at default
+ * zoom (~50 px/in) is comfortably separated when offset by SHIFT_PER_SLOT.
+ */
+const LANE_RENDER_BUCKET_IN = 0.3;
+/** Perpendicular nudge per cable in a shared lane. */
+const LANE_RENDER_SHIFT_IN = 0.1;
+
+interface RoutedCable {
+  path: { xIn: number; yIn: number }[];
+}
+
+/**
+ * Post-processing pass: when two cables end up on near-identical
+ * Y-lanes (horizontal segments) or X-lanes (vertical segments) with
+ * overlapping ranges, nudge each one perpendicular by a small amount
+ * so they render as visually distinct lines instead of stacking.
+ *
+ * Mutates the path arrays. Skips the leader segments (path[0]->path[1]
+ * and path[N-2]->path[N-1]) so the cable still terminates exactly at
+ * the port endpoints — only the inner crossbar shifts.
+ */
+interface SegRef {
+  cableIdx: number;
+  segIdx: number;
+  lo: number; // start of segment along the lane axis
+  hi: number;
+  axisValue: number; // y for horizontal, x for vertical
+}
+
+function applyLaneRenderOffsets(cables: RoutedCable[]): void {
+  // Bucket segments by their lane axis value. Round to nearest bucket
+  // so segments within ~LANE_RENDER_BUCKET_IN share a group.
+  const hBuckets = new Map<number, SegRef[]>();
+  const vBuckets = new Map<number, SegRef[]>();
+  for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
+    const path = cables[cableIdx]!.path;
+    if (path.length < 4) continue; // need at least port + leader endpoints
+    for (let i = 1; i < path.length - 2; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const dx = Math.abs(b.xIn - a.xIn);
+      const dy = Math.abs(b.yIn - a.yIn);
+      if (dy < 0.001 && dx > 0.3) {
+        const bucket = Math.round(a.yIn / LANE_RENDER_BUCKET_IN);
+        const arr = hBuckets.get(bucket) ?? [];
+        arr.push({
+          cableIdx,
+          segIdx: i,
+          lo: Math.min(a.xIn, b.xIn),
+          hi: Math.max(a.xIn, b.xIn),
+          axisValue: a.yIn,
+        });
+        hBuckets.set(bucket, arr);
+      } else if (dx < 0.001 && dy > 0.3) {
+        const bucket = Math.round(a.xIn / LANE_RENDER_BUCKET_IN);
+        const arr = vBuckets.get(bucket) ?? [];
+        arr.push({
+          cableIdx,
+          segIdx: i,
+          lo: Math.min(a.yIn, b.yIn),
+          hi: Math.max(a.yIn, b.yIn),
+          axisValue: a.xIn,
+        });
+        vBuckets.set(bucket, arr);
+      }
+    }
+  }
+  // For each bucket, find groups of overlapping segments and assign
+  // each an offset slot. A group is a maximal cluster where every
+  // segment range-overlaps at least one other.
+  const segShiftY = new Map<string, number>(); // "cableIdx:segIdx" -> shift
+  const segShiftX = new Map<string, number>();
+  const processBucket = (
+    bucket: SegRef[],
+    shiftMap: Map<string, number>,
+  ): void => {
+    if (bucket.length < 2) return;
+    // Greedy clustering by range overlap.
+    const used = new Set<number>();
+    for (let i = 0; i < bucket.length; i++) {
+      if (used.has(i)) continue;
+      const group: SegRef[] = [bucket[i]!];
+      used.add(i);
+      // Expand greedily — add any segment that overlaps any member.
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (let j = 0; j < bucket.length; j++) {
+          if (used.has(j)) continue;
+          const candidate = bucket[j]!;
+          for (const member of group) {
+            if (
+              candidate.lo < member.hi - 0.05 &&
+              candidate.hi > member.lo + 0.05
+            ) {
+              group.push(candidate);
+              used.add(j);
+              expanded = true;
+              break;
+            }
+          }
+        }
+      }
+      if (group.length < 2) continue;
+      group.sort((a, b) => a.axisValue - b.axisValue);
+      const center = (group.length - 1) / 2;
+      for (let k = 0; k < group.length; k++) {
+        const seg = group[k]!;
+        shiftMap.set(
+          `${seg.cableIdx}:${seg.segIdx}`,
+          (k - center) * LANE_RENDER_SHIFT_IN,
+        );
+      }
+    }
+  };
+  for (const list of hBuckets.values()) processBucket(list, segShiftY);
+  for (const list of vBuckets.values()) processBucket(list, segShiftX);
+  // Apply shifts to path points. Shift BOTH endpoints of each affected
+  // segment so the segment itself moves; the connecting (perpendicular)
+  // segments stretch slightly to follow, which is fine.
+  for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
+    const path = cables[cableIdx]!.path;
+    for (let i = 1; i < path.length - 2; i++) {
+      const shiftY = segShiftY.get(`${cableIdx}:${i}`);
+      if (shiftY !== undefined) {
+        path[i] = { xIn: path[i]!.xIn, yIn: path[i]!.yIn + shiftY };
+        path[i + 1] = {
+          xIn: path[i + 1]!.xIn,
+          yIn: path[i + 1]!.yIn + shiftY,
+        };
+      }
+      const shiftX = segShiftX.get(`${cableIdx}:${i}`);
+      if (shiftX !== undefined) {
+        path[i] = { xIn: path[i]!.xIn + shiftX, yIn: path[i]!.yIn };
+        path[i + 1] = {
+          xIn: path[i + 1]!.xIn + shiftX,
+          yIn: path[i + 1]!.yIn,
+        };
+      }
+    }
+  }
+}
+
 interface ResolvedPort {
   placed: PlacedPedal;
   pedal: Pedal;
@@ -430,6 +575,14 @@ export function ChainOverlay({
       return { c, from, to, path, cableColor, fromColor, toColor, isExternal };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  // Render-time fan-out for cables that share a lane: nudge each one's
+  // horizontal/vertical segment perpendicular by a small amount so two
+  // cables that *had* to route at very close y/x values render as two
+  // distinct lines instead of looking like one stacked stroke. Pure
+  // visual offset — leaves the underlying path geometry intact for the
+  // claimed-lane and routing logic above.
+  applyLaneRenderOffsets(routedCables);
 
   return (
     <>
