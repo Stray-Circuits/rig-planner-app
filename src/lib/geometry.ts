@@ -746,12 +746,21 @@ function generate5SegCandidates(
     return cands;
   }
   // Mixed orientation. 4-inner-segment path with 2 free parameters.
+  // Unlike same-side cables, mixed orientation has no valid "staple
+  // outward" shape — the two leaders point in perpendicular directions,
+  // so if the inner's perpendicular-to-from-leader transit (`a`) lands
+  // outside the [tl, fl] range, the cable's first inner segment exits
+  // in the OPPOSITE direction of the destination, creating a visible
+  // U-turn at the leader endpoint. Restrict `a` to the in-range band.
   if (fh) {
     // from is horizontal (leader along X), to is vertical (leader along Y).
     // Inner direction: Y-X-Y-X.
+    const yLo = Math.min(from.yIn, to.yIn);
+    const yHi = Math.max(from.yIn, to.yIn);
     const yTransits = transitCandidates(from.yIn, to.yIn, obstacles, 'y');
     const xTransits = transitCandidates(from.xIn, to.xIn, obstacles, 'x');
     for (const a of yTransits) {
+      if (a < yLo - epsZero || a > yHi + epsZero) continue;
       if (Math.abs(a - from.yIn) < epsZero) continue;
       if (Math.abs(a - to.yIn) < epsZero) continue;
       for (const b of xTransits) {
@@ -769,9 +778,12 @@ function generate5SegCandidates(
     return cands;
   }
   // from vertical, to horizontal — inner direction X-Y-X-Y.
+  const xLo = Math.min(from.xIn, to.xIn);
+  const xHi = Math.max(from.xIn, to.xIn);
   const yTransits = transitCandidates(from.yIn, to.yIn, obstacles, 'y');
   const xTransits = transitCandidates(from.xIn, to.xIn, obstacles, 'x');
   for (const a of xTransits) {
+    if (a < xLo - epsZero || a > xHi + epsZero) continue;
     if (Math.abs(a - from.xIn) < epsZero) continue;
     if (Math.abs(a - to.xIn) < epsZero) continue;
     for (const b of yTransits) {

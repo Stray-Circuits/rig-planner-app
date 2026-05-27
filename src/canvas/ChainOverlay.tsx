@@ -149,8 +149,12 @@ function computeLeaderLanes(
  * zoom (~50 px/in) is comfortably separated when offset by SHIFT_PER_SLOT.
  */
 const LANE_RENDER_BUCKET_IN = 0.3;
-/** Perpendicular nudge per cable in a shared lane. */
-const LANE_RENDER_SHIFT_IN = 0.1;
+/**
+ * Perpendicular nudge per cable in a shared lane. ~9px at default zoom
+ * (50 px/in) gives two parallel cables a 3.5x cable-stroke gap, clearly
+ * distinct without pushing cables far from their natural lane.
+ */
+const LANE_RENDER_SHIFT_IN = 0.18;
 
 interface RoutedCable {
   path: { xIn: number; yIn: number }[];
