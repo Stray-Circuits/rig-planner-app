@@ -281,6 +281,25 @@ export function presetsByBrand(): Map<string, BoardPreset[]> {
   return byBrand;
 }
 
+/**
+ * Resolve which bundled board image should render for a rig.
+ *
+ * - If the rig has a presetId pointing at a preset with an image, use that.
+ * - Otherwise return null (callers fall back to the procedural drawer for
+ *   non-rail styles; Phase 4 extends this with a closest-render fallback
+ *   for custom rail).
+ */
+export function resolveBoardImageSrc(rig: {
+  style: BoardStyle;
+  presetId: string | null;
+}): string | null {
+  if (rig.presetId) {
+    const preset = findPreset(rig.presetId);
+    if (preset?.image) return preset.image;
+  }
+  return null;
+}
+
 /** Pedaltrain presets grouped by series, in the order defined by BOARD_SERIES_ORDER. */
 export function pedaltrainPresetsBySeries(): Map<BoardSeries, BoardPreset[]> {
   const bySeries = new Map<BoardSeries, BoardPreset[]>();

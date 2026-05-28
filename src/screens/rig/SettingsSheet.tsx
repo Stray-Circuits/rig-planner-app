@@ -6,6 +6,7 @@ import type {
   Rig,
 } from '../../data/schema';
 import { findExistingRigForImport, importRig } from '../../data/rigImportRepo';
+import { findPreset, resolveBoardImageSrc } from '../../data/boardPresets';
 import { BoardThumb } from '../../canvas/BoardThumb';
 import { BoardPicker } from '../../components/BoardPicker';
 import {
@@ -134,6 +135,15 @@ export function SettingsSheet({
     (pickerChoice.widthIn !== rig.widthIn ||
       pickerChoice.depthIn !== rig.depthIn ||
       pickerChoice.style !== rig.style);
+
+  // Image src to show in the board-summary thumb. While the picker is
+  // open and a choice is pending, preview the chosen preset; otherwise
+  // show the rig's current preset.
+  const summaryImageSrc = pickerChoice
+    ? pickerChoice.source === 'custom'
+      ? null
+      : (findPreset(pickerChoice.source)?.image ?? null)
+    : resolveBoardImageSrc({ style: rig.style, presetId: rig.presetId });
 
   const setSelection = (s: BoardSelection) =>
     setPickerState((p) => ({ ...p, selection: s }));
@@ -292,6 +302,9 @@ export function SettingsSheet({
                   width={56}
                   height={32}
                   scale={0.2}
+                  {...(summaryImageSrc !== null
+                    ? { imageSrc: summaryImageSrc }
+                    : {})}
                 />
               </div>
               <div className={styles.boardInfo}>

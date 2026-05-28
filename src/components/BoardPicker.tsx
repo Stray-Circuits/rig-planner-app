@@ -153,6 +153,7 @@ function PresetCard({ preset, selected, onClick }: PresetCardProps) {
         width={52}
         height={30}
         scale={0.2}
+        {...(preset.image !== undefined ? { imageSrc: preset.image } : {})}
         title={`${preset.brand} ${preset.name}`}
       />
       <div className={styles.presetInfo}>
