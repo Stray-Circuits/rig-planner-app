@@ -170,6 +170,7 @@ export function BoardCanvas({
         width: widthPx,
         height: heightPx,
         scale: 1,
+        widthIn: rig.widthIn,
       });
     };
 
@@ -198,7 +199,7 @@ export function BoardCanvas({
     return () => {
       cancelled = true;
     };
-  }, [rig.style, imageSrc, widthPx, heightPx, dpr]);
+  }, [rig.style, rig.widthIn, imageSrc, widthPx, heightPx, dpr]);
 
   const pointerToInches = useCallback(
     (clientX: number, clientY: number) => {
