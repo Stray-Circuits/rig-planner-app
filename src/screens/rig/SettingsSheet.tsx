@@ -206,9 +206,10 @@ export function SettingsSheet({
         await saveTextFile({
           suggestedFilename: filename,
           text: json,
-          filters: [
-            { name: 'Rig Planner export', extensions: ['rig.json', 'json'] },
-          ],
+          // Tauri filter extensions are bare suffixes — multi-dot like
+          // "rig.json" doesn't match. The full ".rig.json" suffix is
+          // preserved via the defaultPath/suggestedFilename.
+          filters: [{ name: 'Rig Planner export', extensions: ['json'] }],
         });
       } catch (err) {
         setError(
