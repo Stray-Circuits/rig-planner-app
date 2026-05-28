@@ -1,14 +1,128 @@
-.brandSection {
-  margin-bottom: 20px;
+.brandList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.brandLabel {
-  font-size: 11px;
-  font-weight: 600;
+.brandCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 14px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.brandCard:hover {
+  border-color: var(--border-strong);
+}
+
+.brandThumb {
+  width: 64px;
+  height: 36px;
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--surface-alt);
+}
+
+.brandChevron {
+  font-size: 18px;
   color: var(--muted-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 10px;
+}
+
+.backHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px 6px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.backButton i {
+  font-size: 16px;
+}
+
+.backButton:hover {
+  border-color: var(--border-strong);
+}
+
+.backLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.seriesList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seriesSection {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.seriesHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.seriesHeader:hover {
+  background: var(--surface-alt);
+}
+
+.seriesName {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.seriesCount {
+  font-size: 11px;
+  color: var(--muted-soft);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-alt);
+}
+
+.seriesChevron {
+  font-size: 16px;
+  color: var(--muted-soft);
+}
+
+.seriesBoards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 10px 8px;
 }
 
 .presetGrid {
