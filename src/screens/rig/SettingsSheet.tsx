@@ -137,13 +137,24 @@ export function SettingsSheet({
       pickerChoice.style !== rig.style);
 
   // Image src to show in the board-summary thumb. While the picker is
-  // open and a choice is pending, preview the chosen preset; otherwise
-  // show the rig's current preset.
+  // open with a pending change, preview the chosen board (preset image
+  // when picking a preset; closest-render scaling when picking custom
+  // rail). Otherwise show whatever the rig's current state resolves to.
   const summaryImageSrc = pickerChoice
     ? pickerChoice.source === 'custom'
-      ? null
+      ? resolveBoardImageSrc({
+          style: pickerChoice.style,
+          presetId: null,
+          widthIn: pickerChoice.widthIn,
+          depthIn: pickerChoice.depthIn,
+        })
       : (findPreset(pickerChoice.source)?.image ?? null)
-    : resolveBoardImageSrc({ style: rig.style, presetId: rig.presetId });
+    : resolveBoardImageSrc({
+        style: rig.style,
+        presetId: rig.presetId,
+        widthIn: rig.widthIn,
+        depthIn: rig.depthIn,
+      });
 
   const setSelection = (s: BoardSelection) =>
     setPickerState((p) => ({ ...p, selection: s }));

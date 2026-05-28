@@ -32,6 +32,8 @@ export function RigThumb({
   const imageSrc = resolveBoardImageSrc({
     style: rig.style,
     presetId: rig.presetId,
+    widthIn: rig.widthIn,
+    depthIn: rig.depthIn,
   });
   return (
     <div className={styles.wrap} style={{ width, height }}>

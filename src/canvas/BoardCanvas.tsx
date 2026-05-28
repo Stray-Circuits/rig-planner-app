@@ -133,8 +133,14 @@ export function BoardCanvas({
     typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
 
   const imageSrc = useMemo(
-    () => resolveBoardImageSrc({ style: rig.style, presetId: rig.presetId }),
-    [rig.style, rig.presetId],
+    () =>
+      resolveBoardImageSrc({
+        style: rig.style,
+        presetId: rig.presetId,
+        widthIn: rig.widthIn,
+        depthIn: rig.depthIn,
+      }),
+    [rig.style, rig.presetId, rig.widthIn, rig.depthIn],
   );
 
   useEffect(() => {

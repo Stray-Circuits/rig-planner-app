@@ -282,20 +282,53 @@ export function presetsByBrand(): Map<string, BoardPreset[]> {
 }
 
 /**
+ * Find the Pedaltrain rail preset closest to (widthIn, depthIn) in
+ * Euclidean distance. Used so custom-rail rigs get a real photo
+ * stretched to fit, instead of the procedural rail drawer. Only
+ * Pedaltrain rail presets with bundled images are considered.
+ */
+export function findClosestRailPreset(
+  widthIn: number,
+  depthIn: number,
+): BoardPreset | undefined {
+  let best: BoardPreset | undefined;
+  let bestDist = Infinity;
+  for (const p of BOARD_PRESETS) {
+    if (p.brand !== 'Pedaltrain' || p.style !== 'rail' || !p.image) continue;
+    const dw = p.widthIn - widthIn;
+    const dd = p.depthIn - depthIn;
+    const dist = dw * dw + dd * dd;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = p;
+    }
+  }
+  return best;
+}
+
+/**
  * Resolve which bundled board image should render for a rig.
  *
  * - If the rig has a presetId pointing at a preset with an image, use that.
- * - Otherwise return null (callers fall back to the procedural drawer for
- *   non-rail styles; Phase 4 extends this with a closest-render fallback
- *   for custom rail).
+ * - Else, if style is 'rail', pick the closest Pedaltrain rail preset by
+ *   Euclidean (widthIn, depthIn) distance and let the canvas stretch its
+ *   image to fit. Looks better than the procedural rail drawer for any
+ *   sane custom dimensions.
+ * - Otherwise return null — callers fall back to the procedural drawer.
  */
 export function resolveBoardImageSrc(rig: {
   style: BoardStyle;
   presetId: string | null;
+  widthIn: number;
+  depthIn: number;
 }): string | null {
   if (rig.presetId) {
     const preset = findPreset(rig.presetId);
     if (preset?.image) return preset.image;
+  }
+  if (rig.style === 'rail') {
+    const closest = findClosestRailPreset(rig.widthIn, rig.depthIn);
+    if (closest?.image) return closest.image;
   }
   return null;
 }
