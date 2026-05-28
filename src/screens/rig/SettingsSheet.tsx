@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   BoardStyle,
   ExternalEndpoint,
   ExternalEndpointKind,
   Rig,
 } from '../../data/schema';
+import { findExistingRigForImport, importRig } from '../../data/rigImportRepo';
 import { BoardThumb } from '../../canvas/BoardThumb';
 import { BoardPicker } from '../../components/BoardPicker';
 import {
@@ -13,6 +14,7 @@ import {
   type BoardSelection,
 } from '../../components/boardPickerHelpers';
 import { FLOOR_STYLES, type FloorStyle } from '../../lib/floorStyle';
+import { parseRigExport, type RigExport } from '../../lib/rigPortability';
 import { Button, Sheet, TextField } from '../../ui';
 import styles from './SettingsSheet.module.css';
 
@@ -33,6 +35,12 @@ interface SettingsSheetProps {
   onAddEndpoint: (kind: ExternalEndpointKind, label: string) => Promise<void>;
   onRemoveEndpoint: (endpointId: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  /** Build the export JSON and hand it back. The sheet triggers the download. */
+  onExport: () => Promise<{ filename: string; json: string }>;
+  /**
+   * Reload stores + (if needed) navigate after a successful import.
+   */
+  onImported: (rigId: string) => void | Promise<void>;
 }
 
 const ENDPOINT_KIND_LABELS: Record<ExternalEndpointKind, string> = {
@@ -65,6 +73,8 @@ export function SettingsSheet({
   onAddEndpoint,
   onRemoveEndpoint,
   onDelete,
+  onExport,
+  onImported,
 }: SettingsSheetProps) {
   const [newEndpointKind, setNewEndpointKind] =
     useState<ExternalEndpointKind>('custom');
@@ -80,8 +90,17 @@ export function SettingsSheet({
       setShowAddEndpoint(false);
     })();
   };
-  const [view, setView] = useState<'main' | 'board' | 'confirmDelete'>('main');
+  const [view, setView] = useState<
+    'main' | 'board' | 'confirmDelete' | 'confirmImport'
+  >('main');
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{
+    exp: RigExport;
+    collisionWith: string | null;
+  } | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [name, setName] = useState(rig.name);
   const [pickerState, setPickerState] = useState(() =>
     initialPickerStateFor(rig),
@@ -93,6 +112,9 @@ export function SettingsSheet({
     if (!open) return;
     setView('main');
     setDeleting(false);
+    setExporting(false);
+    setImporting(false);
+    setPendingImport(null);
     setName(rig.name);
     setPickerState(
       initialPickerStateFor({
@@ -156,7 +178,9 @@ export function SettingsSheet({
       ? 'Rig Settings'
       : view === 'board'
         ? 'Change Board'
-        : 'Delete Rig?';
+        : view === 'confirmImport'
+          ? 'Import Rig?'
+          : 'Delete Rig?';
 
   const handleConfirmDelete = () => {
     setError(null);
@@ -168,6 +192,76 @@ export function SettingsSheet({
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setDeleting(false);
+      }
+    })();
+  };
+
+  const handleExport = () => {
+    setError(null);
+    setExporting(true);
+    void (async () => {
+      try {
+        const { filename, json } = await onExport();
+        const { saveTextFile } = await import('../../lib/fileDownload');
+        await saveTextFile({
+          suggestedFilename: filename,
+          text: json,
+          filters: [
+            { name: 'Rig Planner export', extensions: ['rig.json', 'json'] },
+          ],
+        });
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? `Export failed: ${err.message}`
+            : `Export failed: ${String(err)}`,
+        );
+      } finally {
+        setExporting(false);
+      }
+    })();
+  };
+
+  const handleImportFilePicked = (file: File) => {
+    setError(null);
+    void (async () => {
+      try {
+        const text = await file.text();
+        const exp = parseRigExport(text);
+        const existing = await findExistingRigForImport(exp);
+        setPendingImport({
+          exp,
+          collisionWith: existing?.name ?? null,
+        });
+        setView('confirmImport');
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? `Import failed: ${err.message}`
+            : `Import failed: ${String(err)}`,
+        );
+      }
+    })();
+  };
+
+  const handleConfirmImport = () => {
+    if (!pendingImport) return;
+    setError(null);
+    setImporting(true);
+    const { exp } = pendingImport;
+    void (async () => {
+      try {
+        await importRig(exp);
+        await onImported(exp.rig.id);
+        setPendingImport(null);
+        onClose();
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? `Import failed: ${err.message}`
+            : `Import failed: ${String(err)}`,
+        );
+        setImporting(false);
       }
     })();
   };
@@ -307,6 +401,45 @@ export function SettingsSheet({
             </div>
           </div>
 
+          <div className={styles.field}>
+            <span className={styles.label}>Backup &amp; Share</span>
+            <div className={styles.backupRow}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleExport}
+                disabled={exporting}
+              >
+                <i className="ti ti-download" aria-hidden />{' '}
+                {exporting ? 'Exporting…' : 'Export rig'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => importInputRef.current?.click()}
+              >
+                <i className="ti ti-upload" aria-hidden /> Import rig
+              </Button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".json,.rig.json,application/json"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  // Reset so the same file can be picked again later.
+                  e.target.value = '';
+                  if (file) handleImportFilePicked(file);
+                }}
+              />
+            </div>
+            <p className={styles.backupHint}>
+              Exports a single <code>.rig.json</code> file containing this rig
+              and the pedals it places. Importing a file with the same rig ID
+              will overwrite this rig.
+            </p>
+          </div>
+
           {error ? <p className={styles.error}>{error}</p> : null}
 
           <div className={styles.actions}>
@@ -349,7 +482,7 @@ export function SettingsSheet({
             </Button>
           </div>
         </div>
-      ) : (
+      ) : view === 'confirmDelete' ? (
         <div className={styles.body}>
           <p className={styles.confirmText}>
             Permanently delete <strong>{rig.name}</strong>?
@@ -377,6 +510,52 @@ export function SettingsSheet({
               disabled={deleting}
             >
               {deleting ? 'Deleting…' : 'Delete Rig'}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.body}>
+          {pendingImport ? (
+            <>
+              <p className={styles.confirmText}>
+                Import <strong>{pendingImport.exp.rig.name}</strong>?
+              </p>
+              <p className={styles.backupHint}>
+                {pendingImport.exp.placedPedals.length} placed pedal
+                {pendingImport.exp.placedPedals.length === 1 ? '' : 's'},{' '}
+                {pendingImport.exp.connections.length} connection
+                {pendingImport.exp.connections.length === 1 ? '' : 's'},
+                exported {pendingImport.exp.exportedAt.slice(0, 10)}.
+              </p>
+              {pendingImport.collisionWith !== null ? (
+                <p className={styles.confirmWarn}>
+                  <i className="ti ti-alert-triangle" aria-hidden /> A rig with
+                  this ID already exists as{' '}
+                  <strong>{pendingImport.collisionWith}</strong>. Importing will
+                  overwrite it — its placements, connections, and endpoints will
+                  be replaced.
+                </p>
+              ) : null}
+            </>
+          ) : null}
+          {error ? <p className={styles.error}>{error}</p> : null}
+          <div className={styles.actions}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPendingImport(null);
+                setView('main');
+              }}
+              disabled={importing}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmImport} disabled={importing}>
+              {importing
+                ? 'Importing…'
+                : pendingImport?.collisionWith !== null
+                  ? 'Overwrite'
+                  : 'Import'}
             </Button>
           </div>
         </div>

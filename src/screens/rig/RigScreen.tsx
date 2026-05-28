@@ -44,9 +44,11 @@ const EMPTY_ENDPOINTS: ExternalEndpoint[] = [];
 interface RigScreenProps {
   rig: Rig;
   onBack: () => void;
+  /** Optional: switch to a different rig (e.g. after importing one). */
+  onOpenRig?: (rigId: string) => void;
 }
 
-export function RigScreen({ rig, onBack }: RigScreenProps) {
+export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
   const pedals = usePedalsStore((s) => s.pedals);
   const pedalsStatus = usePedalsStore((s) => s.status);
   const loadPedals = usePedalsStore((s) => s.loadPedals);
@@ -66,6 +68,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const renameRig = useRigsStore((s) => s.renameRig);
   const updateBoard = useRigsStore((s) => s.updateBoard);
   const deleteRig = useRigsStore((s) => s.deleteRig);
+  const loadRigs = useRigsStore((s) => s.loadRigs);
 
   const connections = useSignalChainStore(
     (s) => s.connectionsByRig[rig.id] ?? EMPTY_CONNECTIONS,
@@ -515,6 +518,32 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           await deleteRig(rig.id);
           setSettingsOpen(false);
           onBack();
+        }}
+        onExport={async () => {
+          const { buildRigExport, defaultExportFilename } =
+            await import('../../lib/rigPortability');
+          const exp = buildRigExport({
+            rig,
+            pedals,
+            placedPedals: placed,
+            endpoints,
+            connections,
+          });
+          return {
+            filename: defaultExportFilename(rig),
+            json: JSON.stringify(exp, null, 2),
+          };
+        }}
+        onImported={async (importedRigId) => {
+          // Refresh the pedal library (imported pedals may be new), the
+          // rig list (imported rig may be new or renamed), and the
+          // per-rig data the screen renders from.
+          await Promise.all([loadPedals(), loadRigs()]);
+          await Promise.all([
+            loadForRig(importedRigId),
+            loadSignalChain(importedRigId),
+          ]);
+          if (importedRigId !== rig.id) onOpenRig?.(importedRigId);
         }}
       />
 
