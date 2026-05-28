@@ -21,6 +21,7 @@ function fakeCtx(): CanvasRenderingContext2D {
     fillStyle: '',
     strokeStyle: '',
     lineWidth: 0,
+    globalCompositeOperation: 'source-over',
     clearRect: noop,
     fillRect: noop,
     strokeRect: noop,
@@ -36,6 +37,8 @@ function fakeCtx(): CanvasRenderingContext2D {
     arc: noop,
     stroke: noop,
     fill: noop,
+    save: noop,
+    restore: noop,
   };
   return ctx as unknown as CanvasRenderingContext2D;
 }
@@ -71,6 +74,10 @@ describe('boardStyles', () => {
     ).not.toThrow();
     expect(() =>
       drawHoles({ ctx, width: 120, height: 60, scale: 0.2 }),
+    ).not.toThrow();
+    // Full-scale path exercises the rim-shading branch in drawHoles.
+    expect(() =>
+      drawHoles({ ctx, width: 500, height: 250, scale: 1 }),
     ).not.toThrow();
   });
 });
