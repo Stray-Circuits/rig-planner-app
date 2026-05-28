@@ -5,6 +5,7 @@ description = "Pedalboard planning app with signal-path overlay"
 authors = ["Stray Circuits"]
 edition = "2021"
 rust-version = "1.77"
+license = "AGPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
