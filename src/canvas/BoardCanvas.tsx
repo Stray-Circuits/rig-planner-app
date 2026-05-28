@@ -319,7 +319,9 @@ export function BoardCanvas({
       <canvas
         ref={canvasRef}
         className={styles.canvas}
-        style={{ background: backgroundForStyle(rig.style) }}
+        style={{
+          background: imageSrc ? 'transparent' : backgroundForStyle(rig.style),
+        }}
       />
       <div className={styles.keepOutLayer} aria-hidden>
         {placed.map((p) => {

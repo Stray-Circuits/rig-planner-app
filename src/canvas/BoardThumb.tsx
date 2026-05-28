@@ -91,7 +91,9 @@ export function BoardThumb({
     <canvas
       ref={canvasRef}
       className={className}
-      style={{ background: backgroundForStyle(style) }}
+      style={{
+        background: imageSrc ? 'transparent' : backgroundForStyle(style),
+      }}
       role="img"
       aria-label={title ?? `${style} board`}
     />
