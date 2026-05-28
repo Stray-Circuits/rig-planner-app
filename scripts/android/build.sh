@@ -106,6 +106,9 @@ exec_in_container() {
         # the container's pnpm modifies the host file, which then pins host
         # pnpm to whatever the container has and can break host workflows.
         -e COREPACK_ENABLE_AUTO_PIN=0
+        # Forward cargo profile overrides if the caller set them (used to
+        # strip symbols from the debug .so without touching desktop dev).
+        -e CARGO_PROFILE_DEV_STRIP
         -v "${REPO_ROOT}:/workspace"
         -v "${SCRIPT_DIR}/container-pnpm-workspace.yaml:/workspace/pnpm-workspace.yaml:ro"
         -v "${VOL_NODE_MODULES}:/workspace/node_modules"
@@ -140,9 +143,18 @@ cmd_init() {
 }
 
 cmd_build() {
-    local mode="--debug"
+    # Debug ships arm64-v8a only — every Android device made in the last ~6
+    # years is arm64, and cargo's dev profile emits a ~190MB unstripped .so
+    # per ABI. We also strip symbols at the cargo level (via
+    # CARGO_PROFILE_DEV_STRIP env override) so the single .so lands at
+    # ~15MB instead of ~190MB. Release stays universal (all 4 ABIs, no env
+    # override — release already strips well).
+    local mode="--debug --target aarch64"
     if [ "${1:-}" = "--release" ]; then
         mode="--release"
+        unset CARGO_PROFILE_DEV_STRIP
+    else
+        export CARGO_PROFILE_DEV_STRIP="symbols"
     fi
     echo ">> Building Android APK (${mode})"
     exec_in_container bash -lc "
