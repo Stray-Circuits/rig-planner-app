@@ -54,10 +54,12 @@ allow = [
   "0BSD",
   "Unicode-DFS-2016",
   "Unicode-3.0",
-  "OpenSSL",
   # Mozilla's certificate roots data ship under CDLA-Permissive-2.0
   # (used by webpki-roots via reqwest). Permissive data license, AGPL-OK.
   "CDLA-Permissive-2.0",
+  # NOTE: SPDX `OpenSSL` (old OpenSSL + SSLeay dual license) is
+  # AGPL-incompatible due to the advertising clause. Do not add it
+  # back. Modern OpenSSL (3.0+) ships as Apache-2.0, already allowed.
 ]
 # Per-crate license clarifications go here when SPDX detection fails.
 exceptions = []

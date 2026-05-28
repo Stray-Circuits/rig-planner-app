@@ -79,7 +79,7 @@ Commit at phase + feature boundaries with all four gates green (typecheck, lint,
 Three layers, all defined under `.github/`:
 
 - **`.github/workflows/security.yml`** — runs on push/PR + weekly cron. Three jobs:
-  - `pnpm audit --prod --audit-level=high` — fails the build on high/critical CVEs in production JS deps. Dev-only advisories surface via Dependabot to keep this signal actionable.
+  - `pnpm audit --prod --audit-level=high` plus `pnpm licenses:check` (script at `scripts/check-npm-licenses.mjs`). The audit fails on high/critical CVEs in production JS deps; the license gate fails on any production dep whose license isn't in the AGPL-compatible allowlist or recorded as a per-package exception. Dev-only advisories surface via Dependabot to keep the audit signal actionable.
   - `cargo-deny check advisories bans licenses sources` — RustSec CVEs, AGPL-compatible license allowlist, banned/duplicate crates, registry source pinning. Config lives in `src-tauri/deny.toml`.
   - `dependency-review-action` — PR-only gate that blocks introducing a new vulnerable dep.
   - **Secret scanning is GitHub-native** (push protection + secret scanning alerts, toggled in repo settings). No CI job — `gitleaks-action` is paywalled for org use and the native ruleset is broader. If you ever need a custom rule (e.g. an internal token format GitHub doesn't ship), the fallback is to run the gitleaks CLI binary directly (still MIT) rather than the action.
@@ -88,8 +88,11 @@ Three layers, all defined under `.github/`:
 
 **First-party Rust forbids `unsafe`.** Both `src-tauri/src/lib.rs` and `src-tauri/src/main.rs` carry `#![forbid(unsafe_code)]`. If you genuinely need `unsafe` (FFI, etc.), justify it in the PR and scope it with `#[allow(unsafe_code)]` on the smallest possible item — don't lift the crate-level forbid.
 
+**Project license is `AGPL-3.0-or-later`**, declared in both `package.json` and `src-tauri/Cargo.toml`. The constraint comes from `@imgly/background-removal` (AGPLv3); if that dep is ever swapped for an MIT/Apache equivalent, the project can relicense to something more permissive. Until then, every new dep must be AGPL-compatible — the npm + cargo license gates enforce this. Common pitfalls: SPDX `OpenSSL` (legacy dual license — incompatible, deliberately absent from both allowlists), `LGPL-2.1-only` (only LGPL-3.0+ is bidirectionally compatible with AGPL-3.0). Dual-licensed crates like `MIT OR Apache-2.0 OR LGPL-2.1-or-later` are fine — cargo-deny / our npm script pick an allowed alternative.
+
 **Suppressing findings.**
 - cargo-deny advisories: add an entry to `[advisories.ignore]` in `src-tauri/deny.toml` with a `reason =` string that links to your analysis. Don't ignore without reading the advisory.
+- npm license check: if a package reports as "Unknown" because it uses `"SEE LICENSE IN LICENSE.md"` or similar, read the LICENSE file directly and add an entry to `PACKAGE_EXCEPTIONS` in `scripts/check-npm-licenses.mjs` with a reason. To allow a previously-unseen but compatible SPDX identifier, add it to `ALLOWED_LICENSES` in the same file.
 - CodeQL: prefer fixing. If a finding is a true false-positive, dismiss it via the GitHub Security tab with a note; don't sprinkle `// codeql[...]` suppressions in code.
 - Native secret scanning: dismiss false positives via the Security tab → Secret scanning alerts → "Close as" with a reason. For fixture strings that look secret-like, prefer rewriting the fixture over carrying a perpetual dismissal.
 

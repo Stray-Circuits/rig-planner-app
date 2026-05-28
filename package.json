@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Pedalboard planning app with signal-path overlay — desktop + mobile",
   "author": "Stray Circuits",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -28,7 +29,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "licenses:check": "node scripts/check-npm-licenses.mjs"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
