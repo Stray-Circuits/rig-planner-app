@@ -23,17 +23,13 @@
   color: var(--primary);
 }
 
-/* Brand mark — uses ui-rounded so the wordmark gets a friendlier shape
-   than the body font (system-ui). No web font fetch; this resolves to
-   SF Rounded on Apple platforms and gracefully degrades to system-ui
-   elsewhere. */
+/* Brand mark — Audiowide (Google Fonts) for a techy wordmark that
+   matches the circuit-board vibe. Loaded via <link> in index.html. */
 .brand {
-  font-family:
-    ui-rounded, 'SF Pro Rounded', 'Segoe UI Variable Display', system-ui,
-    sans-serif;
+  font-family: 'Audiowide', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
   font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 400;
+  letter-spacing: 0.01em;
   color: var(--fg);
   line-height: 1;
 }
