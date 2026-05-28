@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOARD_PRESETS,
-  BOARD_SERIES_ORDER,
+  PEDALTRAIN_SERIES_ORDER,
+  TEMPLE_AUDIO_SERIES_ORDER,
   findClosestRailPreset,
   findPreset,
   pedaltrainPresetsBySeries,
   presetsByBrand,
   resolveBoardImageSrc,
+  templeAudioPresetsBySeries,
 } from '../src/data/boardPresets';
 
 describe('boardPresets', () => {
@@ -25,9 +27,14 @@ describe('boardPresets', () => {
     expect(names).toContain('Pedaltrain Terra 42');
     expect(names).toContain('Pedaltrain XD-18');
     expect(names).toContain('Pedaltrain XD-24');
-    // Temple Audio — 3 boards (unchanged)
+    // Temple Audio — full Solo/Duo/Trio lineup
     expect(names).toContain('Temple Audio Solo 18');
+    expect(names).toContain('Temple Audio Duo 17');
+    expect(names).toContain('Temple Audio Duo 24');
+    expect(names).toContain('Temple Audio Duo 34');
     expect(names).toContain('Temple Audio Trio 21');
+    expect(names).toContain('Temple Audio Trio 28');
+    expect(names).toContain('Temple Audio Trio 43');
   });
 
   it('every Pedaltrain preset has a bundled image and a series', () => {
@@ -39,11 +46,12 @@ describe('boardPresets', () => {
     }
   });
 
-  it('Temple Audio presets stay procedural (no image)', () => {
+  it('Temple Audio presets stay procedural (no image) and carry a series', () => {
     const temples = BOARD_PRESETS.filter((p) => p.brand === 'Temple Audio');
-    expect(temples).toHaveLength(3);
+    expect(temples).toHaveLength(7);
     for (const p of temples) {
       expect(p.image).toBeUndefined();
+      expect(p.series, `${p.name} missing series`).toBeTruthy();
     }
   });
 
@@ -56,12 +64,12 @@ describe('boardPresets', () => {
   it('presetsByBrand groups by brand', () => {
     const byBrand = presetsByBrand();
     expect(byBrand.get('Pedaltrain')).toHaveLength(19);
-    expect(byBrand.get('Temple Audio')).toHaveLength(3);
+    expect(byBrand.get('Temple Audio')).toHaveLength(7);
   });
 
   it('pedaltrainPresetsBySeries groups all 19 Pedaltrains across the five series', () => {
     const bySeries = pedaltrainPresetsBySeries();
-    expect(Array.from(bySeries.keys())).toEqual([...BOARD_SERIES_ORDER]);
+    expect(Array.from(bySeries.keys())).toEqual([...PEDALTRAIN_SERIES_ORDER]);
     expect(bySeries.get('Nano')).toHaveLength(3);
     expect(bySeries.get('Metro')).toHaveLength(4);
     expect(bySeries.get('Classic')).toHaveLength(6);
@@ -72,6 +80,19 @@ describe('boardPresets', () => {
       0,
     );
     expect(total).toBe(19);
+  });
+
+  it('templeAudioPresetsBySeries groups all 7 Temples across Solo/Duo/Trio', () => {
+    const bySeries = templeAudioPresetsBySeries();
+    expect(Array.from(bySeries.keys())).toEqual([...TEMPLE_AUDIO_SERIES_ORDER]);
+    expect(bySeries.get('Solo')).toHaveLength(1);
+    expect(bySeries.get('Duo')).toHaveLength(3);
+    expect(bySeries.get('Trio')).toHaveLength(3);
+    const total = Array.from(bySeries.values()).reduce(
+      (n, list) => n + list.length,
+      0,
+    );
+    expect(total).toBe(7);
   });
 
   it('all preset ids are unique', () => {

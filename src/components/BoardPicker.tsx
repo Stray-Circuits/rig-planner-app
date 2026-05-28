@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
-  BOARD_SERIES_ORDER,
-  BOARD_PRESETS,
+  PEDALTRAIN_SERIES_ORDER,
+  TEMPLE_AUDIO_SERIES_ORDER,
   findPreset,
   pedaltrainPresetsBySeries,
+  templeAudioPresetsBySeries,
   type BoardPreset,
   type BoardSeries,
 } from '../data/boardPresets';
@@ -77,10 +78,7 @@ export function BoardPicker({
   });
 
   const pedaltrainBySeries = useMemo(() => pedaltrainPresetsBySeries(), []);
-  const temples = useMemo(
-    () => BOARD_PRESETS.filter((p) => p.brand === 'Temple Audio'),
-    [],
-  );
+  const templeBySeries = useMemo(() => templeAudioPresetsBySeries(), []);
 
   const toggleSeries = (s: BoardSeries) => {
     setExpandedSeries((prev) => {
@@ -102,7 +100,7 @@ export function BoardPicker({
         />
         <BrandCard
           label="Temple Audio"
-          sub="3 boards"
+          sub="7 boards · Solo, Duo, Trio"
           previewPreset={brandThumbPreset('Temple Audio')}
           onClick={() => setView('temple-audio')}
         />
@@ -133,7 +131,7 @@ export function BoardPicker({
       <div>
         <BackHeader onBack={() => setView('brand')} label="Pedaltrain" />
         <div className={styles.seriesList}>
-          {BOARD_SERIES_ORDER.map((series) => {
+          {PEDALTRAIN_SERIES_ORDER.map((series) => {
             const presets = pedaltrainBySeries.get(series) ?? [];
             if (presets.length === 0) return null;
             return (
@@ -157,15 +155,22 @@ export function BoardPicker({
     return (
       <div>
         <BackHeader onBack={() => setView('brand')} label="Temple Audio" />
-        <div className={styles.presetGrid}>
-          {temples.map((p) => (
-            <PresetCard
-              key={p.id}
-              preset={p}
-              selected={selection === p.id}
-              onClick={() => onSelect(p.id)}
-            />
-          ))}
+        <div className={styles.seriesList}>
+          {TEMPLE_AUDIO_SERIES_ORDER.map((series) => {
+            const presets = templeBySeries.get(series) ?? [];
+            if (presets.length === 0) return null;
+            return (
+              <SeriesSection
+                key={series}
+                series={series}
+                presets={presets}
+                open={expandedSeries.has(series)}
+                onToggle={() => toggleSeries(series)}
+                selection={selection}
+                onSelect={onSelect}
+              />
+            );
+          })}
         </div>
       </div>
     );

@@ -20,15 +20,32 @@ import terra42Img from '../assets/boards/terra-42.png';
 import xd18Img from '../assets/boards/xd-18.png';
 import xd24Img from '../assets/boards/xd-24.png';
 
-export type BoardSeries = 'Nano' | 'Metro' | 'Classic' | 'Novo' | 'Large';
+export type BoardSeries =
+  // Pedaltrain
+  | 'Nano'
+  | 'Metro'
+  | 'Classic'
+  | 'Novo'
+  | 'Large'
+  // Temple Audio
+  | 'Solo'
+  | 'Duo'
+  | 'Trio';
 
-/** Order series should appear in the picker. */
-export const BOARD_SERIES_ORDER: readonly BoardSeries[] = [
+/** Order Pedaltrain series should appear in the picker. */
+export const PEDALTRAIN_SERIES_ORDER: readonly BoardSeries[] = [
   'Nano',
   'Metro',
   'Classic',
   'Novo',
   'Large',
+] as const;
+
+/** Order Temple Audio series should appear in the picker. */
+export const TEMPLE_AUDIO_SERIES_ORDER: readonly BoardSeries[] = [
+  'Solo',
+  'Duo',
+  'Trio',
 ] as const;
 
 export interface BoardPreset {
@@ -240,7 +257,11 @@ export const BOARD_PRESETS: readonly BoardPreset[] = [
     image: xd24Img,
     series: 'Large',
   },
-  // Temple Audio
+  // Temple Audio — widths are the usable-pedal-area width (marketed
+  // model number is slightly larger; e.g. Duo 24 markets as 24" but
+  // actually fits pedals across 22.7"). All boards in a series share
+  // a fixed depth.
+  // Solo
   {
     id: 'temple-solo-18',
     brand: 'Temple Audio',
@@ -248,15 +269,37 @@ export const BOARD_PRESETS: readonly BoardPreset[] = [
     widthIn: 16.7,
     depthIn: 8.5,
     style: 'holes',
+    series: 'Solo',
+  },
+  // Duo
+  {
+    id: 'temple-duo-17',
+    brand: 'Temple Audio',
+    name: 'Duo 17',
+    widthIn: 15.7,
+    depthIn: 12.5,
+    style: 'holes',
+    series: 'Duo',
   },
   {
     id: 'temple-duo-24',
     brand: 'Temple Audio',
     name: 'Duo 24',
-    widthIn: 23.2,
+    widthIn: 22.7,
     depthIn: 12.5,
     style: 'holes',
+    series: 'Duo',
   },
+  {
+    id: 'temple-duo-34',
+    brand: 'Temple Audio',
+    name: 'Duo 34',
+    widthIn: 32.7,
+    depthIn: 12.5,
+    style: 'holes',
+    series: 'Duo',
+  },
+  // Trio
   {
     id: 'temple-trio-21',
     brand: 'Temple Audio',
@@ -264,6 +307,25 @@ export const BOARD_PRESETS: readonly BoardPreset[] = [
     widthIn: 19.7,
     depthIn: 16.5,
     style: 'holes',
+    series: 'Trio',
+  },
+  {
+    id: 'temple-trio-28',
+    brand: 'Temple Audio',
+    name: 'Trio 28',
+    widthIn: 26.7,
+    depthIn: 16.5,
+    style: 'holes',
+    series: 'Trio',
+  },
+  {
+    id: 'temple-trio-43',
+    brand: 'Temple Audio',
+    name: 'Trio 43',
+    widthIn: 41.7,
+    depthIn: 16.5,
+    style: 'holes',
+    series: 'Trio',
   },
 ];
 
@@ -333,14 +395,27 @@ export function resolveBoardImageSrc(rig: {
   return null;
 }
 
-/** Pedaltrain presets grouped by series, in the order defined by BOARD_SERIES_ORDER. */
+/** Pedaltrain presets grouped by series, in the order defined by PEDALTRAIN_SERIES_ORDER. */
 export function pedaltrainPresetsBySeries(): Map<BoardSeries, BoardPreset[]> {
   const bySeries = new Map<BoardSeries, BoardPreset[]>();
-  for (const series of BOARD_SERIES_ORDER) {
+  for (const series of PEDALTRAIN_SERIES_ORDER) {
     bySeries.set(series, []);
   }
   for (const p of BOARD_PRESETS) {
     if (p.brand !== 'Pedaltrain' || !p.series) continue;
+    bySeries.get(p.series)?.push(p);
+  }
+  return bySeries;
+}
+
+/** Temple Audio presets grouped by series, in the order defined by TEMPLE_AUDIO_SERIES_ORDER. */
+export function templeAudioPresetsBySeries(): Map<BoardSeries, BoardPreset[]> {
+  const bySeries = new Map<BoardSeries, BoardPreset[]>();
+  for (const series of TEMPLE_AUDIO_SERIES_ORDER) {
+    bySeries.set(series, []);
+  }
+  for (const p of BOARD_PRESETS) {
+    if (p.brand !== 'Temple Audio' || !p.series) continue;
     bySeries.get(p.series)?.push(p);
   }
   return bySeries;
