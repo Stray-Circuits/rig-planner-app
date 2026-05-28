@@ -1,0 +1,1 @@
+ALTER TABLE rigs ADD COLUMN preset_id TEXT;

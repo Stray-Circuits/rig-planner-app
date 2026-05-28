@@ -41,6 +41,7 @@ const rig: Rig = {
   widthIn: 24,
   depthIn: 12,
   style: 'rail',
+  presetId: null,
   createdAt: '',
   updatedAt: '',
 };

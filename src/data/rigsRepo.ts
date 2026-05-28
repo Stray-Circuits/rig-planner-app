@@ -8,6 +8,7 @@ interface RigRow {
   width_in: number;
   depth_in: number;
   style: string;
+  preset_id: string | null | undefined;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +29,7 @@ function fromRow(r: RigRow): Rig {
     widthIn: r.width_in,
     depthIn: r.depth_in,
     style: r.style,
+    presetId: r.preset_id ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -38,6 +40,7 @@ export interface CreateRigInput {
   widthIn: number;
   depthIn: number;
   style: BoardStyle;
+  presetId?: string | null;
 }
 
 export async function listRigs(): Promise<Rig[]> {
@@ -64,9 +67,16 @@ export async function createRig(input: CreateRigInput): Promise<Rig> {
   const id = newId();
   const db = await getDb();
   await db.execute(
-    `INSERT INTO rigs (id, name, width_in, depth_in, style)
-     VALUES (?, ?, ?, ?, ?)`,
-    [id, name, input.widthIn, input.depthIn, input.style],
+    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      name,
+      input.widthIn,
+      input.depthIn,
+      input.style,
+      input.presetId ?? null,
+    ],
   );
   const created = await getRig(id);
   if (!created) throw new Error('Rig insert succeeded but row not found');
@@ -109,20 +119,21 @@ export async function updateRigDimensions(
   );
 }
 
-/** Atomically swap board dimensions + style. Used when "changing the board" via the picker. */
+/** Atomically swap board dimensions + style + preset. Used when "changing the board" via the picker. */
 export async function updateRigBoard(
   id: string,
   widthIn: number,
   depthIn: number,
   style: BoardStyle,
+  presetId: string | null,
 ): Promise<void> {
   if (widthIn <= 0 || depthIn <= 0) {
     throw new Error('Rig dimensions must be positive');
   }
   const db = await getDb();
   await db.execute(
-    `UPDATE rigs SET width_in = ?, depth_in = ?, style = ?, updated_at = datetime('now') WHERE id = ?`,
-    [widthIn, depthIn, style, id],
+    `UPDATE rigs SET width_in = ?, depth_in = ?, style = ?, preset_id = ?, updated_at = datetime('now') WHERE id = ?`,
+    [widthIn, depthIn, style, presetId, id],
   );
 }
 
@@ -132,14 +143,15 @@ export async function duplicateRig(id: string): Promise<Rig> {
   const newRigId = newId();
   const db = await getDb();
   await db.execute(
-    `INSERT INTO rigs (id, name, width_in, depth_in, style)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
     [
       newRigId,
       `${source.name} (copy)`,
       source.widthIn,
       source.depthIn,
       source.style,
+      source.presetId,
     ],
   );
   // Copy placed pedals, external endpoints, connections. IDs are remapped

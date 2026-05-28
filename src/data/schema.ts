@@ -123,6 +123,13 @@ export interface Rig {
   widthIn: number;
   depthIn: number;
   style: BoardStyle;
+  /**
+   * Id of the BoardPreset the user picked, or null for custom-dimension rigs
+   * (and rigs created before this field existed). When present, the canvas
+   * draws the preset's bundled image; when null and style is 'rail', the
+   * renderer falls back to the closest Pedaltrain image, scaled.
+   */
+  presetId: string | null;
   createdAt: string;
   updatedAt: string;
 }

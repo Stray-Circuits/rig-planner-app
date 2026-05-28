@@ -47,14 +47,29 @@ export function resolveBoardChoice(
 }
 
 /**
- * Pre-fill a picker from an existing rig. Tries to match the rig against a
- * preset; falls back to "custom" with the rig's current values.
+ * Pre-fill a picker from an existing rig. Prefers the rig's stored presetId
+ * (authoritative), then falls back to fuzzy-matching dims+style against a
+ * preset, then to "custom" with the rig's current values. The fuzzy match
+ * is what lets pre-presetId rigs (created before the column existed) still
+ * land on the right preset card.
  */
 export function initialPickerStateFor(rig: {
   widthIn: number;
   depthIn: number;
   style: BoardStyle;
+  presetId?: string | null;
 }): BoardPickerState {
+  if (rig.presetId) {
+    const byId = BOARD_PRESETS.find((p) => p.id === rig.presetId);
+    if (byId) {
+      return {
+        selection: byId.id,
+        customW: '',
+        customD: '',
+        customStyle: rig.style,
+      };
+    }
+  }
   const matched = BOARD_PRESETS.find(
     (p) =>
       Math.abs(p.widthIn - rig.widthIn) < 0.01 &&

@@ -18,6 +18,12 @@ pub fn run() {
             sql: include_str!("../migrations/0002_image_source_url.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "rigs: track which BoardPreset the user picked",
+            sql: include_str!("../migrations/0003_rig_preset_id.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

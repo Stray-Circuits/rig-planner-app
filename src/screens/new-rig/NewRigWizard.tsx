@@ -62,6 +62,7 @@ export function NewRigWizard({
         widthIn: choice.widthIn,
         depthIn: choice.depthIn,
         style: choice.style,
+        presetId: choice.source === 'custom' ? null : choice.source,
       });
       // Seed the rig's external endpoints from the wizard choices. Done
       // here (before navigating) so ensureDefaultEndpoints on first

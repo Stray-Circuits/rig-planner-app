@@ -30,6 +30,7 @@ interface SettingsSheetProps {
     widthIn: number,
     depthIn: number,
     style: BoardStyle,
+    presetId: string | null,
   ) => Promise<void>;
   onChangeFloor: (style: FloorStyle) => void;
   onAddEndpoint: (kind: ExternalEndpointKind, label: string) => Promise<void>;
@@ -121,10 +122,11 @@ export function SettingsSheet({
         widthIn: rig.widthIn,
         depthIn: rig.depthIn,
         style: rig.style,
+        presetId: rig.presetId,
       }),
     );
     setError(null);
-  }, [open, rig.name, rig.widthIn, rig.depthIn, rig.style]);
+  }, [open, rig.name, rig.widthIn, rig.depthIn, rig.style, rig.presetId]);
 
   const pickerChoice = resolveBoardChoice(pickerState);
   const boardChanged =
@@ -162,6 +164,7 @@ export function SettingsSheet({
             pickerChoice.widthIn,
             pickerChoice.depthIn,
             pickerChoice.style,
+            pickerChoice.source === 'custom' ? null : pickerChoice.source,
           );
         }
         onClose();
