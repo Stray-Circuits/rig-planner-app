@@ -76,11 +76,11 @@ Commit at phase + feature boundaries with all four gates green (typecheck, lint,
 
 Three layers, all defined under `.github/`:
 
-- **`.github/workflows/security.yml`** — runs on push/PR + weekly cron. Four jobs:
+- **`.github/workflows/security.yml`** — runs on push/PR + weekly cron. Three jobs:
   - `pnpm audit --prod --audit-level=high` — fails the build on high/critical CVEs in production JS deps. Dev-only advisories surface via Dependabot to keep this signal actionable.
   - `cargo-deny check advisories bans licenses sources` — RustSec CVEs, AGPL-compatible license allowlist, banned/duplicate crates, registry source pinning. Config lives in `src-tauri/deny.toml`.
-  - `gitleaks` — diff-level secret scan on PRs (belt-and-suspenders on top of GitHub's native push protection).
   - `dependency-review-action` — PR-only gate that blocks introducing a new vulnerable dep.
+  - **Secret scanning is GitHub-native** (push protection + secret scanning alerts, toggled in repo settings). No CI job — `gitleaks-action` is paywalled for org use and the native ruleset is broader. If you ever need a custom rule (e.g. an internal token format GitHub doesn't ship), the fallback is to run the gitleaks CLI binary directly (still MIT) rather than the action.
 - **`.github/workflows/codeql.yml`** — CodeQL SAST for `javascript-typescript` and `rust` with the `security-and-quality` query suite. Rust analysis needs the same `libwebkit2gtk-4.1-dev` system deps as the main Rust CI job.
 - **`.github/dependabot.yml`** — weekly PRs for `npm`, `cargo` (in `src-tauri/`), and `github-actions`. Dev-tooling minor/patch bumps are grouped into one PR.
 
@@ -89,6 +89,6 @@ Three layers, all defined under `.github/`:
 **Suppressing findings.**
 - cargo-deny advisories: add an entry to `[advisories.ignore]` in `src-tauri/deny.toml` with a `reason =` string that links to your analysis. Don't ignore without reading the advisory.
 - CodeQL: prefer fixing. If a finding is a true false-positive, dismiss it via the GitHub Security tab with a note; don't sprinkle `// codeql[...]` suppressions in code.
-- gitleaks: if a checked-in string is a known false positive (e.g. a fixture), add it to a `[allowlist]` block in a `.gitleaks.toml` at the repo root — create the file when first needed.
+- Native secret scanning: dismiss false positives via the Security tab → Secret scanning alerts → "Close as" with a reason. For fixture strings that look secret-like, prefer rewriting the fixture over carrying a perpetual dismissal.
 
-**Repo-settings dependencies** (toggled in GitHub UI, not in this repo): secret scanning, push protection, Dependabot alerts, Dependabot security updates. These are assumed on; the workflows above complement them rather than replace them.
+**Repo-settings dependencies** (toggled in GitHub UI, not in this repo): secret scanning, push protection, Dependabot alerts, Dependabot security updates. These are required for the security model to hold; the workflows above complement them.
