@@ -750,7 +750,7 @@ export function ChainOverlay({
       >
         <div className={styles.endpointsCluster}>
           {endpoints
-            .filter((ep) => ep.kind === 'amp_in' || ep.kind === 'amp_fx_send')
+            .filter((ep) => ep.kind === 'amp_in' || ep.kind === 'amp_fx_return')
             .map((ep) => (
               <EndpointChip
                 key={ep.id}
@@ -766,7 +766,7 @@ export function ChainOverlay({
         </div>
         <div className={styles.endpointsCluster}>
           {endpoints
-            .filter((ep) => ep.kind === 'guitar' || ep.kind === 'amp_fx_return')
+            .filter((ep) => ep.kind === 'guitar' || ep.kind === 'amp_fx_send')
             .map((ep) => (
               <EndpointChip
                 key={ep.id}
@@ -880,7 +880,7 @@ function lookupConnectionEnd(
     };
   }
   const yIn = -ENDPOINT_CHIP_BOTTOM_PX / pxPerInch;
-  const isLeftCluster = ep.kind === 'amp_in' || ep.kind === 'amp_fx_send';
+  const isLeftCluster = ep.kind === 'amp_in' || ep.kind === 'amp_fx_return';
   const xIn = isLeftCluster ? 0.75 : rig.widthIn - 0.75;
   return { xIn, yIn, side: 'bottom' };
 }
