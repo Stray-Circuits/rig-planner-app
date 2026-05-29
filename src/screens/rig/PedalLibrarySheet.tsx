@@ -60,14 +60,14 @@ export function PedalLibrarySheet({
   }, [open]);
 
   const filteredPedals = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return pedals;
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return pedals;
+    // Multi-token search: every token must appear somewhere in the
+    // brand + name haystack so e.g. "stray buff" finds "Stray Circuits
+    // Buff Boost" even though that exact substring never appears.
     return pedals.filter((p) => {
-      const name = p.name.toLowerCase();
-      const brand = p.brand.toLowerCase();
-      return (
-        name.includes(q) || brand.includes(q) || `${brand} ${name}`.includes(q)
-      );
+      const haystack = `${p.brand} ${p.name}`.toLowerCase();
+      return tokens.every((t) => haystack.includes(t));
     });
   }, [pedals, query]);
 
@@ -155,7 +155,7 @@ export function PedalLibrarySheet({
             <div className={styles.searchRow}>
               <i className={`ti ti-search ${styles.searchIcon}`} aria-hidden />
               <input
-                type="search"
+                type="text"
                 className={styles.searchInput}
                 placeholder="Search pedals"
                 value={query}
