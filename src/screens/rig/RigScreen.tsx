@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Pedal, PlacedPedal, Port, Rig } from '../../data/schema';
-import { BoardCanvas } from '../../canvas/BoardCanvas';
+import { BoardCanvas, type BoardCanvasHandle } from '../../canvas/BoardCanvas';
 import { useViewport } from '../../canvas/useViewport';
 import {
   centeredOnRig,
@@ -671,9 +671,12 @@ function CanvasArea({
   children,
 }: CanvasAreaProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const boardRef = useRef<BoardCanvasHandle | null>(null);
   const [pxPerInch, setPxPerInch] = useState(18);
   const { viewport, pointerHandlers, attachWheel, reset, setScale } =
-    useViewport();
+    useViewport({
+      onPinchStart: () => boardRef.current?.cancelActiveDrag(),
+    });
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -739,6 +742,7 @@ function CanvasArea({
         }}
       >
         <BoardCanvas
+          ref={boardRef}
           rig={rig}
           placed={placed}
           pedalsById={pedalsById}

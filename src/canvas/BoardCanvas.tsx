@@ -1,8 +1,11 @@
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
+  type ForwardedRef,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
@@ -59,6 +62,16 @@ interface BoardCanvasProps {
   unconnectedRequired?: Set<string>;
 }
 
+export interface BoardCanvasHandle {
+  /**
+   * Abort any in-flight pedal drag — used when a second touch lands and
+   * pinch-zoom takes over the gesture. Commits the partial move if the
+   * drag had already crossed the movement threshold so the user doesn't
+   * lose progress.
+   */
+  cancelActiveDrag: () => void;
+}
+
 interface DragState {
   placedId: string;
   pointerId: number;
@@ -86,22 +99,25 @@ const DRAG_THRESHOLD_PX = 4;
 const LONG_PRESS_CANCEL_PX = 2;
 const LONG_PRESS_MS = 450;
 
-export function BoardCanvas({
-  rig,
-  placed,
-  pedalsById,
-  pxPerInch,
-  onDragMove,
-  onDragCommit,
-  onRequestActions,
-  chainMode = false,
-  connections = [],
-  endpoints = [],
-  onPedalTap,
-  onEndpointTap,
-  armedPort = null,
-  unconnectedRequired,
-}: BoardCanvasProps) {
+function BoardCanvasInner(
+  {
+    rig,
+    placed,
+    pedalsById,
+    pxPerInch,
+    onDragMove,
+    onDragCommit,
+    onRequestActions,
+    chainMode = false,
+    connections = [],
+    endpoints = [],
+    onPedalTap,
+    onEndpointTap,
+    armedPort = null,
+    unconnectedRequired,
+  }: BoardCanvasProps,
+  ref: ForwardedRef<BoardCanvasHandle>,
+) {
   const warnings = unconnectedRequired ?? EMPTY_WARNING_SET;
   const overlapping = useMemo(
     () => overlappingPlacedIds(placed, pedalsById),
@@ -242,9 +258,11 @@ export function BoardCanvas({
         longPressFired: false,
       };
       e.currentTarget.setPointerCapture(e.pointerId);
-      // Pedal drag owns this pointer; don't let canvas-level pinch/pan
-      // gestures pick it up.
-      e.stopPropagation();
+      // Note: we intentionally let this event bubble to the canvas wrapper
+      // so `useViewport` registers the first finger in its pointer map. A
+      // second finger landing on (or off) the pedal then forms a pinch
+      // anchor and the viewport's onPinchStart aborts this drag — see
+      // useImperativeHandle below.
     },
     [chainMode, onDragMove, onRequestActions, pedalsById, pointerToInches],
   );
@@ -295,6 +313,25 @@ export function BoardCanvas({
       }
       dragRef.current = null;
     },
+    [onDragCommit],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      cancelActiveDrag: () => {
+        const drag = dragRef.current;
+        if (!drag) return;
+        if (drag.longPressTimer) clearTimeout(drag.longPressTimer);
+        // Commit the partial move so the user doesn't lose progress when
+        // a pinch interrupts a drag. The captured pointer's subsequent
+        // move/up events will no-op once dragRef is null.
+        if (drag.movedEnough && !drag.longPressFired) {
+          onDragCommit?.(drag.placedId);
+        }
+        dragRef.current = null;
+      },
+    }),
     [onDragCommit],
   );
 
@@ -405,3 +442,5 @@ export function BoardCanvas({
     </div>
   );
 }
+
+export const BoardCanvas = forwardRef(BoardCanvasInner);

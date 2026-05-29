@@ -56,7 +56,22 @@ export interface UseViewportResult {
   attachWheel: (el: HTMLElement | null) => void;
 }
 
-export function useViewport(): UseViewportResult {
+export interface UseViewportOptions {
+  /**
+   * Fired once when a second touch pointer lands and the pinch anchor is
+   * formed. Lets the consumer cancel any in-flight single-finger gesture
+   * (e.g. a pedal drag) so it doesn't compete with the pinch.
+   */
+  onPinchStart?: () => void;
+}
+
+export function useViewport(
+  options: UseViewportOptions = {},
+): UseViewportResult {
+  const onPinchStartRef = useRef(options.onPinchStart);
+  useEffect(() => {
+    onPinchStartRef.current = options.onPinchStart;
+  }, [options.onPinchStart]);
   const [viewport, setViewport] = useState<Viewport>({
     scale: 1,
     panX: 0,
@@ -94,6 +109,7 @@ export function useViewport(): UseViewportResult {
           initialPanX: viewport.panX,
           initialPanY: viewport.panY,
         };
+        onPinchStartRef.current?.();
       }
     },
     [viewport.scale, viewport.panX, viewport.panY],
