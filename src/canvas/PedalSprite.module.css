@@ -20,6 +20,15 @@
   justify-content: center;
   transition: transform 0.18s ease;
   pointer-events: auto;
+  /* Outer is sized to the post-rotation bounding box (depth×width when
+     rotated 90/270), but the body keeps its un-rotated width/height so the
+     CSS rotate transform yields the right footprint. For a pedal where
+     widthIn > depthIn, the body's pre-rotation width exceeds the outer's
+     width, and the default flex-shrink:1 would squish the body to a
+     square before rotation — distorting the bg-image. Pin to 0 so the
+     body keeps its declared size and the rotation alone determines
+     visual orientation. */
+  flex-shrink: 0;
 }
 
 /* Real (background-removed) photos already have their own silhouette, so we
