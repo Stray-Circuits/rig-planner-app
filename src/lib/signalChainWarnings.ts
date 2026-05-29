@@ -8,10 +8,14 @@ import type {
 } from '../data/schema';
 
 /**
- * How many cables a single jack of this connector type can host. TRS
- * accepts a splitter cable (one tip-ring-sleeve carrier feeding two
- * mono sends), so users can rig that up as two logical connections on
- * one physical port. Every other connector saturates at one.
+ * How many logical cables can terminate at a single jack of this
+ * connector type. A TRS jack carries two signals on one connector
+ * (tip + ring), so up to two connection records can share one TRS
+ * port — whether the user runs a TRS-to-TRS cable to another stereo
+ * port or a TRS Y-splitter to two mono destinations is downstream of
+ * the data model. Every other connector carries one signal and
+ * saturates at one cable. midi_trs is TRS-shaped but carries a single
+ * MIDI signal per the MIDI TRS spec, so it stays at 1.
  */
 export function maxCablesForConnector(c: Connector): number {
   return c === 'trs' ? 2 : 1;

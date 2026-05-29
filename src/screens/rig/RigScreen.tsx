@@ -170,10 +170,10 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     role === 'fx_send' ||
     role === 'midi_out';
 
-  // Returns a user-facing notice if the port is already at its cable cap,
-  // or null if it has room. TRS jacks accept a splitter (one tip-ring-
-  // sleeve cable carrying two signals) and so hold two cables; everything
-  // else is a single mono / MIDI DIN / XLR jack and saturates at one.
+  // Returns a user-facing notice if the port is already at its cable
+  // cap, or null if it has room. Per-connector caps live in
+  // maxCablesForConnector — TRS carries two signals so two connection
+  // records can share one port.
   const portFullReason = (
     port: Port,
     placedId: string,
