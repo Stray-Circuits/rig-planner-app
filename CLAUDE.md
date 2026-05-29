@@ -76,7 +76,7 @@ The codebase compiles with `exactOptionalPropertyTypes`, `noUncheckedIndexedAcce
 
 ## Backlog / planning files
 
-- **`FOLLOWUPS.md`** — tracked, curated polish list grouped by area. Update when phases / fixes complete.
+- **GitHub issues** — primary tracker for polish, bugs, and deferred features. Filed under `Stray-Circuits/rig-planner-app`; use `gh issue list` / `gh issue view <n>`.
 - **`other_todos.txt`** — Zach's working notes, gitignored. Read when he points at it; treat lines as authoritative scope when he says "fix the items I listed."
 - **`mockups/`** — original HTML/CSS mockups the app implements. Reference for visual intent, not import.
 
