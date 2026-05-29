@@ -231,6 +231,24 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     return true;
   };
 
+  // Reports whether adding one more cable to (placedId, portId) would
+  // saturate it. Drives the "stay armed for the next cable" decision so
+  // a stereo TRS can be wired to two destinations without re-tapping the
+  // source pedal between cables.
+  const sourcePortFullAfterAdd = (
+    placedId: string,
+    portId: string,
+  ): boolean => {
+    const owner = placed.find((p) => p.id === placedId);
+    const port = owner
+      ? pedalsById.get(owner.pedalId)?.ports.find((p) => p.id === portId)
+      : null;
+    if (!port) return true;
+    const max = maxCablesForConnector(port.connector);
+    const have = cableCountByPort.get(`${placedId}:${portId}`) ?? 0;
+    return have + 1 >= max;
+  };
+
   const handlePortTap = (placedId: string, portId: string) => {
     if (!armedPort) {
       setArmedPort({ placedId, portId });
@@ -240,8 +258,19 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
       setArmedPort(null);
       return;
     }
-    tryConnectPorts(armedPort.placedId, armedPort.portId, placedId, portId);
-    setArmedPort(null);
+    const ok = tryConnectPorts(
+      armedPort.placedId,
+      armedPort.portId,
+      placedId,
+      portId,
+    );
+    if (!ok) {
+      setArmedPort(null);
+      return;
+    }
+    if (sourcePortFullAfterAdd(armedPort.placedId, armedPort.portId)) {
+      setArmedPort(null);
+    }
   };
 
   const handleCanvasBackgroundClick = () => {
@@ -291,6 +320,20 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
         return;
       }
     }
+    // Same saturation gate that tryConnectPorts uses for pedal-to-pedal:
+    // refuse a cable that would over-fill the source port (TS at 1, TRS
+    // at 2). The mirror gate for the endpoint side isn't needed —
+    // external endpoints don't have a cable cap.
+    const armedMax = maxCablesForConnector(armedPortDef.connector);
+    const armedHave =
+      cableCountByPort.get(`${armedPort.placedId}:${armedPort.portId}`) ?? 0;
+    if (armedHave >= armedMax) {
+      setNotice(
+        `${armedPortDef.label} is already full (${armedMax} cable${armedMax === 1 ? '' : 's'} max).`,
+      );
+      setArmedPort(null);
+      return;
+    }
     const armedIsOutput = isOutputRole(armedPortDef.role);
     const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
     // Endpoint is "from" if it's a source; otherwise the pedal port is the source.
@@ -308,7 +351,9 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     // direction is currently determined by endpoint kind alone, so we
     // intentionally ignore the port role here.
     void armedIsOutput;
-    setArmedPort(null);
+    if (sourcePortFullAfterAdd(armedPort.placedId, armedPort.portId)) {
+      setArmedPort(null);
+    }
   };
 
   const targetPlaced = useMemo(

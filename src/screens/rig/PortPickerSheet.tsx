@@ -1,6 +1,7 @@
 import type { Pedal, PlacedPedal, Port } from '../../data/schema';
 import {
   connectionCompatibility,
+  maxCablesForConnector,
   type SignalFamily,
   signalFamily,
 } from '../../lib/signalChainWarnings';
@@ -82,12 +83,16 @@ export function PortPickerSheet({
           pedal.ports.map((port) => {
             const portKey = `${placed.id}:${port.id}`;
             const cableCount = cableCountByPort.get(portKey) ?? 0;
-            const isConnected = cableCount > 0;
+            const portMax = maxCablesForConnector(port.connector);
             const portFamily = signalFamily(port.signalType);
-            // A connected port outside the in-flight "to" step becomes a
-            // disconnect button — the only way to delete a cable now that
-            // tapping the cable line is gone.
-            const isDisconnectAction = isConnected && !isCompletingConnection;
+            // Tap = disconnect only when the port has no slots left. A
+            // partially-filled TRS jack (1 of 2) stays in "arm to add
+            // another cable" mode so users can wire a stereo splitter
+            // without re-tapping the pedal between cables.
+            const isDisconnectAction =
+              !isCompletingConnection &&
+              cableCount >= portMax &&
+              cableCount > 0;
             let disabledReason: string | null = null;
             if (isCompletingConnection && armedFromPort) {
               const compat = connectionCompatibility(
@@ -131,6 +136,7 @@ export function PortPickerSheet({
                           port,
                           portFamily,
                           cableCount,
+                          portMax,
                           isDisconnectAction,
                         )}
                     </span>
@@ -160,6 +166,7 @@ function subtitleFor(
   port: Port,
   family: SignalFamily,
   cableCount: number,
+  portMax: number,
   isDisconnectAction: boolean,
 ): string {
   const base = `${family} · ${port.connector.toUpperCase()}`;
@@ -168,7 +175,12 @@ function subtitleFor(
       ? `${base} · ${cableCount} cables · tap to disconnect`
       : `${base} · tap to disconnect`;
   }
-  if (cableCount > 0) return `${base} · connected`;
+  if (cableCount > 0) {
+    // Partially-filled multi-slot jack (TRS at 1 of 2). Make the
+    // remaining capacity legible so the user can see they're about
+    // to add another cable, not start a fresh connection.
+    return `${base} · ${cableCount} of ${portMax} used · tap to add another`;
+  }
   if (!port.optional) return `${base} · required`;
   return base;
 }
