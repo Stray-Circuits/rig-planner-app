@@ -91,6 +91,10 @@ interface DragState {
 }
 
 const DRAG_THRESHOLD_PX = 4;
+// Any movement past this kills a pending long-press, even if it's still
+// below the drag-promotion threshold. Small enough to ignore touch-rest
+// jitter, large enough that a real nudge cancels the actions sheet.
+const LONG_PRESS_CANCEL_PX = 2;
 const LONG_PRESS_MS = 450;
 
 export function BoardCanvas({
@@ -258,15 +262,22 @@ export function BoardCanvas({
       const drag = dragRef.current;
       if (drag?.pointerId !== e.pointerId) return;
       if (drag.longPressFired) return;
+      const dx = e.clientX - drag.startClientX;
+      const dy = e.clientY - drag.startClientY;
+      const distSq = dx * dx + dy * dy;
+      // Cancel the pending long-press as soon as the finger moves past
+      // resting-jitter. A user nudging a pedal shouldn't get the actions
+      // sheet just because they didn't cross the drag-promotion threshold.
+      if (
+        drag.longPressTimer &&
+        distSq >= LONG_PRESS_CANCEL_PX * LONG_PRESS_CANCEL_PX
+      ) {
+        clearTimeout(drag.longPressTimer);
+        drag.longPressTimer = null;
+      }
       if (!drag.movedEnough) {
-        const dx = e.clientX - drag.startClientX;
-        const dy = e.clientY - drag.startClientY;
-        if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+        if (distSq < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
         drag.movedEnough = true;
-        if (drag.longPressTimer) {
-          clearTimeout(drag.longPressTimer);
-          drag.longPressTimer = null;
-        }
       }
       const { xIn, yIn } = pointerToInches(e.clientX, e.clientY);
       const proposed = clampToBoard(
