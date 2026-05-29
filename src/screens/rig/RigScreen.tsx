@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
+import type { Pedal, PlacedPedal, Port, Rig } from '../../data/schema';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
 import { useViewport } from '../../canvas/useViewport';
 import {
@@ -17,6 +17,7 @@ import {
 import {
   computeUnconnectedRequiredPorts,
   connectionCompatibility,
+  maxCablesForConnector,
 } from '../../lib/signalChainWarnings';
 import {
   type FloorStyle,
@@ -131,16 +132,17 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     [placed, pedalsById, connections],
   );
 
-  // Set of "${placedId}:${portId}" keys for every port currently
-  // touched by at least one cable. Used by the picker to surface a
-  // "connected" hint per row.
-  const connectedPortKeys = useMemo(() => {
-    const out = new Set<string>();
+  // Number of cables touching each "${placedId}:${portId}". Drives the
+  // picker's "connected" hint, the disconnect count, and the saturation
+  // gate in tryConnectPorts (TRS holds two; everything else holds one).
+  const cableCountByPort = useMemo(() => {
+    const out = new Map<string, number>();
+    const bump = (key: string) => out.set(key, (out.get(key) ?? 0) + 1);
     for (const c of connections) {
       if (c.fromNodeKind === 'pedal' && c.fromPortId)
-        out.add(`${c.fromNodeId}:${c.fromPortId}`);
+        bump(`${c.fromNodeId}:${c.fromPortId}`);
       if (c.toNodeKind === 'pedal' && c.toPortId)
-        out.add(`${c.toNodeId}:${c.toPortId}`);
+        bump(`${c.toNodeId}:${c.toPortId}`);
     }
     return out;
   }, [connections]);
@@ -168,11 +170,26 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     role === 'fx_send' ||
     role === 'midi_out';
 
+  // Returns a user-facing notice if the port is already at its cable cap,
+  // or null if it has room. TRS jacks accept a splitter (one tip-ring-
+  // sleeve cable carrying two signals) and so hold two cables; everything
+  // else is a single mono / MIDI DIN / XLR jack and saturates at one.
+  const portFullReason = (
+    port: Port,
+    placedId: string,
+    portId: string,
+  ): string | null => {
+    const max = maxCablesForConnector(port.connector);
+    const have = cableCountByPort.get(`${placedId}:${portId}`) ?? 0;
+    if (have < max) return null;
+    return `${port.label} is already full (${max} cable${max === 1 ? '' : 's'} max).`;
+  };
+
   /**
    * Validate a pair of pedal ports and (if compatible) persist a cable.
-   * Used both by tap-then-tap (handlePortTap) and the new drag-to-connect
-   * gesture. Returns true if a connection was created so callers can clear
-   * any state (e.g. armed port) on success.
+   * Driven by the port-picker sheet's two-tap flow. Returns true if a
+   * connection was created so callers can clear any state (e.g. armed
+   * port) on success.
    */
   const tryConnectPorts = (
     aPlacedId: string,
@@ -194,6 +211,16 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
       setNotice(compat.reason);
       return false;
     }
+    const aFull = portFullReason(aPort, aPlacedId, aPortId);
+    if (aFull) {
+      setNotice(aFull);
+      return false;
+    }
+    const bFull = portFullReason(bPort, bPlacedId, bPortId);
+    if (bFull) {
+      setNotice(bFull);
+      return false;
+    }
     // Outputs become "from", inputs become "to". Swap if needed.
     const aIsOutput = isOutputRole(aPort.role);
     const bIsOutput = isOutputRole(bPort.role);
@@ -210,6 +237,24 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     return true;
   };
 
+  // Reports whether adding one more cable to (placedId, portId) would
+  // saturate it. Drives the "stay armed for the next cable" decision so
+  // a stereo TRS can be wired to two destinations without re-tapping the
+  // source pedal between cables.
+  const sourcePortFullAfterAdd = (
+    placedId: string,
+    portId: string,
+  ): boolean => {
+    const owner = placed.find((p) => p.id === placedId);
+    const port = owner
+      ? pedalsById.get(owner.pedalId)?.ports.find((p) => p.id === portId)
+      : null;
+    if (!port) return true;
+    const max = maxCablesForConnector(port.connector);
+    const have = cableCountByPort.get(`${placedId}:${portId}`) ?? 0;
+    return have + 1 >= max;
+  };
+
   const handlePortTap = (placedId: string, portId: string) => {
     if (!armedPort) {
       setArmedPort({ placedId, portId });
@@ -219,27 +264,38 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
       setArmedPort(null);
       return;
     }
-    tryConnectPorts(armedPort.placedId, armedPort.portId, placedId, portId);
-    setArmedPort(null);
-  };
-
-  const handlePortConnect = (
-    fromPlacedId: string,
-    fromPortId: string,
-    toPlacedId: string,
-    toPortId: string,
-  ) => {
-    if (fromPlacedId === toPlacedId && fromPortId === toPortId) return;
-    tryConnectPorts(fromPlacedId, fromPortId, toPlacedId, toPortId);
-    setArmedPort(null);
+    const ok = tryConnectPorts(
+      armedPort.placedId,
+      armedPort.portId,
+      placedId,
+      portId,
+    );
+    if (!ok) {
+      setArmedPort(null);
+      return;
+    }
+    if (sourcePortFullAfterAdd(armedPort.placedId, armedPort.portId)) {
+      setArmedPort(null);
+    }
   };
 
   const handleCanvasBackgroundClick = () => {
     if (chainMode && armedPort) setArmedPort(null);
   };
 
-  const handleCableTap = (connectionId: string) => {
-    void removeConnection(rig.id, connectionId);
+  const handleDisconnectPort = (placedId: string, portId: string) => {
+    // A TRS port may host two cables (splitter). The picker treats them
+    // as one tap target — remove every cable touching this port in one go.
+    const targets = connections.filter(
+      (c) =>
+        (c.fromNodeKind === 'pedal' &&
+          c.fromNodeId === placedId &&
+          c.fromPortId === portId) ||
+        (c.toNodeKind === 'pedal' &&
+          c.toNodeId === placedId &&
+          c.toPortId === portId),
+    );
+    for (const t of targets) void removeConnection(rig.id, t.id);
   };
 
   const handleEndpointTap = (endpointId: string) => {
@@ -270,6 +326,18 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
         return;
       }
     }
+    // External endpoints have no cable cap, but the armed source port
+    // still does. Same gate that tryConnectPorts uses pedal-to-pedal.
+    const armedFull = portFullReason(
+      armedPortDef,
+      armedPort.placedId,
+      armedPort.portId,
+    );
+    if (armedFull) {
+      setNotice(armedFull);
+      setArmedPort(null);
+      return;
+    }
     const armedIsOutput = isOutputRole(armedPortDef.role);
     const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
     // Endpoint is "from" if it's a source; otherwise the pedal port is the source.
@@ -287,7 +355,9 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     // direction is currently determined by endpoint kind alone, so we
     // intentionally ignore the port role here.
     void armedIsOutput;
-    setArmedPort(null);
+    if (sourcePortFullAfterAdd(armedPort.placedId, armedPort.portId)) {
+      setArmedPort(null);
+    }
   };
 
   const targetPlaced = useMemo(
@@ -362,10 +432,7 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
         endpoints={endpoints}
         armedPort={armedPort}
         unconnectedRequired={unconnectedRequired}
-        onPortTap={handlePortTap}
         onPedalTap={setPickerFor}
-        onPortConnect={handlePortConnect}
-        onCableTap={handleCableTap}
         onEndpointTap={handleEndpointTap}
         onBackgroundTap={handleCanvasBackgroundClick}
       >
@@ -466,10 +533,14 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
             placed={placedForPicker}
             pedal={pedalForPicker}
             armedFromPort={armedDetail}
-            connectedPortIds={connectedPortKeys}
+            cableCountByPort={cableCountByPort}
             onClose={() => setPickerFor(null)}
             onPickPort={(placedId, portId) => {
               handlePortTap(placedId, portId);
+              setPickerFor(null);
+            }}
+            onDisconnectPort={(placedId, portId) => {
+              handleDisconnectPort(placedId, portId);
               setPickerFor(null);
             }}
           />
@@ -588,15 +659,7 @@ interface CanvasAreaProps {
   endpoints: ExternalEndpoint[];
   armedPort: { placedId: string; portId: string } | null;
   unconnectedRequired: Set<string>;
-  onPortTap: (placedId: string, portId: string) => void;
   onPedalTap: (placedId: string) => void;
-  onPortConnect: (
-    fromPlacedId: string,
-    fromPortId: string,
-    toPlacedId: string,
-    toPortId: string,
-  ) => void;
-  onCableTap: (connectionId: string) => void;
   onEndpointTap: (endpointId: string) => void;
   onBackgroundTap: () => void;
   /** Overlay elements (mobile floating buttons, etc.) painted above the board. */
@@ -616,10 +679,7 @@ function CanvasArea({
   endpoints,
   armedPort,
   unconnectedRequired,
-  onPortTap,
   onPedalTap,
-  onPortConnect,
-  onCableTap,
   onEndpointTap,
   onBackgroundTap,
   children,
@@ -705,10 +765,7 @@ function CanvasArea({
           endpoints={endpoints}
           armedPort={armedPort}
           unconnectedRequired={unconnectedRequired}
-          onPortTap={onPortTap}
           onPedalTap={onPedalTap}
-          onPortConnect={onPortConnect}
-          onCableTap={onCableTap}
           onEndpointTap={onEndpointTap}
         />
       </div>

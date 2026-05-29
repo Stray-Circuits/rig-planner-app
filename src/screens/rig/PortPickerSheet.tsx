@@ -1,6 +1,7 @@
 import type { Pedal, PlacedPedal, Port } from '../../data/schema';
 import {
   connectionCompatibility,
+  maxCablesForConnector,
   type SignalFamily,
   signalFamily,
 } from '../../lib/signalChainWarnings';
@@ -24,12 +25,19 @@ interface PortPickerSheetProps {
     port: Port;
   } | null;
   /**
-   * "${placedId}:${portId}" keys of ports already touched by an
-   * existing cable on this rig. Surfaces a "connected" hint per row.
+   * Number of existing cables touching each "${placedId}:${portId}".
+   * Drives the per-row "connected" hint and the disconnect-count display
+   * (a TRS port can host two cables via a splitter).
    */
-  connectedPortIds: Set<string>;
+  cableCountByPort: Map<string, number>;
   onClose: () => void;
   onPickPort: (placedId: string, portId: string) => void;
+  /**
+   * Called when the user taps an already-connected port while NOT in the
+   * middle of completing a connection. The parent removes the cable
+   * touching that port. Replaces the old "tap the cable line" delete UX.
+   */
+  onDisconnectPort: (placedId: string, portId: string) => void;
 }
 
 /**
@@ -43,9 +51,10 @@ export function PortPickerSheet({
   placed,
   pedal,
   armedFromPort,
-  connectedPortIds,
+  cableCountByPort,
   onClose,
   onPickPort,
+  onDisconnectPort,
 }: PortPickerSheetProps) {
   if (!pedal || !placed) return null;
 
@@ -73,8 +82,16 @@ export function PortPickerSheet({
         ) : (
           pedal.ports.map((port) => {
             const portKey = `${placed.id}:${port.id}`;
-            const isConnected = connectedPortIds.has(portKey);
+            const cableCount = cableCountByPort.get(portKey) ?? 0;
+            const portMax = maxCablesForConnector(port.connector);
             const portFamily = signalFamily(port.signalType);
+            // Tap = disconnect only when the port has no slots left. A
+            // partially-filled TRS jack (1 of 2) stays in "arm to add
+            // another cable" mode so users can wire a stereo splitter
+            // without re-tapping the pedal between cables. portMax is
+            // always >= 1, so cableCount >= portMax already implies > 0.
+            const isDisconnectAction =
+              !isCompletingConnection && cableCount >= portMax;
             let disabledReason: string | null = null;
             if (isCompletingConnection && armedFromPort) {
               const compat = connectionCompatibility(
@@ -99,7 +116,11 @@ export function PortPickerSheet({
                   type="button"
                   className={styles.rowButton}
                   disabled={disabledReason !== null}
-                  onClick={() => onPickPort(placed.id, port.id)}
+                  onClick={() =>
+                    isDisconnectAction
+                      ? onDisconnectPort(placed.id, port.id)
+                      : onPickPort(placed.id, port.id)
+                  }
                 >
                   <span
                     className={styles.dot}
@@ -110,7 +131,13 @@ export function PortPickerSheet({
                     <span className={styles.rowLabel}>{port.label}</span>
                     <span className={styles.rowSub}>
                       {disabledReason ??
-                        subtitleFor(port, portFamily, isConnected)}
+                        subtitleFor(
+                          port,
+                          portFamily,
+                          cableCount,
+                          portMax,
+                          isDisconnectAction,
+                        )}
                     </span>
                   </span>
                 </button>
@@ -137,10 +164,22 @@ function isOutputRole(role: Port['role']): boolean {
 function subtitleFor(
   port: Port,
   family: SignalFamily,
-  isConnected: boolean,
+  cableCount: number,
+  portMax: number,
+  isDisconnectAction: boolean,
 ): string {
   const base = `${family} · ${port.connector.toUpperCase()}`;
-  if (isConnected) return `${base} · connected`;
+  if (isDisconnectAction) {
+    return cableCount > 1
+      ? `${base} · ${cableCount} cables · tap to disconnect`
+      : `${base} · tap to disconnect`;
+  }
+  if (cableCount > 0) {
+    // Partially-filled multi-slot jack (TRS at 1 of 2). Make the
+    // remaining capacity legible so the user can see they're about
+    // to add another cable, not start a fresh connection.
+    return `${base} · ${cableCount} of ${portMax} used · tap to add another`;
+  }
   if (!port.optional) return `${base} · required`;
   return base;
 }

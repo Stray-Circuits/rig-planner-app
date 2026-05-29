@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeUnconnectedRequiredPorts,
   connectionCompatibility,
+  maxCablesForConnector,
   roleGroup,
   signalFamily,
   sortConnectionsForRender,
@@ -196,5 +197,15 @@ describe('computeUnconnectedRequiredPorts', () => {
     ];
     const result = computeUnconnectedRequiredPorts(placed, map, connections);
     expect(result.size).toBe(0);
+  });
+});
+
+describe('maxCablesForConnector', () => {
+  it('TRS holds two cables (splitter rule); all other connectors hold one', () => {
+    expect(maxCablesForConnector('trs')).toBe(2);
+    expect(maxCablesForConnector('ts')).toBe(1);
+    expect(maxCablesForConnector('xlr')).toBe(1);
+    expect(maxCablesForConnector('midi_din')).toBe(1);
+    expect(maxCablesForConnector('midi_trs')).toBe(1);
   });
 });
