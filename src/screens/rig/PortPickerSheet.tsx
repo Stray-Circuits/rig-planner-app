@@ -30,6 +30,12 @@ interface PortPickerSheetProps {
   connectedPortIds: Set<string>;
   onClose: () => void;
   onPickPort: (placedId: string, portId: string) => void;
+  /**
+   * Called when the user taps an already-connected port while NOT in the
+   * middle of completing a connection. The parent removes the cable
+   * touching that port. Replaces the old "tap the cable line" delete UX.
+   */
+  onDisconnectPort: (placedId: string, portId: string) => void;
 }
 
 /**
@@ -46,6 +52,7 @@ export function PortPickerSheet({
   connectedPortIds,
   onClose,
   onPickPort,
+  onDisconnectPort,
 }: PortPickerSheetProps) {
   if (!pedal || !placed) return null;
 
@@ -75,6 +82,10 @@ export function PortPickerSheet({
             const portKey = `${placed.id}:${port.id}`;
             const isConnected = connectedPortIds.has(portKey);
             const portFamily = signalFamily(port.signalType);
+            // A connected port outside the in-flight "to" step becomes a
+            // disconnect button — the only way to delete a cable now that
+            // tapping the cable line is gone.
+            const isDisconnectAction = isConnected && !isCompletingConnection;
             let disabledReason: string | null = null;
             if (isCompletingConnection && armedFromPort) {
               const compat = connectionCompatibility(
@@ -99,7 +110,11 @@ export function PortPickerSheet({
                   type="button"
                   className={styles.rowButton}
                   disabled={disabledReason !== null}
-                  onClick={() => onPickPort(placed.id, port.id)}
+                  onClick={() =>
+                    isDisconnectAction
+                      ? onDisconnectPort(placed.id, port.id)
+                      : onPickPort(placed.id, port.id)
+                  }
                 >
                   <span
                     className={styles.dot}
@@ -110,7 +125,12 @@ export function PortPickerSheet({
                     <span className={styles.rowLabel}>{port.label}</span>
                     <span className={styles.rowSub}>
                       {disabledReason ??
-                        subtitleFor(port, portFamily, isConnected)}
+                        subtitleFor(
+                          port,
+                          portFamily,
+                          isConnected,
+                          isDisconnectAction,
+                        )}
                     </span>
                   </span>
                 </button>
@@ -138,8 +158,10 @@ function subtitleFor(
   port: Port,
   family: SignalFamily,
   isConnected: boolean,
+  isDisconnectAction: boolean,
 ): string {
   const base = `${family} · ${port.connector.toUpperCase()}`;
+  if (isDisconnectAction) return `${base} · tap to disconnect`;
   if (isConnected) return `${base} · connected`;
   if (!port.optional) return `${base} · required`;
   return base;

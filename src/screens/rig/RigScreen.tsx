@@ -170,9 +170,9 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
 
   /**
    * Validate a pair of pedal ports and (if compatible) persist a cable.
-   * Used both by tap-then-tap (handlePortTap) and the new drag-to-connect
-   * gesture. Returns true if a connection was created so callers can clear
-   * any state (e.g. armed port) on success.
+   * Driven by the port-picker sheet's two-tap flow. Returns true if a
+   * connection was created so callers can clear any state (e.g. armed
+   * port) on success.
    */
   const tryConnectPorts = (
     aPlacedId: string,
@@ -223,23 +223,22 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     setArmedPort(null);
   };
 
-  const handlePortConnect = (
-    fromPlacedId: string,
-    fromPortId: string,
-    toPlacedId: string,
-    toPortId: string,
-  ) => {
-    if (fromPlacedId === toPlacedId && fromPortId === toPortId) return;
-    tryConnectPorts(fromPlacedId, fromPortId, toPlacedId, toPortId);
-    setArmedPort(null);
-  };
-
   const handleCanvasBackgroundClick = () => {
     if (chainMode && armedPort) setArmedPort(null);
   };
 
-  const handleCableTap = (connectionId: string) => {
-    void removeConnection(rig.id, connectionId);
+  const handleDisconnectPort = (placedId: string, portId: string) => {
+    const target = connections.find(
+      (c) =>
+        (c.fromNodeKind === 'pedal' &&
+          c.fromNodeId === placedId &&
+          c.fromPortId === portId) ||
+        (c.toNodeKind === 'pedal' &&
+          c.toNodeId === placedId &&
+          c.toPortId === portId),
+    );
+    if (!target) return;
+    void removeConnection(rig.id, target.id);
   };
 
   const handleEndpointTap = (endpointId: string) => {
@@ -362,10 +361,7 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
         endpoints={endpoints}
         armedPort={armedPort}
         unconnectedRequired={unconnectedRequired}
-        onPortTap={handlePortTap}
         onPedalTap={setPickerFor}
-        onPortConnect={handlePortConnect}
-        onCableTap={handleCableTap}
         onEndpointTap={handleEndpointTap}
         onBackgroundTap={handleCanvasBackgroundClick}
       >
@@ -470,6 +466,10 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
             onClose={() => setPickerFor(null)}
             onPickPort={(placedId, portId) => {
               handlePortTap(placedId, portId);
+              setPickerFor(null);
+            }}
+            onDisconnectPort={(placedId, portId) => {
+              handleDisconnectPort(placedId, portId);
               setPickerFor(null);
             }}
           />
@@ -588,15 +588,7 @@ interface CanvasAreaProps {
   endpoints: ExternalEndpoint[];
   armedPort: { placedId: string; portId: string } | null;
   unconnectedRequired: Set<string>;
-  onPortTap: (placedId: string, portId: string) => void;
   onPedalTap: (placedId: string) => void;
-  onPortConnect: (
-    fromPlacedId: string,
-    fromPortId: string,
-    toPlacedId: string,
-    toPortId: string,
-  ) => void;
-  onCableTap: (connectionId: string) => void;
   onEndpointTap: (endpointId: string) => void;
   onBackgroundTap: () => void;
   /** Overlay elements (mobile floating buttons, etc.) painted above the board. */
@@ -616,10 +608,7 @@ function CanvasArea({
   endpoints,
   armedPort,
   unconnectedRequired,
-  onPortTap,
   onPedalTap,
-  onPortConnect,
-  onCableTap,
   onEndpointTap,
   onBackgroundTap,
   children,
@@ -705,10 +694,7 @@ function CanvasArea({
           endpoints={endpoints}
           armedPort={armedPort}
           unconnectedRequired={unconnectedRequired}
-          onPortTap={onPortTap}
           onPedalTap={onPedalTap}
-          onPortConnect={onPortConnect}
-          onCableTap={onCableTap}
           onEndpointTap={onEndpointTap}
         />
       </div>

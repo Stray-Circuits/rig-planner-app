@@ -45,23 +45,12 @@ interface BoardCanvasProps {
   connections?: Connection[];
   /** External endpoints for the active rig (Guitar, Amp, etc.). */
   endpoints?: ExternalEndpoint[];
-  /** Fired when the user taps a port in chain mode. */
-  onPortTap?: (placedId: string, portId: string) => void;
   /**
    * Fired when the user taps a pedal's body (anywhere on the pedal
    * sprite) while in chain mode. The parent opens a port-picker sheet
-   * for that pedal — the new tap-then-pick connection grammar.
+   * for that pedal — the tap-then-pick connection grammar.
    */
   onPedalTap?: (placedId: string) => void;
-  /** Fired when the user drag-releases from one port onto another. */
-  onPortConnect?: (
-    fromPlacedId: string,
-    fromPortId: string,
-    toPlacedId: string,
-    toPortId: string,
-  ) => void;
-  /** Fired when the user taps an existing cable in chain mode. */
-  onCableTap?: (connectionId: string) => void;
   /** Fired when the user taps an external endpoint chip. */
   onEndpointTap?: (endpointId: string) => void;
   /** Currently-armed port (highlighted), if any. */
@@ -108,10 +97,7 @@ export function BoardCanvas({
   chainMode = false,
   connections = [],
   endpoints = [],
-  onPortTap,
   onPedalTap,
-  onPortConnect,
-  onCableTap,
   onEndpointTap,
   armedPort = null,
   unconnectedRequired,
@@ -377,6 +363,8 @@ export function BoardCanvas({
                 touchAction: 'none',
               }}
               data-placed-id={p.id}
+              role="button"
+              aria-label={`${def.brand} ${def.name}`}
               onPointerDown={(e) => handlePointerDown(e, p)}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
@@ -412,9 +400,6 @@ export function BoardCanvas({
           pxPerInch={pxPerInch}
           armedPort={armedPort}
           unconnectedRequired={warnings}
-          {...(onPortTap ? { onPortTap } : {})}
-          {...(onPortConnect ? { onPortConnect } : {})}
-          {...(onCableTap ? { onCableTap } : {})}
           {...(onEndpointTap ? { onEndpointTap } : {})}
         />
       ) : null}

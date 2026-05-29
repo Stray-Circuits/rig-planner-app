@@ -206,10 +206,12 @@ describe('RigScreen', () => {
       expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(2);
     });
 
-    // Turn on chain mode and tap DS-1 Out then Phase 90 In.
+    // Turn on chain mode. Connection grammar is now pedal-tap → sheet → port row.
     fireEvent.click(screen.getByLabelText('Show signal chain'));
-    fireEvent.click(await screen.findByLabelText(/^DS-1 Out/));
-    fireEvent.click(screen.getByLabelText(/^Phase 90 In/));
+    fireEvent.click(await screen.findByLabelText('Boss DS-1'));
+    fireEvent.click(await screen.findByRole('button', { name: /^Out\b/ }));
+    fireEvent.click(screen.getByLabelText('MXR Phase 90'));
+    fireEvent.click(await screen.findByRole('button', { name: /^In\b/ }));
 
     await waitFor(() => {
       const conns = useSignalChainStore.getState().connectionsByRig[rig.id];
@@ -229,7 +231,8 @@ describe('RigScreen', () => {
       expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
     });
     fireEvent.click(screen.getByLabelText('Show signal chain'));
-    fireEvent.click(await screen.findByLabelText(/^DS-1 In/));
+    fireEvent.click(await screen.findByLabelText('Boss DS-1'));
+    fireEvent.click(await screen.findByRole('button', { name: /^In\b/ }));
     fireEvent.click(await screen.findByText('From Guitar'));
 
     await waitFor(() => {
@@ -251,14 +254,19 @@ describe('RigScreen', () => {
         usePlacedPedalsStore.getState().byRig[rig.id]?.length,
       ).toBeGreaterThan(0);
     });
-    // Default: no port dots visible.
-    expect(screen.queryByLabelText(/DS-1 In/)).not.toBeInTheDocument();
+    // Default: chain mode off → port-picker sheet doesn't open when tapping a pedal.
+    fireEvent.click(screen.getByLabelText('Boss DS-1'));
+    expect(screen.queryByText('Pick a port to start a connection')).toBeNull();
 
-    // Toggle chain mode on.
+    // Toggle chain mode on → tapping the pedal opens the port picker sheet
+    // with rows for each port.
     fireEvent.click(screen.getByLabelText('Show signal chain'));
-    // Dots are buttons with label "<pedal name> <port label>"
-    expect(await screen.findByLabelText(/^DS-1 In/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^DS-1 Out/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Boss DS-1'));
+    expect(
+      await screen.findByText('Pick a port to start a connection'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^In\b/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Out\b/ })).toBeInTheDocument();
   });
 
   it('removing a pedal from the library cascades through placements + connections', async () => {
@@ -272,7 +280,8 @@ describe('RigScreen', () => {
     });
     // Connect Guitar → DS-1 In so we have a connection that will be cascaded.
     fireEvent.click(screen.getByLabelText('Show signal chain'));
-    fireEvent.click(await screen.findByLabelText(/^DS-1 In/));
+    fireEvent.click(await screen.findByLabelText('Boss DS-1'));
+    fireEvent.click(await screen.findByRole('button', { name: /^In\b/ }));
     fireEvent.click(await screen.findByText('From Guitar'));
     await waitFor(() => {
       expect(
