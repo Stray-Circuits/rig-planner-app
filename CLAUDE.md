@@ -29,6 +29,10 @@ iOS / Android entry points (`pnpm tauri:ios:dev`, `pnpm tauri:android:dev`) requ
 
 **Canvas geometry is in inches, not pixels.** Board dimensions, pedal sizes, and port positions are all `widthIn` / `xIn` / etc. The `pxPerInch` scalar (computed by `RigScreen.CanvasArea.fit()`) is the conversion factor; the canvas element applies it. `src/lib/geometry.ts` is the single source of truth for `clampToBoard`, `placedFootprint`, `rotatedSide`, `portPositionOnBoard`, and `routeCablePath`. Test changes to placement / rotation against `tests/geometry.test.ts` + `tests/portGeometry.test.ts`.
 
+**Board renders are bundled PNGs at 300 DPI.** The master Affinity doc lives at `resources/PedalTrain/pedaltrain_renders.af` (untracked — kept locally as source-of-truth for regeneration). Each Pedaltrain board is a group, exported as a transparent PNG slice via Window → Slices in the unified Affinity 3 app. Slice pixel dims map to the preset's real-world inches at 300 DPI (so `widthIn = pixelWidth / 300`). Bundled PNGs live in `src/assets/boards/` named with kebab-case preset IDs (`classic-pro.png`, `xd-18.png`, `nano-plus.png`); `BoardPreset.image` references them as Vite asset URLs. The image renderer (`src/canvas/BoardCanvas.tsx`, `src/canvas/BoardThumb.tsx`) loads through `boardImageCache.ts` and paints a transparent canvas backdrop — `backgroundForStyle('rail')` returns `#888` because that's the procedural rail drawer's frame color and would bleed through every transparent pixel of a photo. `resolveBoardImageSrc` (in `boardPresets.ts`) picks the preset image, or for custom-rail rigs returns the closest Pedaltrain preset by Euclidean `(widthIn, depthIn)` distance, stretched to fit.
+
+**Temple Audio dimensions are usable-pedal-area, not marketed.** A Temple "Duo 24" actually fits pedals across 22.7" — the model number is rounded up from the case dimension, not the surface. All `temple-*` presets in `boardPresets.ts` use the usable width (Solo 18 → 16.7", Duo 17/24/34 → 15.7/22.7/32.7", Trio 21/28/43 → 19.7/26.7/41.7"). Each series shares a fixed depth (Solo 8.5", Duo 12.5", Trio 16.5"). The procedural `drawHoles` drawer uses the real Temple mounting spec (6mm diameter on a 12mm grid) when `DrawArgs.widthIn` is set, so the main canvas renders the correct hole density; thumbnails skip the physical math and use a legibility heuristic.
+
 **Rig screen is workspace-first.** No persistent header / sidebar / bottom strip on the rig screen at any viewport. Top-level actions are FABs (Back top-left, Settings top-right, Signal Chain + Add Pedal bottom-right). Sheets summon on demand. Settings (rename, board change, delete) live in `SettingsSheet`. See `feedback_minimal_chrome.md` in agent memory.
 
 **Sheet has a `floatingActions` slot** (`src/ui/Sheet.tsx`) that renders inside the modal panel but outside the scrollable body — used for FAB-style content that needs to stay anchored to the panel corner regardless of scroll position.
@@ -76,19 +80,22 @@ Commit at phase + feature boundaries with all four gates green (typecheck, lint,
 
 Three layers, all defined under `.github/`:
 
-- **`.github/workflows/security.yml`** — runs on push/PR + weekly cron. Four jobs:
-  - `pnpm audit --prod --audit-level=high` — fails the build on high/critical CVEs in production JS deps. Dev-only advisories surface via Dependabot to keep this signal actionable.
+- **`.github/workflows/security.yml`** — runs on push/PR + weekly cron. Three jobs:
+  - `pnpm audit --prod --audit-level=high` plus `pnpm licenses:check` (script at `scripts/check-npm-licenses.mjs`). The audit fails on high/critical CVEs in production JS deps; the license gate fails on any production dep whose license isn't in the AGPL-compatible allowlist or recorded as a per-package exception. Dev-only advisories surface via Dependabot to keep the audit signal actionable.
   - `cargo-deny check advisories bans licenses sources` — RustSec CVEs, AGPL-compatible license allowlist, banned/duplicate crates, registry source pinning. Config lives in `src-tauri/deny.toml`.
-  - `gitleaks` — diff-level secret scan on PRs (belt-and-suspenders on top of GitHub's native push protection).
   - `dependency-review-action` — PR-only gate that blocks introducing a new vulnerable dep.
+  - **Secret scanning is GitHub-native** (push protection + secret scanning alerts, toggled in repo settings). No CI job — `gitleaks-action` is paywalled for org use and the native ruleset is broader. If you ever need a custom rule (e.g. an internal token format GitHub doesn't ship), the fallback is to run the gitleaks CLI binary directly (still MIT) rather than the action.
 - **`.github/workflows/codeql.yml`** — CodeQL SAST for `javascript-typescript` and `rust` with the `security-and-quality` query suite. Rust analysis needs the same `libwebkit2gtk-4.1-dev` system deps as the main Rust CI job.
 - **`.github/dependabot.yml`** — weekly PRs for `npm`, `cargo` (in `src-tauri/`), and `github-actions`. Dev-tooling minor/patch bumps are grouped into one PR.
 
 **First-party Rust forbids `unsafe`.** Both `src-tauri/src/lib.rs` and `src-tauri/src/main.rs` carry `#![forbid(unsafe_code)]`. If you genuinely need `unsafe` (FFI, etc.), justify it in the PR and scope it with `#[allow(unsafe_code)]` on the smallest possible item — don't lift the crate-level forbid.
 
+**Project license is `AGPL-3.0-or-later`**, declared in both `package.json` and `src-tauri/Cargo.toml`. The constraint comes from `@imgly/background-removal` (AGPLv3); if that dep is ever swapped for an MIT/Apache equivalent, the project can relicense to something more permissive. Until then, every new dep must be AGPL-compatible — the npm + cargo license gates enforce this. Common pitfalls: SPDX `OpenSSL` (legacy dual license — incompatible, deliberately absent from both allowlists), `LGPL-2.1-only` (only LGPL-3.0+ is bidirectionally compatible with AGPL-3.0). Dual-licensed crates like `MIT OR Apache-2.0 OR LGPL-2.1-or-later` are fine — cargo-deny / our npm script pick an allowed alternative.
+
 **Suppressing findings.**
 - cargo-deny advisories: add an entry to `[advisories.ignore]` in `src-tauri/deny.toml` with a `reason =` string that links to your analysis. Don't ignore without reading the advisory.
+- npm license check: if a package reports as "Unknown" because it uses `"SEE LICENSE IN LICENSE.md"` or similar, read the LICENSE file directly and add an entry to `PACKAGE_EXCEPTIONS` in `scripts/check-npm-licenses.mjs` with a reason. To allow a previously-unseen but compatible SPDX identifier, add it to `ALLOWED_LICENSES` in the same file.
 - CodeQL: prefer fixing. If a finding is a true false-positive, dismiss it via the GitHub Security tab with a note; don't sprinkle `// codeql[...]` suppressions in code.
-- gitleaks: if a checked-in string is a known false positive (e.g. a fixture), add it to a `[allowlist]` block in a `.gitleaks.toml` at the repo root — create the file when first needed.
+- Native secret scanning: dismiss false positives via the Security tab → Secret scanning alerts → "Close as" with a reason. For fixture strings that look secret-like, prefer rewriting the fixture over carrying a perpetual dismissal.
 
-**Repo-settings dependencies** (toggled in GitHub UI, not in this repo): secret scanning, push protection, Dependabot alerts, Dependabot security updates. These are assumed on; the workflows above complement them rather than replace them.
+**Repo-settings dependencies** (toggled in GitHub UI, not in this repo): secret scanning, push protection, Dependabot alerts, Dependabot security updates. These are required for the security model to hold; the workflows above complement them.

@@ -64,8 +64,36 @@ describe('rigsRepo.createRig', () => {
     });
 
     const insert = db.executes.find((c) => c.sql.includes('INSERT INTO rigs'));
-    expect(insert?.params).toEqual([created.id, 'My rig', 24, 8, 'rail']);
+    expect(insert?.params).toEqual([created.id, 'My rig', 24, 8, 'rail', null]);
     expect(created.name).toBe('My rig');
+  });
+
+  it('writes the presetId when provided', async () => {
+    db.mockSelect(/SELECT \* FROM rigs WHERE id = \?/, (params) => [
+      {
+        ...fakeRow(params[0] as string, 'My rig'),
+        preset_id: 'pedaltrain-nano',
+      },
+    ]);
+
+    const created = await createRig({
+      name: 'My rig',
+      widthIn: 14,
+      depthIn: 5.5,
+      style: 'rail',
+      presetId: 'pedaltrain-nano',
+    });
+
+    const insert = db.executes.find((c) => c.sql.includes('INSERT INTO rigs'));
+    expect(insert?.params).toEqual([
+      created.id,
+      'My rig',
+      14,
+      5.5,
+      'rail',
+      'pedaltrain-nano',
+    ]);
+    expect(created.presetId).toBe('pedaltrain-nano');
   });
 
   it('rejects empty names', async () => {

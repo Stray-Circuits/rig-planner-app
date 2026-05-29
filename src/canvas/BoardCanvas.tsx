@@ -18,7 +18,9 @@ import {
   keepOutRect,
   overlappingPlacedIds,
 } from '../lib/geometry';
+import { resolveBoardImageSrc } from '../data/boardPresets';
 import { BOARD_DRAWERS, backgroundForStyle } from './boardStyles';
+import { getCachedBoardImage, loadBoardImage } from './boardImageCache';
 import { PedalSprite } from './PedalSprite';
 import { ChainOverlay } from './ChainOverlay';
 import styles from './BoardCanvas.module.css';
@@ -130,6 +132,17 @@ export function BoardCanvas({
   const dpr =
     typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
 
+  const imageSrc = useMemo(
+    () =>
+      resolveBoardImageSrc({
+        style: rig.style,
+        presetId: rig.presetId,
+        widthIn: rig.widthIn,
+        depthIn: rig.depthIn,
+      }),
+    [rig.style, rig.presetId, rig.widthIn, rig.depthIn],
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -144,14 +157,49 @@ export function BoardCanvas({
       return;
     }
     if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    BOARD_DRAWERS[rig.style]({
-      ctx,
-      width: widthPx,
-      height: heightPx,
-      scale: 1,
-    });
-  }, [rig.style, widthPx, heightPx, dpr]);
+    const drawCtx = ctx;
+    drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const drawImage = (img: HTMLImageElement) => {
+      drawCtx.clearRect(0, 0, widthPx, heightPx);
+      drawCtx.drawImage(img, 0, 0, widthPx, heightPx);
+    };
+    const drawProcedural = () => {
+      BOARD_DRAWERS[rig.style]({
+        ctx: drawCtx,
+        width: widthPx,
+        height: heightPx,
+        scale: 1,
+        widthIn: rig.widthIn,
+      });
+    };
+
+    if (!imageSrc) {
+      drawProcedural();
+      return;
+    }
+    const cached = getCachedBoardImage(imageSrc);
+    if (cached) {
+      drawImage(cached);
+      return;
+    }
+    // Paint procedural as a placeholder, then swap in the bundled image
+    // once it decodes. `cancelled` guards against a src change mid-load
+    // (e.g. user changes the board) so we don't overwrite a fresh draw.
+    drawProcedural();
+    let cancelled = false;
+    void loadBoardImage(imageSrc)
+      .then((img) => {
+        if (cancelled) return;
+        drawImage(img);
+      })
+      .catch(() => {
+        // Procedural fallback is already on-canvas; swallow the error.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rig.style, rig.widthIn, imageSrc, widthPx, heightPx, dpr]);
 
   const pointerToInches = useCallback(
     (clientX: number, clientY: number) => {
@@ -272,7 +320,9 @@ export function BoardCanvas({
       <canvas
         ref={canvasRef}
         className={styles.canvas}
-        style={{ background: backgroundForStyle(rig.style) }}
+        style={{
+          background: imageSrc ? 'transparent' : backgroundForStyle(rig.style),
+        }}
       />
       <div className={styles.keepOutLayer} aria-hidden>
         {placed.map((p) => {

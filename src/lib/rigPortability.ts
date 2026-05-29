@@ -147,7 +147,13 @@ export function parseRigExport(text: string): RigExport {
   requireNumber(rigObj, 'widthIn');
   requireNumber(rigObj, 'depthIn');
   requireString(rigObj, 'style');
-  const rig = rigObj as unknown as Rig;
+  // presetId is optional in older exports — coerce missing/invalid to null
+  // so downstream code can treat it as Rig['presetId'] without runtime
+  // surprises.
+  const presetIdRaw = rigObj.presetId;
+  const presetId: string | null =
+    typeof presetIdRaw === 'string' ? presetIdRaw : null;
+  const rig = { ...rigObj, presetId } as unknown as Rig;
 
   const pedals = requireArray(raw, 'pedals') as Pedal[];
   const placedPedals = requireArray(raw, 'placedPedals') as PlacedPedal[];

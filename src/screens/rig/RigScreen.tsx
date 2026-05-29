@@ -507,8 +507,8 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
         onRemoveEndpoint={async (id) => {
           await removeEndpoint(rig.id, id);
         }}
-        onChangeBoard={async (w, d, style) => {
-          await updateBoard(rig.id, w, d, style);
+        onChangeBoard={async (w, d, style, presetId) => {
+          await updateBoard(rig.id, w, d, style, presetId);
           await clampToRigBounds(
             { id: rig.id, widthIn: w, depthIn: d },
             pedalsById,

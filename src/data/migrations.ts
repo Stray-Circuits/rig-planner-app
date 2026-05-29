@@ -104,4 +104,9 @@ export const MIGRATIONS: Migration[] = [
     description: 'pedals: track source URL for searched/fetched photos',
     statements: [`ALTER TABLE pedals ADD COLUMN image_source_url TEXT`],
   },
+  {
+    version: 3,
+    description: 'rigs: track which BoardPreset the user picked',
+    statements: [`ALTER TABLE rigs ADD COLUMN preset_id TEXT`],
+  },
 ];

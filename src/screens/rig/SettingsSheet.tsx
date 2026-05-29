@@ -6,6 +6,7 @@ import type {
   Rig,
 } from '../../data/schema';
 import { findExistingRigForImport, importRig } from '../../data/rigImportRepo';
+import { findPreset, resolveBoardImageSrc } from '../../data/boardPresets';
 import { BoardThumb } from '../../canvas/BoardThumb';
 import { BoardPicker } from '../../components/BoardPicker';
 import {
@@ -30,6 +31,7 @@ interface SettingsSheetProps {
     widthIn: number,
     depthIn: number,
     style: BoardStyle,
+    presetId: string | null,
   ) => Promise<void>;
   onChangeFloor: (style: FloorStyle) => void;
   onAddEndpoint: (kind: ExternalEndpointKind, label: string) => Promise<void>;
@@ -121,10 +123,11 @@ export function SettingsSheet({
         widthIn: rig.widthIn,
         depthIn: rig.depthIn,
         style: rig.style,
+        presetId: rig.presetId,
       }),
     );
     setError(null);
-  }, [open, rig.name, rig.widthIn, rig.depthIn, rig.style]);
+  }, [open, rig.name, rig.widthIn, rig.depthIn, rig.style, rig.presetId]);
 
   const pickerChoice = resolveBoardChoice(pickerState);
   const boardChanged =
@@ -132,6 +135,26 @@ export function SettingsSheet({
     (pickerChoice.widthIn !== rig.widthIn ||
       pickerChoice.depthIn !== rig.depthIn ||
       pickerChoice.style !== rig.style);
+
+  // Image src to show in the board-summary thumb. While the picker is
+  // open with a pending change, preview the chosen board (preset image
+  // when picking a preset; closest-render scaling when picking custom
+  // rail). Otherwise show whatever the rig's current state resolves to.
+  const summaryImageSrc = pickerChoice
+    ? pickerChoice.source === 'custom'
+      ? resolveBoardImageSrc({
+          style: pickerChoice.style,
+          presetId: null,
+          widthIn: pickerChoice.widthIn,
+          depthIn: pickerChoice.depthIn,
+        })
+      : (findPreset(pickerChoice.source)?.image ?? null)
+    : resolveBoardImageSrc({
+        style: rig.style,
+        presetId: rig.presetId,
+        widthIn: rig.widthIn,
+        depthIn: rig.depthIn,
+      });
 
   const setSelection = (s: BoardSelection) =>
     setPickerState((p) => ({ ...p, selection: s }));
@@ -162,6 +185,7 @@ export function SettingsSheet({
             pickerChoice.widthIn,
             pickerChoice.depthIn,
             pickerChoice.style,
+            pickerChoice.source === 'custom' ? null : pickerChoice.source,
           );
         }
         onClose();
@@ -289,6 +313,9 @@ export function SettingsSheet({
                   width={56}
                   height={32}
                   scale={0.2}
+                  {...(summaryImageSrc !== null
+                    ? { imageSrc: summaryImageSrc }
+                    : {})}
                 />
               </div>
               <div className={styles.boardInfo}>

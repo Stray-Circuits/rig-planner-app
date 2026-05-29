@@ -133,7 +133,10 @@ describe('RigScreen', () => {
     )!;
     fireEvent.click(within(dialog as HTMLElement).getByText('Change'));
 
-    // We're now in the picker view. Pick "Classic Pro" (32 × 16 rail).
+    // Picker is multi-stage. The current rig fuzzy-matches Pedaltrain
+    // Metro 24, so we land on the Pedaltrain view with the Metro series
+    // pre-expanded. Expand Classic to reveal Classic Pro.
+    fireEvent.click(await screen.findByText('Classic'));
     const classicCard = (await screen.findByText('Classic Pro')).closest(
       'button',
     )!;

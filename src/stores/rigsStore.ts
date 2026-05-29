@@ -26,6 +26,7 @@ interface RigsState {
     widthIn: number;
     depthIn: number;
     style: Rig['style'];
+    presetId?: string | null;
   }) => Promise<Rig>;
   renameRig: (id: string, name: string) => Promise<void>;
   updateStyle: (id: string, style: Rig['style']) => Promise<void>;
@@ -39,6 +40,7 @@ interface RigsState {
     widthIn: number,
     depthIn: number,
     style: Rig['style'],
+    presetId: string | null,
   ) => Promise<void>;
   duplicateRig: (id: string) => Promise<Rig>;
   deleteRig: (id: string) => Promise<void>;
@@ -96,11 +98,11 @@ export const useRigsStore = create<RigsState>((set, get) => ({
     });
   },
 
-  updateBoard: async (id, widthIn, depthIn, style) => {
-    await repoUpdateBoard(id, widthIn, depthIn, style);
+  updateBoard: async (id, widthIn, depthIn, style, presetId) => {
+    await repoUpdateBoard(id, widthIn, depthIn, style, presetId);
     set({
       rigs: get().rigs.map((r) =>
-        r.id === id ? { ...r, widthIn, depthIn, style } : r,
+        r.id === id ? { ...r, widthIn, depthIn, style, presetId } : r,
       ),
     });
   },

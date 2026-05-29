@@ -1,11 +1,12 @@
 import type { Pedal, PlacedPedal, Rig } from '../data/schema';
+import { resolveBoardImageSrc } from '../data/boardPresets';
 import { pedalImageStyle } from '../lib/pedalImage';
 import { placedFootprint } from '../lib/geometry';
 import { BoardThumb } from './BoardThumb';
 import styles from './RigThumb.module.css';
 
 interface RigThumbProps {
-  rig: Pick<Rig, 'widthIn' | 'depthIn' | 'style'>;
+  rig: Pick<Rig, 'widthIn' | 'depthIn' | 'style' | 'presetId'>;
   placed: PlacedPedal[];
   pedalsById: Map<string, Pedal>;
   width: number;
@@ -28,6 +29,12 @@ export function RigThumb({
   title,
 }: RigThumbProps) {
   const pxPerInch = width / rig.widthIn;
+  const imageSrc = resolveBoardImageSrc({
+    style: rig.style,
+    presetId: rig.presetId,
+    widthIn: rig.widthIn,
+    depthIn: rig.depthIn,
+  });
   return (
     <div className={styles.wrap} style={{ width, height }}>
       <BoardThumb
@@ -35,6 +42,7 @@ export function RigThumb({
         width={width}
         height={height}
         scale={0.3}
+        {...(imageSrc !== null ? { imageSrc } : {})}
         {...(title !== undefined ? { title } : {})}
       />
       <div className={styles.overlay}>

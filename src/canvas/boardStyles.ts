@@ -14,6 +14,13 @@ export interface DrawArgs {
   height: number;
   /** Ratio relative to a "full size" board for tuning detail density. */
   scale: number;
+  /**
+   * Board width in real inches. When provided, drawers that care about
+   * physical scale (currently just `drawHoles`) can size details from
+   * `pxPerInch = width / widthIn`. Thumbnails should leave this unset
+   * so the drawer uses its legibility heuristic instead.
+   */
+  widthIn?: number;
 }
 
 export function drawRail({ ctx, width, height, scale }: DrawArgs): void {
@@ -103,30 +110,78 @@ export function drawWood({ ctx, width, height, scale }: DrawArgs): void {
   }
 }
 
-export function drawHoles({ ctx, width, height, scale }: DrawArgs): void {
+// Temple Audio mounting-hole geometry: ~6mm diameter on a 12mm grid.
+// Converted to inches so the drawer can size them against pxPerInch.
+const TEMPLE_HOLE_DIAM_IN = 6 / 25.4;
+const TEMPLE_HOLE_SPACING_IN = 12 / 25.4;
+
+export function drawHoles({
+  ctx,
+  width,
+  height,
+  scale,
+  widthIn,
+}: DrawArgs): void {
+  ctx.clearRect(0, 0, width, height);
+  // Board body
   ctx.fillStyle = '#1A1A1A';
   ctx.fillRect(0, 0, width, height);
-  const sp = scale >= 0.5 ? 16 : 6;
-  const r = scale >= 0.5 ? 5.5 : 2;
+
+  let sp: number;
+  let r: number;
+  if (widthIn !== undefined && widthIn > 0) {
+    // Physically accurate: 6mm diameter on a 12mm grid.
+    const pxPerInch = width / widthIn;
+    sp = TEMPLE_HOLE_SPACING_IN * pxPerInch;
+    r = (TEMPLE_HOLE_DIAM_IN / 2) * pxPerInch;
+  } else {
+    // Thumbnail / no-context fallback — legibility over realism.
+    sp = scale >= 0.5 ? 16 : 6;
+    r = scale >= 0.5 ? 5.5 : 2;
+  }
+  // Below ~0.5px the holes are sub-pixel and just produce noise. Skip
+  // them and leave the board as a solid dark surface at that zoom.
+  if (r < 0.5 || sp <= 0) return;
+
   const cols = Math.floor((width - sp) / sp);
   const rows = Math.floor((height - sp) / sp);
   const ox = (width - cols * sp) / 2 + sp / 2;
   const oy = (height - rows * sp) / 2 + sp / 2;
+
+  // Cut transparent holes through the body so the floor behind the
+  // canvas shows through (the workspace pattern lands "inside" the
+  // mounting holes the way it does on a real Temple board).
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = ox + col * sp;
       const y = oy + row * sp;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = '#000';
       ctx.fill();
-      if (scale >= 0.5) {
-        ctx.strokeStyle = '#3A3A3A';
-        ctx.lineWidth = 0.75;
-        ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // Inner rim shading so each hole reads as recessed instead of a flat
+  // cutout. Only meaningful once the hole is several pixels across;
+  // below that it just produces noise.
+  if (r >= 3) {
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = ox + col * sp;
+        const y = oy + row * sp;
+        // Dark shadow ring just inside the body around the hole rim.
         ctx.beginPath();
-        ctx.arc(x - 0.5, y - 0.5, r - 1, Math.PI * 1.1, Math.PI * 1.7);
-        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.arc(x, y, r + 0.6, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Subtle highlight arc on the upper-left edge.
+        ctx.beginPath();
+        ctx.arc(x, y, r + 0.2, Math.PI * 1.1, Math.PI * 1.7);
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
         ctx.lineWidth = 0.75;
         ctx.stroke();
       }

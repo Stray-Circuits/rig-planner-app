@@ -55,8 +55,10 @@ describe('NewRigWizard', () => {
     fireEvent.click(screen.getByText('Continue'));
 
     expect(await screen.findByText('Choose Your Board')).toBeInTheDocument();
-    // Pedaltrain Nano+ preset card
-    fireEvent.click(screen.getByText('Nano+'));
+    // Brand select → Pedaltrain → Nano series → Nano+ card
+    fireEvent.click(screen.getByText('Pedaltrain'));
+    fireEvent.click(await screen.findByText('Nano'));
+    fireEvent.click(await screen.findByText('Nano+'));
     fireEvent.click(screen.getByText('Continue'));
 
     expect(

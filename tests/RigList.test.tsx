@@ -24,6 +24,7 @@ const mkRig = (
   widthIn: 24,
   depthIn: 8,
   style: 'rail',
+  presetId: null,
   createdAt: '',
   updatedAt: '',
   ...overrides,

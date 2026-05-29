@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { BoardStyle } from '../data/schema';
 import { BOARD_DRAWERS, backgroundForStyle } from './boardStyles';
+import { getCachedBoardImage, loadBoardImage } from './boardImageCache';
 
 interface BoardThumbProps {
   style: BoardStyle;
@@ -8,6 +9,12 @@ interface BoardThumbProps {
   height: number;
   /** Tuning param for detail density; defaults to width-derived. */
   scale?: number;
+  /**
+   * When set, the thumb renders this bundled image instead of the procedural
+   * drawer for `style`. Caller is responsible for picking the right preset
+   * image (see resolveBoardImageSrc).
+   */
+  imageSrc?: string;
   className?: string;
   title?: string;
 }
@@ -17,6 +24,7 @@ export function BoardThumb({
   width,
   height,
   scale,
+  imageSrc,
   className,
   title,
 }: BoardThumbProps) {
@@ -39,16 +47,53 @@ export function BoardThumb({
       return;
     }
     if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const draw = BOARD_DRAWERS[style];
-    draw({ ctx, width, height, scale: scale ?? width / 500 });
-  }, [style, width, height, scale, dpr]);
+    const drawCtx = ctx;
+    drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const drawImage = (img: HTMLImageElement) => {
+      drawCtx.clearRect(0, 0, width, height);
+      drawCtx.drawImage(img, 0, 0, width, height);
+    };
+    const drawProcedural = () => {
+      BOARD_DRAWERS[style]({
+        ctx: drawCtx,
+        width,
+        height,
+        scale: scale ?? width / 500,
+      });
+    };
+
+    if (!imageSrc) {
+      drawProcedural();
+      return;
+    }
+    const cached = getCachedBoardImage(imageSrc);
+    if (cached) {
+      drawImage(cached);
+      return;
+    }
+    drawProcedural();
+    let cancelled = false;
+    void loadBoardImage(imageSrc)
+      .then((img) => {
+        if (cancelled) return;
+        drawImage(img);
+      })
+      .catch(() => {
+        // Procedural fallback is already on-canvas.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [style, width, height, scale, imageSrc, dpr]);
 
   return (
     <canvas
       ref={canvasRef}
       className={className}
-      style={{ background: backgroundForStyle(style) }}
+      style={{
+        background: imageSrc ? 'transparent' : backgroundForStyle(style),
+      }}
       role="img"
       aria-label={title ?? `${style} board`}
     />
