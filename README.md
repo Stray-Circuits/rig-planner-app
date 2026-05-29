@@ -66,16 +66,6 @@ src-tauri/        # Rust shell
 mockups/          # Original HTML mockups (reference)
 ```
 
-## Phase progress
-
-- [x] Phase 1 — Scaffold: Tauri 2 + React + DB schema + tests + boot shell
-- [x] Phase 2 — Rigs: list, new-rig wizard, persistence
-- [x] Phase 3 — Canvas: board styles, drag, gestures, rotate
-- [x] Phase 4 — Add-pedal wizard
-- [x] Phase 5 — Background removal (@imgly/background-removal — WebGPU + WASM fallback)
-- [x] Phase 6 — Signal-chain overlay
-- [ ] Phase 7 — Mobile polish + native builds *(Android containerized debug build wired up; release signing + iOS still pending)*
-
 ## Android via Docker
 
 The Android build runs in a containerized toolchain so the host only needs
