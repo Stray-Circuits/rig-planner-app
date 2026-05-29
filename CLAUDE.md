@@ -76,6 +76,8 @@ The codebase compiles with `exactOptionalPropertyTypes`, `noUncheckedIndexedAcce
 
 Commit at phase + feature boundaries with all four gates green (typecheck, lint, format, tests). Avoid `git add -A` / `git add .` — the working tree often has untracked private notes or browser-dev artifacts (`rig-planner-memory-db.json` for example) that mustn't ship. Stage explicit paths.
 
+**`main` is branch-protected** — direct pushes are rejected at the GitHub level. Every change (including one-line docs/CLAUDE.md edits) goes on a feature branch and merges via PR. Don't try to `--force` or admin-bypass; the protection is intentional.
+
 ## Security
 
 Three layers, all defined under `.github/`:
@@ -86,7 +88,7 @@ Three layers, all defined under `.github/`:
   - `dependency-review-action` — PR-only gate that blocks introducing a new vulnerable dep.
   - **Secret scanning is GitHub-native** (push protection + secret scanning alerts, toggled in repo settings). No CI job — `gitleaks-action` is paywalled for org use and the native ruleset is broader. If you ever need a custom rule (e.g. an internal token format GitHub doesn't ship), the fallback is to run the gitleaks CLI binary directly (still MIT) rather than the action.
 - **`.github/workflows/codeql.yml`** — CodeQL SAST for `javascript-typescript` and `rust` with the `security-and-quality` query suite. Rust analysis needs the same `libwebkit2gtk-4.1-dev` system deps as the main Rust CI job.
-- **`.github/dependabot.yml`** — weekly PRs for `npm`, `cargo` (in `src-tauri/`), and `github-actions`. Dev-tooling minor/patch bumps are grouped into one PR.
+- **`.github/dependabot.yml`** — weekly PRs for `npm`, `cargo` (in `src-tauri/`), and `github-actions`. Dev-tooling minor/patch bumps are grouped into one PR. Heads-up: pnpm 11.4+ enforces a default `minimumReleaseAge` (~24h) supply-chain check on lockfile entries, so dependabot PRs commonly fail the first CI install with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`. The fix is to re-run failed jobs once the window has elapsed — **don't** regenerate the lockfile (the error message's own suggestion); that defeats the policy and diverges from dependabot's resolution.
 
 **First-party Rust forbids `unsafe`.** Both `src-tauri/src/lib.rs` and `src-tauri/src/main.rs` carry `#![forbid(unsafe_code)]`. If you genuinely need `unsafe` (FFI, etc.), justify it in the PR and scope it with `#[allow(unsafe_code)]` on the smallest possible item — don't lift the crate-level forbid.
 
