@@ -1,10 +1,21 @@
 import type {
   Connection,
+  Connector,
   Pedal,
   PlacedPedal,
   PortRole,
   SignalType,
 } from '../data/schema';
+
+/**
+ * How many cables a single jack of this connector type can host. TRS
+ * accepts a splitter cable (one tip-ring-sleeve carrier feeding two
+ * mono sends), so users can rig that up as two logical connections on
+ * one physical port. Every other connector saturates at one.
+ */
+export function maxCablesForConnector(c: Connector): number {
+  return c === 'trs' ? 2 : 1;
+}
 
 export interface PortKey {
   placedId: string;

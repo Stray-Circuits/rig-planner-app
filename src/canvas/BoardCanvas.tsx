@@ -363,7 +363,6 @@ export function BoardCanvas({
                 touchAction: 'none',
               }}
               data-placed-id={p.id}
-              role="button"
               aria-label={`${def.brand} ${def.name}`}
               onPointerDown={(e) => handlePointerDown(e, p)}
               onPointerMove={handlePointerMove}

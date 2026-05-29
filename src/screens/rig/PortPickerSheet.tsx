@@ -24,10 +24,11 @@ interface PortPickerSheetProps {
     port: Port;
   } | null;
   /**
-   * "${placedId}:${portId}" keys of ports already touched by an
-   * existing cable on this rig. Surfaces a "connected" hint per row.
+   * Number of existing cables touching each "${placedId}:${portId}".
+   * Drives the per-row "connected" hint and the disconnect-count display
+   * (a TRS port can host two cables via a splitter).
    */
-  connectedPortIds: Set<string>;
+  cableCountByPort: Map<string, number>;
   onClose: () => void;
   onPickPort: (placedId: string, portId: string) => void;
   /**
@@ -49,7 +50,7 @@ export function PortPickerSheet({
   placed,
   pedal,
   armedFromPort,
-  connectedPortIds,
+  cableCountByPort,
   onClose,
   onPickPort,
   onDisconnectPort,
@@ -80,7 +81,8 @@ export function PortPickerSheet({
         ) : (
           pedal.ports.map((port) => {
             const portKey = `${placed.id}:${port.id}`;
-            const isConnected = connectedPortIds.has(portKey);
+            const cableCount = cableCountByPort.get(portKey) ?? 0;
+            const isConnected = cableCount > 0;
             const portFamily = signalFamily(port.signalType);
             // A connected port outside the in-flight "to" step becomes a
             // disconnect button — the only way to delete a cable now that
@@ -128,7 +130,7 @@ export function PortPickerSheet({
                         subtitleFor(
                           port,
                           portFamily,
-                          isConnected,
+                          cableCount,
                           isDisconnectAction,
                         )}
                     </span>
@@ -157,12 +159,16 @@ function isOutputRole(role: Port['role']): boolean {
 function subtitleFor(
   port: Port,
   family: SignalFamily,
-  isConnected: boolean,
+  cableCount: number,
   isDisconnectAction: boolean,
 ): string {
   const base = `${family} · ${port.connector.toUpperCase()}`;
-  if (isDisconnectAction) return `${base} · tap to disconnect`;
-  if (isConnected) return `${base} · connected`;
+  if (isDisconnectAction) {
+    return cableCount > 1
+      ? `${base} · ${cableCount} cables · tap to disconnect`
+      : `${base} · tap to disconnect`;
+  }
+  if (cableCount > 0) return `${base} · connected`;
   if (!port.optional) return `${base} · required`;
   return base;
 }

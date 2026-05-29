@@ -17,6 +17,7 @@ import {
 import {
   computeUnconnectedRequiredPorts,
   connectionCompatibility,
+  maxCablesForConnector,
 } from '../../lib/signalChainWarnings';
 import {
   type FloorStyle,
@@ -131,16 +132,17 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     [placed, pedalsById, connections],
   );
 
-  // Set of "${placedId}:${portId}" keys for every port currently
-  // touched by at least one cable. Used by the picker to surface a
-  // "connected" hint per row.
-  const connectedPortKeys = useMemo(() => {
-    const out = new Set<string>();
+  // Number of cables touching each "${placedId}:${portId}". Drives the
+  // picker's "connected" hint, the disconnect count, and the saturation
+  // gate in tryConnectPorts (TRS holds two; everything else holds one).
+  const cableCountByPort = useMemo(() => {
+    const out = new Map<string, number>();
+    const bump = (key: string) => out.set(key, (out.get(key) ?? 0) + 1);
     for (const c of connections) {
       if (c.fromNodeKind === 'pedal' && c.fromPortId)
-        out.add(`${c.fromNodeId}:${c.fromPortId}`);
+        bump(`${c.fromNodeId}:${c.fromPortId}`);
       if (c.toNodeKind === 'pedal' && c.toPortId)
-        out.add(`${c.toNodeId}:${c.toPortId}`);
+        bump(`${c.toNodeId}:${c.toPortId}`);
     }
     return out;
   }, [connections]);
@@ -194,6 +196,25 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
       setNotice(compat.reason);
       return false;
     }
+    // TRS jacks accept a splitter (one tip-ring-sleeve cable carrying two
+    // signals), so they can host two cables; anything else is a single
+    // mono / MIDI DIN / XLR jack and saturates at one.
+    const aMax = maxCablesForConnector(aPort.connector);
+    const bMax = maxCablesForConnector(bPort.connector);
+    const aHave = cableCountByPort.get(`${aPlacedId}:${aPortId}`) ?? 0;
+    const bHave = cableCountByPort.get(`${bPlacedId}:${bPortId}`) ?? 0;
+    if (aHave >= aMax) {
+      setNotice(
+        `${aPort.label} is already full (${aMax} cable${aMax === 1 ? '' : 's'} max).`,
+      );
+      return false;
+    }
+    if (bHave >= bMax) {
+      setNotice(
+        `${bPort.label} is already full (${bMax} cable${bMax === 1 ? '' : 's'} max).`,
+      );
+      return false;
+    }
     // Outputs become "from", inputs become "to". Swap if needed.
     const aIsOutput = isOutputRole(aPort.role);
     const bIsOutput = isOutputRole(bPort.role);
@@ -228,7 +249,9 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
   };
 
   const handleDisconnectPort = (placedId: string, portId: string) => {
-    const target = connections.find(
+    // A TRS port may host two cables (splitter). The picker treats them
+    // as one tap target — remove every cable touching this port in one go.
+    const targets = connections.filter(
       (c) =>
         (c.fromNodeKind === 'pedal' &&
           c.fromNodeId === placedId &&
@@ -237,8 +260,7 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
           c.toNodeId === placedId &&
           c.toPortId === portId),
     );
-    if (!target) return;
-    void removeConnection(rig.id, target.id);
+    for (const t of targets) void removeConnection(rig.id, t.id);
   };
 
   const handleEndpointTap = (endpointId: string) => {
@@ -462,7 +484,7 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
             placed={placedForPicker}
             pedal={pedalForPicker}
             armedFromPort={armedDetail}
-            connectedPortIds={connectedPortKeys}
+            cableCountByPort={cableCountByPort}
             onClose={() => setPickerFor(null)}
             onPickPort={(placedId, portId) => {
               handlePortTap(placedId, portId);
