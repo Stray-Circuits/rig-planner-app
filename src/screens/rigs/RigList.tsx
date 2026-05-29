@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Pedal, Rig } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
 import { useRigsStore } from '../../stores/rigsStore';
+import { findExistingRigForImport, importRig } from '../../data/rigImportRepo';
+import { parseRigExport, type RigExport } from '../../lib/rigPortability';
 import { RigThumb } from '../../canvas/RigThumb';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from '../rig/PedalLibrarySheet';
+import { useSignalChainStore } from '../../stores/signalChainStore';
 import { Button, Sheet, SheetItem, TextField } from '../../ui';
 import styles from './RigList.module.css';
 
@@ -19,14 +22,72 @@ interface RigListProps {
 export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
   const rigs = useRigsStore((s) => s.rigs);
   const status = useRigsStore((s) => s.status);
+  const loadRigs = useRigsStore((s) => s.loadRigs);
   const pedals = usePedalsStore((s) => s.pedals);
   const pedalsStatus = usePedalsStore((s) => s.status);
   const loadPedals = usePedalsStore((s) => s.loadPedals);
   const seedSamples = usePedalsStore((s) => s.seedSamples);
+  const loadPlacedForRig = usePlacedPedalsStore((s) => s.loadForRig);
+  const loadSignalChain = useSignalChainStore((s) => s.loadForRig);
 
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingPedal, setEditingPedal] = useState<Pedal | null>(null);
+
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{
+    exp: RigExport;
+    collisionWith: string | null;
+  } | null>(null);
+
+  const handleImportFilePicked = (file: File) => {
+    setImportError(null);
+    void (async () => {
+      try {
+        const text = await file.text();
+        const exp = parseRigExport(text);
+        const existing = await findExistingRigForImport(exp);
+        setPendingImport({ exp, collisionWith: existing?.name ?? null });
+      } catch (err) {
+        setImportError(
+          err instanceof Error
+            ? `Import failed: ${err.message}`
+            : `Import failed: ${String(err)}`,
+        );
+      }
+    })();
+  };
+
+  const handleConfirmImport = () => {
+    if (!pendingImport) return;
+    setImportError(null);
+    setImporting(true);
+    const { exp } = pendingImport;
+    void (async () => {
+      try {
+        await importRig(exp);
+        // Reload everything the just-imported rig touches so the card
+        // thumbnail draws correctly and the user can jump straight in.
+        await Promise.all([loadPedals(), loadRigs()]);
+        await Promise.all([
+          loadPlacedForRig(exp.rig.id),
+          loadSignalChain(exp.rig.id),
+        ]);
+        setPendingImport(null);
+        setImporting(false);
+        onOpenRig({ ...exp.rig });
+      } catch (err) {
+        setImportError(
+          err instanceof Error
+            ? `Import failed: ${err.message}`
+            : `Import failed: ${String(err)}`,
+        );
+        setImporting(false);
+      }
+    })();
+  };
 
   // Need the pedal definitions to render thumbnail rectangles at the right
   // size; load them once when the rig list mounts (idempotent).
@@ -83,16 +144,100 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
           </ul>
         )}
         {status === 'ready' ? (
-          <button
-            type="button"
-            className={styles.collectionLink}
-            onClick={() => setLibraryOpen(true)}
-          >
-            <i className="ti ti-list-details" aria-hidden /> Your pedal
-            collection ({pedals.length})
-          </button>
+          <div className={styles.footerActions}>
+            <button
+              type="button"
+              className={styles.collectionLink}
+              onClick={() => setLibraryOpen(true)}
+            >
+              <i className="ti ti-list-details" aria-hidden /> Your pedal
+              collection ({pedals.length})
+            </button>
+            <button
+              type="button"
+              className={styles.collectionLink}
+              onClick={() => importInputRef.current?.click()}
+            >
+              <i className="ti ti-upload" aria-hidden /> Import rig
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,.rig.json,application/json"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                // Reset so the same file can be picked again later.
+                e.target.value = '';
+                if (file) handleImportFilePicked(file);
+              }}
+            />
+          </div>
+        ) : null}
+        {importError ? (
+          <p className={styles.importError} role="alert">
+            {importError}
+          </p>
         ) : null}
       </main>
+
+      <Sheet
+        open={pendingImport !== null}
+        onClose={() => {
+          if (importing) return;
+          setPendingImport(null);
+          setImportError(null);
+        }}
+        title="Import Rig?"
+      >
+        <div className={styles.dialogBody}>
+          {pendingImport ? (
+            <>
+              <p className={styles.muted}>
+                Import <strong>{pendingImport.exp.rig.name}</strong>?
+              </p>
+              <p className={styles.muted}>
+                {pendingImport.exp.placedPedals.length} placed pedal
+                {pendingImport.exp.placedPedals.length === 1 ? '' : 's'},{' '}
+                {pendingImport.exp.connections.length} connection
+                {pendingImport.exp.connections.length === 1 ? '' : 's'},
+                exported {pendingImport.exp.exportedAt.slice(0, 10)}.
+              </p>
+              {pendingImport.collisionWith !== null ? (
+                <p className={styles.importWarn}>
+                  <i className="ti ti-alert-triangle" aria-hidden /> A rig with
+                  this ID already exists as{' '}
+                  <strong>{pendingImport.collisionWith}</strong>. Importing will
+                  overwrite it — its placements, connections, and endpoints will
+                  be replaced.
+                </p>
+              ) : null}
+              {importError ? (
+                <p className={styles.importError}>{importError}</p>
+              ) : null}
+              <div className={styles.dialogActions}>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPendingImport(null);
+                    setImportError(null);
+                  }}
+                  disabled={importing}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleConfirmImport} disabled={importing}>
+                  {importing
+                    ? 'Importing…'
+                    : pendingImport.collisionWith !== null
+                      ? 'Overwrite'
+                      : 'Import'}
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </Sheet>
 
       <PedalLibrarySheet
         open={libraryOpen}
