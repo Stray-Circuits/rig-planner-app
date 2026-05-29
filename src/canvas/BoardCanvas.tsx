@@ -210,12 +210,18 @@ export function BoardCanvas({
       const wrap = wrapRef.current;
       if (!wrap) return { xIn: 0, yIn: 0 };
       const rect = wrap.getBoundingClientRect();
+      // The wrapper is CSS-transformed (pinch-zoom) by the parent viewport,
+      // so the rect's on-screen size already includes that scale while
+      // pxPerInch does not. Derive the effective conversion from the rect
+      // itself so dragging tracks the finger at any zoom level.
+      const effPxPerInchX = rect.width / rig.widthIn || pxPerInch;
+      const effPxPerInchY = rect.height / rig.depthIn || pxPerInch;
       return {
-        xIn: (clientX - rect.left) / pxPerInch,
-        yIn: (clientY - rect.top) / pxPerInch,
+        xIn: (clientX - rect.left) / effPxPerInchX,
+        yIn: (clientY - rect.top) / effPxPerInchY,
       };
     },
-    [pxPerInch],
+    [pxPerInch, rig.widthIn, rig.depthIn],
   );
 
   const handlePointerDown = useCallback(
