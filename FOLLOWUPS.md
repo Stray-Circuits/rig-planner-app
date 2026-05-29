@@ -34,11 +34,6 @@ links the phase that originated it so we know roughly when it was set aside.
   but two ports at near-identical y (or x) can't escape a pedal in their
   line of sight with only 3 Manhattan segments. A 5-segment "swerve" path
   (go up/down past the obstacle, across, then back) would close this gap.
-- **Drag-to-connect on mobile** *(Follow-up feedback)* — tap-then-drag from
-  an armed port to a target port would feel more natural than tap-tap on
-  small phones. Tap targets have been widened to 44px already, but the
-  full pointerDown→pointerMove→pointerUp gesture with a ghost cable still
-  needs to be wired up in `BoardCanvas` / `ChainOverlay`.
 
 ## Board presets
 
@@ -53,16 +48,6 @@ links the phase that originated it so we know roughly when it was set aside.
   Brand *names* are fine to reference (nominative trademark use). Generate
   the renders from the existing `BOARD_DRAWERS` / boardStyles pipeline,
   parameterized by rail count + hole spacing per model.
-
-## Pedal seed (deferred indefinitely)
-
-- **Top ~200 pedals via agent** *(other_todos.txt / 2026-05 feedback)* — same
-  copyright bind as boards: we can't ship third-party pedal photos no matter
-  who shot them. Wikimedia Commons coverage isn't dense or consistent enough
-  to be useful. Shelved until either (a) we get explicit licensing from
-  manufacturers / retailers, or (b) we decide to seed with placeholder
-  colors + names only and accept that users will upload their own photos
-  per pedal.
 
 ## Branding
 
