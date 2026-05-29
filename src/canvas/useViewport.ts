@@ -68,10 +68,10 @@ export interface UseViewportOptions {
 export function useViewport(
   options: UseViewportOptions = {},
 ): UseViewportResult {
+  // Standard event-handler ref: assign during render so the ref always
+  // points at the latest closure without a one-render lag.
   const onPinchStartRef = useRef(options.onPinchStart);
-  useEffect(() => {
-    onPinchStartRef.current = options.onPinchStart;
-  }, [options.onPinchStart]);
+  onPinchStartRef.current = options.onPinchStart;
   const [viewport, setViewport] = useState<Viewport>({
     scale: 1,
     panX: 0,

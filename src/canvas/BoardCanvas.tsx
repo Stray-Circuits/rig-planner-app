@@ -75,6 +75,8 @@ export interface BoardCanvasHandle {
 interface DragState {
   placedId: string;
   pointerId: number;
+  /** Element that captured the pointer — needed to release capture on cancel. */
+  capturingEl: Element;
   // Where the pointer grabbed inside the pedal, in inches.
   grabXIn: number;
   grabYIn: number;
@@ -247,6 +249,7 @@ function BoardCanvasInner(
       dragRef.current = {
         placedId: p.id,
         pointerId: e.pointerId,
+        capturingEl: e.currentTarget,
         grabXIn: xIn - p.xIn,
         grabYIn: yIn - p.yIn,
         pedal: def,
@@ -323,9 +326,16 @@ function BoardCanvasInner(
         const drag = dragRef.current;
         if (!drag) return;
         if (drag.longPressTimer) clearTimeout(drag.longPressTimer);
+        // Release the captured pointer so the canvas wrapper owns subsequent
+        // events cleanly. Mirrors handlePointerUp; defensive — the browser
+        // would auto-release on pointerup, but explicit release keeps the
+        // capturing element from being the hit-target until then.
+        if (drag.capturingEl.hasPointerCapture(drag.pointerId)) {
+          drag.capturingEl.releasePointerCapture(drag.pointerId);
+        }
         // Commit the partial move so the user doesn't lose progress when
-        // a pinch interrupts a drag. The captured pointer's subsequent
-        // move/up events will no-op once dragRef is null.
+        // a pinch interrupts a drag. The pedal's subsequent move/up events
+        // will no-op once dragRef is null.
         if (drag.movedEnough && !drag.longPressFired) {
           onDragCommit?.(drag.placedId);
         }
