@@ -29,6 +29,10 @@ interface PedalLibrarySheetProps {
 }
 
 const HOLD_MS = 450;
+// A touch that drifts more than this during the hold window is a scroll,
+// not a long-press — cancel the timer so the actions sheet doesn't pop
+// while the user flicks through the list.
+const HOLD_CANCEL_PX = 8;
 
 export function PedalLibrarySheet({
   open,
@@ -235,9 +239,11 @@ interface PedalRowProps {
 function PedalRow({ pedal, mode, onAdd, onOpenActions }: PedalRowProps) {
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heldRef = useRef(false);
+  const holdStart = useRef<{ x: number; y: number } | null>(null);
 
-  const startHold = () => {
+  const startHold = (x: number, y: number) => {
     heldRef.current = false;
+    holdStart.current = { x, y };
     holdTimer.current = setTimeout(() => {
       heldRef.current = true;
       onOpenActions(pedal);
@@ -249,6 +255,17 @@ function PedalRow({ pedal, mode, onAdd, onOpenActions }: PedalRowProps) {
     if (holdTimer.current) {
       clearTimeout(holdTimer.current);
       holdTimer.current = null;
+    }
+    holdStart.current = null;
+  };
+
+  const maybeCancelHold = (x: number, y: number) => {
+    const start = holdStart.current;
+    if (!start || !holdTimer.current) return;
+    const dx = x - start.x;
+    const dy = y - start.y;
+    if (dx * dx + dy * dy >= HOLD_CANCEL_PX * HOLD_CANCEL_PX) {
+      clearHold();
     }
   };
 
@@ -276,10 +293,18 @@ function PedalRow({ pedal, mode, onAdd, onOpenActions }: PedalRowProps) {
           e.preventDefault();
           onOpenActions(pedal);
         }}
-        onMouseDown={startHold}
+        onMouseDown={(e) => startHold(e.clientX, e.clientY)}
+        onMouseMove={(e) => maybeCancelHold(e.clientX, e.clientY)}
         onMouseUp={clearHold}
         onMouseLeave={clearHold}
-        onTouchStart={startHold}
+        onTouchStart={(e) => {
+          const t = e.touches[0];
+          if (t) startHold(t.clientX, t.clientY);
+        }}
+        onTouchMove={(e) => {
+          const t = e.touches[0];
+          if (t) maybeCancelHold(t.clientX, t.clientY);
+        }}
         onTouchEnd={clearHold}
         onTouchCancel={clearHold}
       >
