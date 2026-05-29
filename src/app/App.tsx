@@ -115,14 +115,5 @@ export function App() {
     return null;
   }
 
-  return (
-    <RigScreen
-      rig={rig}
-      onBack={() => setRoute({ kind: 'rigs' })}
-      onOpenRig={(rigId) => {
-        void openRig(rigId);
-        setRoute({ kind: 'rig', rigId });
-      }}
-    />
-  );
+  return <RigScreen rig={rig} onBack={() => setRoute({ kind: 'rigs' })} />;
 }
