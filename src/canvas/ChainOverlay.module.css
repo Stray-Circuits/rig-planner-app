@@ -73,15 +73,22 @@
   flex-wrap: wrap;
 }
 
+/*
+ * Endpoint "chip" is now a stacked composite: a pill body with the label,
+ * a narrow plug barrel sticking down from its center, and a tip dot at
+ * the barrel's end. The tip is the cable's actual termination point —
+ * ChainOverlay measures its bbox and routes the cable to its center, so
+ * the dot you see is literally where the cable plugs in.
+ */
 .endpointChip {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-floating);
-  border: 0.5px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   font-size: 11px;
   font-weight: 500;
   color: var(--fg);
@@ -90,32 +97,59 @@
   white-space: nowrap;
 }
 
-.endpointChip:hover {
+.endpointBody {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-floating);
+  border: 0.5px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  line-height: 1;
+  /* Direction marker: source vs sink shows as a small color slab on the
+   * inside edge of the pill, in addition to the From/To label prefix. */
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+
+.endpointChip:hover .endpointBody {
   background: var(--surface);
 }
 
-.endpointDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.endpointSource .endpointBody {
+  border-left-color: var(--success);
 }
 
-.endpointSource .endpointDot {
-  background: var(--success);
-}
-
-.endpointSink .endpointDot {
-  background: var(--primary);
-}
-
-.endpointSource {
-  color: var(--success-fg);
-}
-
-.endpointSink {
-  color: var(--primary-fg);
+.endpointSink .endpointBody {
+  border-left-color: var(--primary);
 }
 
 .endpointLabel {
   line-height: 1;
+}
+
+/* Plug barrel: rectangular stub between the chip body and the tip dot.
+ * Neutral metallic color so it reads as connector hardware rather than
+ * signal-typed. */
+.endpointBarrel {
+  display: block;
+  width: 10px;
+  height: 6px;
+  background: var(--border);
+  border-radius: 0 0 2px 2px;
+}
+
+/* Tip dot: the cable terminus. Filled with the cable's signal color so
+ * the visual "plug" matches the wire. External endpoints are always
+ * audio/instrument-class, so the static green matches the cable hue. */
+.endpointTip {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--cable-instrument);
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  margin-top: -1px;
 }
