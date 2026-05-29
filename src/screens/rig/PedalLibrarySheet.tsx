@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Pedal } from '../../data/schema';
 import { pedalImageStyle } from '../../lib/pedalImage';
 import { getLocalStorageUsageFraction } from '../../data/memoryAdapter';
@@ -52,6 +52,24 @@ export function PedalLibrarySheet({
     rigCount: number;
   } | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [query, setQuery] = useState('');
+
+  // Reset the search when the sheet closes so the next open starts fresh.
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  const filteredPedals = useMemo(() => {
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return pedals;
+    // Multi-token search: every token must appear somewhere in the
+    // brand + name haystack so e.g. "stray buff" finds "Stray Circuits
+    // Buff Boost" even though that exact substring never appears.
+    return pedals.filter((p) => {
+      const haystack = `${p.brand} ${p.name}`.toLowerCase();
+      return tokens.every((t) => haystack.includes(t));
+    });
+  }, [pedals, query]);
 
   const usage = usePedalsStore((s) => s.usage);
   const deletePedal = usePedalsStore((s) => s.deletePedal);
@@ -133,8 +151,31 @@ export function PedalLibrarySheet({
               unused pedals. Tauri/desktop builds aren&apos;t limited.
             </div>
           ) : null}
+          {pedals.length > 0 ? (
+            <div className={styles.searchRow}>
+              <i className={`ti ti-search ${styles.searchIcon}`} aria-hidden />
+              <input
+                type="text"
+                className={styles.searchInput}
+                placeholder="Search pedals"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search pedals"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  className={styles.searchClear}
+                  onClick={() => setQuery('')}
+                  aria-label="Clear search"
+                >
+                  <i className="ti ti-x" aria-hidden />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <ul className={styles.list}>
-            {pedals.map((p) => (
+            {filteredPedals.map((p) => (
               <PedalRow
                 key={p.id}
                 pedal={p}
@@ -144,6 +185,13 @@ export function PedalLibrarySheet({
               />
             ))}
           </ul>
+          {pedals.length > 0 && filteredPedals.length === 0 ? (
+            <div className={styles.noMatches}>
+              <p className={styles.muted}>
+                No pedals match &ldquo;{query}&rdquo;.
+              </p>
+            </div>
+          ) : null}
           {pedals.length === 0 ? (
             <div className={styles.empty}>
               <p className={styles.muted}>
