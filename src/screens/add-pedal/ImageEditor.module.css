@@ -36,8 +36,75 @@
 
 .canvas {
   display: block;
-  background: #fff;
+  /* Checkerboard backdrop so the transparent silhouette reads against
+     a neutral pattern. CSS-only: two layered 45° gradients with a
+     half-tile offset → a 16px checker. Beats a flat color that can
+     blend with light-chassis pedals. */
+  background-color: #2a2c33;
+  background-image:
+    linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.06) 25%,
+      transparent 25%,
+      transparent 75%,
+      rgba(255, 255, 255, 0.06) 75%
+    ),
+    linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.06) 25%,
+      transparent 25%,
+      transparent 75%,
+      rgba(255, 255, 255, 0.06) 75%
+    );
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    8px 8px;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+
+.guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Rule-of-thirds grid: two verticals at 1/3 and 2/3 of the width,
+   two horizontals at 1/3 and 2/3 of the height. Lining a pedal's
+   chassis edge against a guide gives an instant straightness read. */
+.guideLine {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.guideVert1,
+.guideVert2 {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.guideVert1 {
+  left: 33.333%;
+}
+
+.guideVert2 {
+  left: 66.666%;
+}
+
+.guideHoriz1,
+.guideHoriz2 {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.guideHoriz1 {
+  top: 33.333%;
+}
+
+.guideHoriz2 {
+  top: 66.666%;
 }
 
 .cropOverlay {
@@ -114,9 +181,43 @@
   font-weight: 500;
 }
 
+.angleControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .angleValue {
   font-variant-numeric: tabular-nums;
   color: var(--fg);
+}
+
+.guidesToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.guidesToggle:hover {
+  color: var(--fg);
+  background: var(--surface-alt);
+}
+
+.guidesToggle[aria-pressed='true'] {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.guidesToggle i {
+  font-size: 14px;
 }
 
 .angleRow input[type='range'] {

@@ -879,29 +879,54 @@ function ImageStep({
     // A device upload has no source URL — clear any URL carried over from a
     // prior search-picked photo.
     setDraft((d) => ({ ...d, photoSourceUrl: null }));
-    // Drop into the editor first so the user can rotate / straighten /
-    // crop before we kick off the bg-removal pipeline. The metered-
-    // connection prompt fires on Apply (when the heavy model download
-    // would actually happen), not on file pick.
-    setEditor({ file });
-  };
-
-  const handleEditorApply = (edited: Blob) => {
-    setEditor(null);
+    // Warn before kicking off the ~176MB model fetch on a metered connection.
     if (isMeteredConnection() && !hasDownloadedModel()) {
-      setMeteredPrompt({ file: edited });
+      setMeteredPrompt({ file });
       return;
     }
-    void processFile(edited, true).then(() => markModelDownloaded());
+    void processFile(file, true).then(() => markModelDownloaded());
+  };
+
+  const handleEditorApply = async (
+    edited: Blob,
+    options: { hadExplicitCrop: boolean },
+  ): Promise<void> => {
+    // The editor operates on the bg-removed PNG, so the result keeps
+    // its alpha channel. If the user only rotated/straightened (no
+    // explicit crop), the alpha bbox now includes the transparent
+    // wedges that rotation introduced — tighten via cropToContent so
+    // we don't store padding. With an explicit crop, respect it
+    // literally; the user already picked their framing.
+    const tightened = options.hadExplicitCrop
+      ? edited
+      : await cropToContent(edited).catch(() => edited);
+    const dataUrl = await blobToDataURL(tightened);
+    const sampled = await sampleDominantImageColor(tightened).catch(() => null);
+    setDraft((d) => ({
+      ...d,
+      photoDataUrl: dataUrl,
+      ...(sampled ? { color: sampled } : {}),
+    }));
+    setEditor(null);
   };
 
   const handleEditorCancel = () => {
     setEditor(null);
   };
 
-  const handleEditExisting = () => {
-    if (!draft.photoSource) return;
-    setEditor({ file: draft.photoSource });
+  const handleEditExisting = async (): Promise<void> => {
+    if (!draft.photoDataUrl) return;
+    // Bg-removed dataURL → Blob the editor can rasterize. fetch() is
+    // the simplest cross-runtime way to do this — works under Tauri
+    // and `pnpm dev` without a custom base64 decode path.
+    try {
+      const blob = await fetch(draft.photoDataUrl).then((r) => r.blob());
+      setEditor({ file: blob });
+    } catch {
+      // Decode failed; leave the user where they were so they can pick
+      // a fresh photo. Surfacing a banner here would be overkill — the
+      // existing post-process row stays usable.
+    }
   };
 
   const acceptMeteredDownload = () => {
@@ -1073,10 +1098,7 @@ function ImageStep({
     const query = search?.query.trim() ?? '';
     setSearch(null);
     setDraft((d) => ({ ...d, photoSourceUrl: result.sourceUrl }));
-    // Same editor-first flow as a device upload — the search-picked
-    // photo often arrives at an unhelpful orientation or with extra
-    // background that the user might want to crop before bg-removal.
-    setEditor({ file: blob });
+    void processFile(blob, true).then(() => markModelDownloaded());
     // Two metadata branches, fired in parallel with bg-removal:
     //   1. The page that hosts the picked image — best signal for
     //      brand/name when it's a retailer / manufacturer page.
@@ -1105,7 +1127,7 @@ function ImageStep({
       <div className={styles.imageStep}>
         <ImageEditor
           source={editor.file}
-          onApply={handleEditorApply}
+          onApply={(blob, opts) => void handleEditorApply(blob, opts)}
           onCancel={handleEditorCancel}
         />
       </div>
@@ -1225,9 +1247,13 @@ function ImageStep({
           <Button variant="secondary" onClick={enterThreshold}>
             <i className="ti ti-adjustments" aria-hidden /> Tune threshold
           </Button>
-          {draft.photoSource ? (
-            <Button variant="secondary" onClick={handleEditExisting}>
-              <i className="ti ti-edit" aria-hidden /> Edit photo
+          {draft.photoDataUrl ? (
+            <Button
+              variant="secondary"
+              onClick={() => void handleEditExisting()}
+            >
+              <i className="ti ti-rotate-rectangle" aria-hidden /> Rotate &amp;
+              crop
             </Button>
           ) : null}
           <Button variant="secondary" onClick={handleUseOriginal}>

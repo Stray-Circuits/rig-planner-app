@@ -17,8 +17,14 @@ import styles from './ImageEditor.module.css';
 
 interface ImageEditorProps {
   source: Blob;
-  /** Applied transform → new source blob, ready for bg-removal. */
-  onApply: (edited: Blob) => void;
+  /**
+   * Applied transform → new PNG Blob, plus a flag telling the caller
+   * whether the user set an explicit crop. The wizard uses the flag
+   * to decide if it should tighten the alpha bbox post-apply (a pure
+   * rotation leaves transparent wedges the user usually wants
+   * trimmed; an explicit crop is the user's authoritative framing).
+   */
+  onApply: (edited: Blob, options: { hadExplicitCrop: boolean }) => void;
   onCancel: () => void;
 }
 
@@ -39,10 +45,12 @@ interface DragState {
 const MIN_CROP_PX = 24;
 
 /**
- * Pre-bg-removal editor. Lets the user rotate the source by quarter
- * turns, straighten by ±45°, and crop. Emits a new PNG Blob the
- * existing pipeline (shrink → bg-remove → cropToContent) consumes
- * as if the user had picked it directly.
+ * Post-bg-removal editor. Lets the user rotate the (already alpha-
+ * masked) pedal photo by quarter turns, straighten by ±45°, and
+ * crop. The preview is drawn on a transparent canvas so the user
+ * can see the silhouette and a rule-of-thirds grid clearly while
+ * straightening. Emits a new PNG Blob the wizard re-saves on the
+ * draft.
  */
 export function ImageEditor({ source, onApply, onCancel }: ImageEditorProps) {
   const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
@@ -50,6 +58,10 @@ export function ImageEditor({ source, onApply, onCancel }: ImageEditorProps) {
   const [transform, setTransform] =
     useState<EditorTransform>(IDENTITY_TRANSFORM);
   const [applying, setApplying] = useState(false);
+  // Rule-of-thirds guide lines so the user has a visual reference
+  // when straightening. Default on — they're the whole point of
+  // straighten — but the user can hide them if they get in the way.
+  const [showGuides, setShowGuides] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -106,8 +118,10 @@ export function ImageEditor({ source, onApply, onCancel }: ImageEditorProps) {
     canvas.height = rotH;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, rotW, rotH);
+    // Clear to transparent — the bg-removed source already has alpha,
+    // and a white fill would defeat the silhouette preview the user
+    // is straightening against.
+    ctx.clearRect(0, 0, rotW, rotH);
     ctx.save();
     ctx.translate(rotW / 2, rotH / 2);
     ctx.rotate(
@@ -258,13 +272,11 @@ export function ImageEditor({ source, onApply, onCancel }: ImageEditorProps) {
   // ---- Apply -------------------------------------------------------------
   const handleApply = () => {
     setApplying(true);
+    const hadExplicitCrop = transform.crop !== null;
     void (async () => {
       try {
-        // Skip the rasterize when nothing changed — saves a roundtrip
-        // through canvas → blob, and means the bg-removal pipeline
-        // sees the original byte-identical file in the no-op case.
         const blob = await applyEditorTransform(source, transform);
-        onApply(blob);
+        onApply(blob, { hadExplicitCrop });
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : String(err));
         setApplying(false);
@@ -290,6 +302,14 @@ export function ImageEditor({ source, onApply, onCancel }: ImageEditorProps) {
         ) : (
           <div className={styles.canvasFrame}>
             <canvas ref={canvasRef} className={styles.canvas} />
+            {showGuides ? (
+              <div className={styles.guides} aria-hidden>
+                <div className={`${styles.guideLine} ${styles.guideVert1}`} />
+                <div className={`${styles.guideLine} ${styles.guideVert2}`} />
+                <div className={`${styles.guideLine} ${styles.guideHoriz1}`} />
+                <div className={`${styles.guideLine} ${styles.guideHoriz2}`} />
+              </div>
+            ) : null}
             {cropDisp ? (
               <div
                 className={styles.cropOverlay}
@@ -364,8 +384,19 @@ export function ImageEditor({ source, onApply, onCancel }: ImageEditorProps) {
         <label className={styles.angleRow}>
           <span className={styles.angleLabel}>
             Straighten
-            <span className={styles.angleValue}>
-              {transform.fineAngleDeg.toFixed(1)}°
+            <span className={styles.angleControls}>
+              <button
+                type="button"
+                className={styles.guidesToggle}
+                onClick={() => setShowGuides((v) => !v)}
+                aria-pressed={showGuides}
+                title={showGuides ? 'Hide guides' : 'Show guides'}
+              >
+                <i className="ti ti-grid-4x4" aria-hidden />
+              </button>
+              <span className={styles.angleValue}>
+                {transform.fineAngleDeg.toFixed(1)}°
+              </span>
             </span>
           </span>
           <input

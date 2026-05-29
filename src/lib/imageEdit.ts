@@ -57,17 +57,18 @@ export function rotatedCanvasSize(
 
 /**
  * Rasterize the transform: returns a new PNG Blob with the chosen
- * rotation + crop baked in. The output is opaque (no transparency
- * is introduced; corners exposed by fine-angle rotation are filled
- * with `fillStyle`, default white, so the downstream bg-remover has
- * a single corner color to key against).
+ * rotation + crop baked in. By default the output preserves source
+ * transparency — corners exposed by a fine-angle rotation stay
+ * transparent. Pass `fillStyle` when the downstream consumer needs
+ * a flat backdrop (e.g. an opaque source feeding a chroma-key
+ * bg-remover that expects a single corner color).
  */
 export async function applyEditorTransform(
   source: Blob,
   transform: EditorTransform,
-  options: { fillStyle?: string } = {},
+  options: { fillStyle?: string | null } = {},
 ): Promise<Blob> {
-  const fillStyle = options.fillStyle ?? '#ffffff';
+  const fillStyle = options.fillStyle ?? null;
   const bitmap = await createImageBitmap(source);
   try {
     const srcW = bitmap.width;
@@ -80,8 +81,10 @@ export async function applyEditorTransform(
     rotCanvas.height = rotH;
     const rotCtx = rotCanvas.getContext('2d');
     if (!rotCtx) throw new Error('2D context unavailable');
-    rotCtx.fillStyle = fillStyle;
-    rotCtx.fillRect(0, 0, rotW, rotH);
+    if (fillStyle !== null) {
+      rotCtx.fillStyle = fillStyle;
+      rotCtx.fillRect(0, 0, rotW, rotH);
+    }
     rotCtx.save();
     rotCtx.translate(rotW / 2, rotH / 2);
     rotCtx.rotate(
