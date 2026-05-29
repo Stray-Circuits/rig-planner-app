@@ -88,11 +88,10 @@ export function PortPickerSheet({
             // Tap = disconnect only when the port has no slots left. A
             // partially-filled TRS jack (1 of 2) stays in "arm to add
             // another cable" mode so users can wire a stereo splitter
-            // without re-tapping the pedal between cables.
+            // without re-tapping the pedal between cables. portMax is
+            // always >= 1, so cableCount >= portMax already implies > 0.
             const isDisconnectAction =
-              !isCompletingConnection &&
-              cableCount >= portMax &&
-              cableCount > 0;
+              !isCompletingConnection && cableCount >= portMax;
             let disabledReason: string | null = null;
             if (isCompletingConnection && armedFromPort) {
               const compat = connectionCompatibility(

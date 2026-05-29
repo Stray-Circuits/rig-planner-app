@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { Pedal, PlacedPedal, Rig } from '../../data/schema';
+import type { Pedal, PlacedPedal, Port, Rig } from '../../data/schema';
 import { BoardCanvas } from '../../canvas/BoardCanvas';
 import { useViewport } from '../../canvas/useViewport';
 import {
@@ -170,6 +170,21 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
     role === 'fx_send' ||
     role === 'midi_out';
 
+  // Returns a user-facing notice if the port is already at its cable cap,
+  // or null if it has room. TRS jacks accept a splitter (one tip-ring-
+  // sleeve cable carrying two signals) and so hold two cables; everything
+  // else is a single mono / MIDI DIN / XLR jack and saturates at one.
+  const portFullReason = (
+    port: Port,
+    placedId: string,
+    portId: string,
+  ): string | null => {
+    const max = maxCablesForConnector(port.connector);
+    const have = cableCountByPort.get(`${placedId}:${portId}`) ?? 0;
+    if (have < max) return null;
+    return `${port.label} is already full (${max} cable${max === 1 ? '' : 's'} max).`;
+  };
+
   /**
    * Validate a pair of pedal ports and (if compatible) persist a cable.
    * Driven by the port-picker sheet's two-tap flow. Returns true if a
@@ -196,23 +211,14 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
       setNotice(compat.reason);
       return false;
     }
-    // TRS jacks accept a splitter (one tip-ring-sleeve cable carrying two
-    // signals), so they can host two cables; anything else is a single
-    // mono / MIDI DIN / XLR jack and saturates at one.
-    const aMax = maxCablesForConnector(aPort.connector);
-    const bMax = maxCablesForConnector(bPort.connector);
-    const aHave = cableCountByPort.get(`${aPlacedId}:${aPortId}`) ?? 0;
-    const bHave = cableCountByPort.get(`${bPlacedId}:${bPortId}`) ?? 0;
-    if (aHave >= aMax) {
-      setNotice(
-        `${aPort.label} is already full (${aMax} cable${aMax === 1 ? '' : 's'} max).`,
-      );
+    const aFull = portFullReason(aPort, aPlacedId, aPortId);
+    if (aFull) {
+      setNotice(aFull);
       return false;
     }
-    if (bHave >= bMax) {
-      setNotice(
-        `${bPort.label} is already full (${bMax} cable${bMax === 1 ? '' : 's'} max).`,
-      );
+    const bFull = portFullReason(bPort, bPlacedId, bPortId);
+    if (bFull) {
+      setNotice(bFull);
       return false;
     }
     // Outputs become "from", inputs become "to". Swap if needed.
@@ -320,17 +326,15 @@ export function RigScreen({ rig, onBack, onOpenRig }: RigScreenProps) {
         return;
       }
     }
-    // Same saturation gate that tryConnectPorts uses for pedal-to-pedal:
-    // refuse a cable that would over-fill the source port (TS at 1, TRS
-    // at 2). The mirror gate for the endpoint side isn't needed —
-    // external endpoints don't have a cable cap.
-    const armedMax = maxCablesForConnector(armedPortDef.connector);
-    const armedHave =
-      cableCountByPort.get(`${armedPort.placedId}:${armedPort.portId}`) ?? 0;
-    if (armedHave >= armedMax) {
-      setNotice(
-        `${armedPortDef.label} is already full (${armedMax} cable${armedMax === 1 ? '' : 's'} max).`,
-      );
+    // External endpoints have no cable cap, but the armed source port
+    // still does. Same gate that tryConnectPorts uses pedal-to-pedal.
+    const armedFull = portFullReason(
+      armedPortDef,
+      armedPort.placedId,
+      armedPort.portId,
+    );
+    if (armedFull) {
+      setNotice(armedFull);
       setArmedPort(null);
       return;
     }

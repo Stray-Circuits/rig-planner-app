@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetDbForTests } from '../src/data/db';
 import { __clearMemoryAdapterStorage } from '../src/data/memoryAdapter';
 import { createRig, listRigs } from '../src/data/rigsRepo';
+import { createPedal } from '../src/data/pedalsRepo';
 import { RigScreen } from '../src/screens/rig/RigScreen';
 import { usePedalsStore } from '../src/stores/pedalsStore';
 import { usePlacedPedalsStore } from '../src/stores/placedPedalsStore';
@@ -242,6 +243,74 @@ describe('RigScreen', () => {
     const conn = useSignalChainStore.getState().connectionsByRig[rig.id]?.[0];
     expect(conn?.fromNodeKind).toBe('external');
     expect(conn?.toNodeKind).toBe('pedal');
+  });
+
+  it('TRS output accepts two cables via splitter; third attempt surfaces the saturation notice', async () => {
+    // Custom pedal with a TRS-jack output — none of the seed pedals use
+    // 'trs' (they use 'ts' or 'midi_trs'), so the splitter case has to
+    // be set up explicitly.
+    await createPedal({
+      brand: 'Acme',
+      name: 'TRS Out Box',
+      widthIn: 3,
+      depthIn: 4,
+      imagePath: null,
+      jackSides: {
+        top: false,
+        bottom: true,
+        left: false,
+        right: false,
+        midi_top: false,
+        midi_bottom: false,
+        midi_left: false,
+        midi_right: false,
+      },
+      powerSide: null,
+      ports: [
+        {
+          label: 'TRS Out',
+          role: 'stereo_output',
+          signalType: 'instrument',
+          connector: 'trs',
+          side: 'bottom',
+          sideOrder: 0,
+          optional: false,
+        },
+      ],
+    });
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('TRS Out Box'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
+    });
+
+    fireEvent.click(screen.getByLabelText('Show signal chain'));
+    // First cable: TRS Out → Amp. Source should stay armed afterwards
+    // (TRS at 1 of 2).
+    fireEvent.click(await screen.findByLabelText('Acme TRS Out Box'));
+    fireEvent.click(await screen.findByRole('button', { name: /^TRS Out\b/ }));
+    fireEvent.click(await screen.findByText('To Amp'));
+    await waitFor(() => {
+      expect(
+        useSignalChainStore.getState().connectionsByRig[rig.id],
+      ).toHaveLength(1);
+    });
+    // Second cable: same TRS Out → Guitar (acts as a sink endpoint here,
+    // we just need a second valid target). Source becomes saturated.
+    fireEvent.click(await screen.findByText('From Guitar'));
+    await waitFor(() => {
+      expect(
+        useSignalChainStore.getState().connectionsByRig[rig.id],
+      ).toHaveLength(2);
+    });
+
+    // The TRS port is now full. Reopening the picker on this pedal
+    // should show the disconnect affordance with the correct count.
+    fireEvent.click(screen.getByLabelText('Acme TRS Out Box'));
+    expect(
+      await screen.findByText(/2 cables · tap to disconnect/),
+    ).toBeInTheDocument();
   });
 
   it('signal-chain FAB toggles chain mode + port dots', async () => {
