@@ -27,6 +27,7 @@ import {
   shrinkImage,
   type BgRemovalProgress,
 } from '../../lib/bgRemoval';
+import { ImageEditor } from './ImageEditor';
 import {
   fetchImageAsBlob,
   isBraveSearchConfigured,
@@ -790,12 +791,19 @@ function ImageStep({
   const searchEnabled = isBraveSearchConfigured();
   const [search, setSearch] = useState<SearchState | null>(null);
 
+  // When non-null, the wizard is in the rotate/straighten/crop editor
+  // sub-mode on `file`. Apply runs the chosen edits and feeds the
+  // result into the normal bg-removal pipeline.
+  const [editor, setEditor] = useState<{ file: Blob } | null>(null);
+
   // Echo sub-mode engagement up to the wizard so it can lock backdrop
   // dismissal — a stray click outside the modal during search wastes a
   // Brave API call AND drops the user back to square one.
   useEffect(() => {
-    onEngagementChange(search !== null || threshold !== null);
-  }, [search, threshold, onEngagementChange]);
+    onEngagementChange(
+      search !== null || threshold !== null || editor !== null,
+    );
+  }, [search, threshold, editor, onEngagementChange]);
 
   // Warm the bg-removal chunk so it's ready by the time the user clicks
   // "Use a photo". Best-effort, no UI feedback for the prefetch itself.
@@ -877,6 +885,48 @@ function ImageStep({
       return;
     }
     void processFile(file, true).then(() => markModelDownloaded());
+  };
+
+  const handleEditorApply = async (
+    edited: Blob,
+    options: { hadExplicitCrop: boolean },
+  ): Promise<void> => {
+    // The editor operates on the bg-removed PNG, so the result keeps
+    // its alpha channel. If the user only rotated/straightened (no
+    // explicit crop), the alpha bbox now includes the transparent
+    // wedges that rotation introduced — tighten via cropToContent so
+    // we don't store padding. With an explicit crop, respect it
+    // literally; the user already picked their framing.
+    const tightened = options.hadExplicitCrop
+      ? edited
+      : await cropToContent(edited).catch(() => edited);
+    const dataUrl = await blobToDataURL(tightened);
+    const sampled = await sampleDominantImageColor(tightened).catch(() => null);
+    setDraft((d) => ({
+      ...d,
+      photoDataUrl: dataUrl,
+      ...(sampled ? { color: sampled } : {}),
+    }));
+    setEditor(null);
+  };
+
+  const handleEditorCancel = () => {
+    setEditor(null);
+  };
+
+  const handleEditExisting = async (): Promise<void> => {
+    if (!draft.photoDataUrl) return;
+    // Bg-removed dataURL → Blob the editor can rasterize. fetch() is
+    // the simplest cross-runtime way to do this — works under Tauri
+    // and `pnpm dev` without a custom base64 decode path.
+    try {
+      const blob = await fetch(draft.photoDataUrl).then((r) => r.blob());
+      setEditor({ file: blob });
+    } catch {
+      // Decode failed; leave the user where they were so they can pick
+      // a fresh photo. Surfacing a banner here would be overkill — the
+      // existing post-process row stays usable.
+    }
   };
 
   const acceptMeteredDownload = () => {
@@ -1071,6 +1121,19 @@ function ImageStep({
     );
   };
 
+  // ---------- Rotate / straighten / crop editor ----------
+  if (editor) {
+    return (
+      <div className={styles.imageStep}>
+        <ImageEditor
+          source={editor.file}
+          onApply={(blob, opts) => void handleEditorApply(blob, opts)}
+          onCancel={handleEditorCancel}
+        />
+      </div>
+    );
+  }
+
   // ---------- Web search ----------
   if (search) {
     return (
@@ -1184,6 +1247,15 @@ function ImageStep({
           <Button variant="secondary" onClick={enterThreshold}>
             <i className="ti ti-adjustments" aria-hidden /> Tune threshold
           </Button>
+          {draft.photoDataUrl ? (
+            <Button
+              variant="secondary"
+              onClick={() => void handleEditExisting()}
+            >
+              <i className="ti ti-rotate-rectangle" aria-hidden /> Rotate &amp;
+              crop
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={handleUseOriginal}>
             Use as-is
           </Button>
