@@ -27,6 +27,7 @@ import {
   shrinkImage,
   type BgRemovalProgress,
 } from '../../lib/bgRemoval';
+import { ImageEditor } from './ImageEditor';
 import {
   fetchImageAsBlob,
   isBraveSearchConfigured,
@@ -790,12 +791,19 @@ function ImageStep({
   const searchEnabled = isBraveSearchConfigured();
   const [search, setSearch] = useState<SearchState | null>(null);
 
+  // When non-null, the wizard is in the rotate/straighten/crop editor
+  // sub-mode on `file`. Apply runs the chosen edits and feeds the
+  // result into the normal bg-removal pipeline.
+  const [editor, setEditor] = useState<{ file: Blob } | null>(null);
+
   // Echo sub-mode engagement up to the wizard so it can lock backdrop
   // dismissal — a stray click outside the modal during search wastes a
   // Brave API call AND drops the user back to square one.
   useEffect(() => {
-    onEngagementChange(search !== null || threshold !== null);
-  }, [search, threshold, onEngagementChange]);
+    onEngagementChange(
+      search !== null || threshold !== null || editor !== null,
+    );
+  }, [search, threshold, editor, onEngagementChange]);
 
   // Warm the bg-removal chunk so it's ready by the time the user clicks
   // "Use a photo". Best-effort, no UI feedback for the prefetch itself.
@@ -871,12 +879,29 @@ function ImageStep({
     // A device upload has no source URL — clear any URL carried over from a
     // prior search-picked photo.
     setDraft((d) => ({ ...d, photoSourceUrl: null }));
-    // Warn before kicking off the ~176MB model fetch on a metered connection.
+    // Drop into the editor first so the user can rotate / straighten /
+    // crop before we kick off the bg-removal pipeline. The metered-
+    // connection prompt fires on Apply (when the heavy model download
+    // would actually happen), not on file pick.
+    setEditor({ file });
+  };
+
+  const handleEditorApply = (edited: Blob) => {
+    setEditor(null);
     if (isMeteredConnection() && !hasDownloadedModel()) {
-      setMeteredPrompt({ file });
+      setMeteredPrompt({ file: edited });
       return;
     }
-    void processFile(file, true).then(() => markModelDownloaded());
+    void processFile(edited, true).then(() => markModelDownloaded());
+  };
+
+  const handleEditorCancel = () => {
+    setEditor(null);
+  };
+
+  const handleEditExisting = () => {
+    if (!draft.photoSource) return;
+    setEditor({ file: draft.photoSource });
   };
 
   const acceptMeteredDownload = () => {
@@ -1048,7 +1073,10 @@ function ImageStep({
     const query = search?.query.trim() ?? '';
     setSearch(null);
     setDraft((d) => ({ ...d, photoSourceUrl: result.sourceUrl }));
-    void processFile(blob, true).then(() => markModelDownloaded());
+    // Same editor-first flow as a device upload — the search-picked
+    // photo often arrives at an unhelpful orientation or with extra
+    // background that the user might want to crop before bg-removal.
+    setEditor({ file: blob });
     // Two metadata branches, fired in parallel with bg-removal:
     //   1. The page that hosts the picked image — best signal for
     //      brand/name when it's a retailer / manufacturer page.
@@ -1070,6 +1098,19 @@ function ImageStep({
       setDraft,
     );
   };
+
+  // ---------- Rotate / straighten / crop editor ----------
+  if (editor) {
+    return (
+      <div className={styles.imageStep}>
+        <ImageEditor
+          source={editor.file}
+          onApply={handleEditorApply}
+          onCancel={handleEditorCancel}
+        />
+      </div>
+    );
+  }
 
   // ---------- Web search ----------
   if (search) {
@@ -1184,6 +1225,11 @@ function ImageStep({
           <Button variant="secondary" onClick={enterThreshold}>
             <i className="ti ti-adjustments" aria-hidden /> Tune threshold
           </Button>
+          {draft.photoSource ? (
+            <Button variant="secondary" onClick={handleEditExisting}>
+              <i className="ti ti-edit" aria-hidden /> Edit photo
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={handleUseOriginal}>
             Use as-is
           </Button>

@@ -1,0 +1,142 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Inherit the modal panel's padding; just fill the available width. */
+  width: 100%;
+}
+
+.stage {
+  flex: 1;
+  min-height: 240px;
+  /* Cap the preview area so the controls below stay reachable on
+     phones — without this the rotated bbox can swell past the modal
+     bounds when the user nudges the straighten slider near 45°. */
+  max-height: min(60vh, 480px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-alt);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  /* Touch-action: none so a finger drag on the crop handle isn't
+     hijacked by the OS for page scroll. */
+  touch-action: none;
+  overflow: hidden;
+  position: relative;
+}
+
+.canvasFrame {
+  position: relative;
+  /* Sized in JS to the displayed canvas dims so the crop overlay's
+     absolute positioning lines up exactly. */
+  display: inline-block;
+  line-height: 0;
+}
+
+.canvas {
+  display: block;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+
+.cropOverlay {
+  position: absolute;
+  border: 1.5px dashed rgba(255, 255, 255, 0.9);
+  /* Inner shadow gives the rest of the image a subtle vignette so
+     the crop area looks brighter without us repainting the canvas. */
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+  touch-action: none;
+}
+
+.cropOverlay:active {
+  cursor: grabbing;
+}
+
+.handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  border-radius: 3px;
+  touch-action: none;
+}
+
+.handle_nw {
+  left: -9px;
+  top: -9px;
+  cursor: nwse-resize;
+}
+
+.handle_ne {
+  right: -9px;
+  top: -9px;
+  cursor: nesw-resize;
+}
+
+.handle_sw {
+  left: -9px;
+  bottom: -9px;
+  cursor: nesw-resize;
+}
+
+.handle_se {
+  right: -9px;
+  bottom: -9px;
+  cursor: nwse-resize;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rotateRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.angleRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.angleLabel {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 500;
+}
+
+.angleValue {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.angleRow input[type='range'] {
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.error {
+  color: var(--danger-fg);
+  font-size: 13px;
+  text-align: center;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
