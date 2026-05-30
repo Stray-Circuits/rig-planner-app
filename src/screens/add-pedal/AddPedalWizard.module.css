@@ -457,12 +457,6 @@
   }
 }
 
-.jacksStep {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .jackPreviewWrap {
   display: flex;
   justify-content: center;
@@ -487,38 +481,6 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 4px;
-}
-
-.jackGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.jackChip {
-  padding: 9px 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--surface-alt);
-  font-size: 13px;
-  color: var(--muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-align: left;
-}
-
-.jackChipActive {
-  border-color: var(--primary);
-  background: var(--primary-bg);
-  color: var(--primary-fg);
-}
-
-.jackChipActiveMidi {
-  border-color: var(--midi);
-  background: var(--midi-bg);
-  color: var(--midi-fg);
 }
 
 .jackDotAudio {
