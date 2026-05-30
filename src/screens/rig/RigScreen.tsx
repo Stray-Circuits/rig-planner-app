@@ -46,6 +46,15 @@ const EMPTY_PLACED: PlacedPedal[] = [];
 const EMPTY_CONNECTIONS: Connection[] = [];
 const EMPTY_ENDPOINTS: ExternalEndpoint[] = [];
 
+/**
+ * Chain-mode "armed" source — the first thing the user tapped, waiting
+ * for a second tap to complete a connection. Can be either a pedal port
+ * or an external endpoint chip; both are valid starting points.
+ */
+type Armed =
+  | { kind: 'port'; placedId: string; portId: string }
+  | { kind: 'endpoint'; endpointId: string };
+
 interface RigScreenProps {
   rig: Rig;
   onBack: () => void;
@@ -112,12 +121,6 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const [editingPedal, setEditingPedal] = useState<Pedal | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chainMode, setChainMode] = useState(false);
-  // Chain-mode "armed" source — the first thing the user tapped, waiting
-  // for a second tap to complete a connection. Can be either a pedal
-  // port or an external endpoint chip; both are valid starting points.
-  type Armed =
-    | { kind: 'port'; placedId: string; portId: string }
-    | { kind: 'endpoint'; endpointId: string };
   const [armed, setArmed] = useState<Armed | null>(null);
   // Legacy aliases — `armedPort` is the pedal-port view, used by the
   // picker subtitle, port-dot highlight, and the older arm/unarm
@@ -354,6 +357,19 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
       return false;
     }
     const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
+    // Reject backwards cables (two sources, or two sinks). The picker
+    // sheet already disables the matching rows for the endpoint-first
+    // flow, but tapping a chip directly while a port is armed skips
+    // that filter — we have to enforce direction here too.
+    const portIsOutput = isOutputRole(portDef.role);
+    if (portIsOutput === endpointIsSource) {
+      setNotice(
+        endpointIsSource
+          ? `${portDef.label} is an output — pick an input to connect from ${ep.label}`
+          : `${portDef.label} is an input — pick an output to connect to ${ep.label}`,
+      );
+      return false;
+    }
     void addConnection({
       rigId: rig.id,
       fromNodeKind: endpointIsSource ? 'external' : 'pedal',

@@ -48,10 +48,12 @@ export function EndpointActionsSheet({
   const headerLabel = isSource
     ? `From ${endpoint.label}`
     : `To ${endpoint.label}`;
+  // Sinks receive signal; the user starts a connection TO them, not FROM.
+  const directionPhrase = isSource ? 'from here' : 'to here';
   const subtitle =
     cables.length === 0
-      ? 'Pick an action to start a connection from this endpoint.'
-      : `Tap a cable below to disconnect it, or start another connection from this endpoint.`;
+      ? `Pick an action to start a connection ${directionPhrase}.`
+      : `Tap a cable below to disconnect it, or start another connection ${directionPhrase}.`;
   return (
     <Sheet open={open} onClose={onClose} title={headerLabel}>
       <p className={styles.subtitle}>{subtitle}</p>
@@ -64,7 +66,7 @@ export function EndpointActionsSheet({
           >
             <span className={styles.rowText}>
               <span className={styles.rowLabel}>
-                Start a new connection from here
+                Start a new connection {directionPhrase}
               </span>
               <span className={styles.rowSub}>
                 Then tap a pedal and pick a port to complete the cable

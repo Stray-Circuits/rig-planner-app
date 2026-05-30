@@ -665,6 +665,7 @@ function EndpointChip({
       className={`${styles.endpointChip} ${
         isSource ? styles.endpointSource : styles.endpointSink
       } ${isArmed ? styles.endpointChipArmed : ''}`}
+      aria-pressed={isArmed}
       onClick={(e) => {
         e.stopPropagation();
         onTap?.(ep.id);

@@ -245,6 +245,27 @@ describe('RigScreen', () => {
     expect(conn?.toNodeKind).toBe('pedal');
   });
 
+  it('endpoint chip: arming an output then tapping From Guitar is rejected (two sources)', async () => {
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
+    fireEvent.click(await screen.findByText('DS-1'));
+    await waitFor(() => {
+      expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
+    });
+    fireEvent.click(screen.getByLabelText('Show signal chain'));
+    fireEvent.click(await screen.findByLabelText('Boss DS-1'));
+    // Arm the OUTPUT port. Guitar is also a source — direction conflict.
+    fireEvent.click(await screen.findByRole('button', { name: /^Out\b/ }));
+    fireEvent.click(await screen.findByText('From Guitar'));
+
+    // The connection store must stay empty — the picker filter doesn't
+    // apply on the chip-tap path, so the handler itself rejects.
+    await new Promise((r) => setTimeout(r, 50));
+    const conns = useSignalChainStore.getState().connectionsByRig[rig.id];
+    expect(conns ?? []).toHaveLength(0);
+  });
+
   it('TRS output accepts two cables via splitter; third attempt surfaces the saturation notice', async () => {
     // Custom pedal with a TRS-jack output — none of the seed pedals use
     // 'trs' (they use 'ts' or 'midi_trs'), so the splitter case has to
@@ -296,9 +317,10 @@ describe('RigScreen', () => {
         useSignalChainStore.getState().connectionsByRig[rig.id],
       ).toHaveLength(1);
     });
-    // Second cable: same TRS Out → Guitar (acts as a sink endpoint here,
-    // we just need a second valid target). Source becomes saturated.
-    fireEvent.click(await screen.findByText('From Guitar'));
+    // Second cable: same TRS Out → Amp again. Endpoints don't have a
+    // cable cap, so wiring the splitter into the same sink twice is
+    // fine and saturates the source-side TRS port.
+    fireEvent.click(await screen.findByText('To Amp'));
     await waitFor(() => {
       expect(
         useSignalChainStore.getState().connectionsByRig[rig.id],
