@@ -68,11 +68,11 @@ describe('AddPedalWizard', () => {
     expect(created.name).toBe('DS-1');
     expect(created.widthIn).toBe(2.85);
     expect(created.depthIn).toBe(4.75);
-    // Default In lands on the right, Out on the left (the new
-    // signal-flow convention); jackSides is derived from the port list.
-    expect(created.jackSides.right).toBe(true);
-    expect(created.jackSides.left).toBe(true);
-    expect(created.jackSides.top).toBe(false);
+    // Modern pedals jack on top, so default In + Out both land on the
+    // top edge; jackSides is derived from the port list.
+    expect(created.jackSides.top).toBe(true);
+    expect(created.jackSides.right).toBe(false);
+    expect(created.jackSides.left).toBe(false);
     expect(created.powerSide).toBe('top');
     expect(created.ports.map((p) => p.role).sort()).toEqual([
       'input',
@@ -137,14 +137,15 @@ describe('AddPedalWizard', () => {
 
     fireEvent.click(screen.getByText('Dual mono stereo'));
     fireEvent.click(screen.getByText('+ MIDI'));
-    expect(screen.getByText(/Ports \(5\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Ports \(6\)/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Add to library'));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     const created = (await listPedals())[0]!;
     expect(created.ports.map((p) => p.role).sort()).toEqual([
-      'input',
+      'input_l',
+      'input_r',
       'midi_in',
       'midi_out',
       'output_l',
@@ -161,8 +162,8 @@ describe('AddPedalWizard', () => {
 
     fireEvent.click(screen.getByText('Add port'));
     // Category picker → Control → Expression In → TRS. Side step is
-    // skipped — the new port lands on the default side derived from the
-    // role (input → right, per the app's signal-flow convention).
+    // skipped — every freshly-added port defaults to the top edge to
+    // match modern top-jack pedals.
     fireEvent.click(screen.getByText('Control'));
     fireEvent.click(screen.getByText('Expression In'));
     fireEvent.click(screen.getByText(/TRS \(stereo \/ balanced\)/));
@@ -177,8 +178,7 @@ describe('AddPedalWizard', () => {
     expect(expr).toBeDefined();
     expect(expr?.connector).toBe('trs');
     expect(expr?.signalType).toBe('expression');
-    // Expression In is an input role, so it lands on the right.
-    expect(expr?.side).toBe('right');
+    expect(expr?.side).toBe('top');
   });
 
   it('Required/Optional chip toggles a port between the two states', async () => {
@@ -217,8 +217,9 @@ describe('AddPedalWizard', () => {
     fireEvent.change(screen.getByLabelText('Port label'), {
       target: { value: 'Guitar In' },
     });
+    // Default In side is 'top'; change to 'right' to exercise the editor.
     fireEvent.change(screen.getByLabelText('Port side'), {
-      target: { value: 'top' },
+      target: { value: 'right' },
     });
     fireEvent.change(screen.getByLabelText('Port connector'), {
       target: { value: 'trs' },
@@ -231,7 +232,7 @@ describe('AddPedalWizard', () => {
     const created = (await listPedals())[0]!;
     const inPort = created.ports.find((p) => p.role === 'input');
     expect(inPort?.label).toBe('Guitar In');
-    expect(inPort?.side).toBe('top');
+    expect(inPort?.side).toBe('right');
     expect(inPort?.connector).toBe('trs');
   });
 
@@ -242,25 +243,19 @@ describe('AddPedalWizard', () => {
     fillNameSize();
     fireEvent.click(screen.getByText('Continue'));
 
-    // Defaults: In on the right (sideOrder 0), Out on the left
-    // (sideOrder 0) — different sides, so add a second right-side port
-    // and reorder it past In to exercise the swap.
-    fireEvent.click(screen.getByText('Add port'));
-    fireEvent.click(screen.getByText('Audio'));
-    fireEvent.click(screen.getByText('FX Return'));
-    fireEvent.click(screen.getByText(/TS \(mono\)/));
-    // FX Return defaults to right (input-side role). It lands after In
-    // with sideOrder 1; bumping it up should swap with In.
-    fireEvent.click(screen.getByLabelText('Move FX Return earlier on right'));
+    // Default ports: In (sideOrder 1) + Out (sideOrder 0), both top.
+    // In is rendered first; "Move In later on top" should bubble it
+    // past Out so In's sideOrder becomes 0 and Out's becomes 1.
+    fireEvent.click(screen.getByLabelText('Move In later on top'));
 
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Add to library'));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     const created = (await listPedals())[0]!;
     const inPort = created.ports.find((p) => p.role === 'input');
-    const fxReturn = created.ports.find((p) => p.role === 'fx_return');
-    expect(inPort?.sideOrder).toBe(1);
-    expect(fxReturn?.sideOrder).toBe(0);
+    const outPort = created.ports.find((p) => p.role === 'output');
+    expect(inPort?.sideOrder).toBe(0);
+    expect(outPort?.sideOrder).toBe(1);
   });
 
   it('removing a port from the list updates the count', () => {
@@ -288,8 +283,8 @@ describe('AddPedalWizard', () => {
       target: { value: 'bottom' },
     });
 
-    // Append a MIDI preset — MIDI I/O ports land on `bottom` by default,
-    // so the derived jackSides should pick up MIDI on the bottom edge.
+    // Append a MIDI preset — MIDI I/O ports land on the top edge, so
+    // the derived jackSides should pick up MIDI on the top edge.
     fireEvent.click(screen.getByText('+ MIDI'));
 
     fireEvent.click(screen.getByText('Continue'));
@@ -297,12 +292,13 @@ describe('AddPedalWizard', () => {
 
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     const created = (await listPedals())[0]!;
-    // Default In + Out put audio on the right + left edges.
-    expect(created.jackSides.right).toBe(true);
-    expect(created.jackSides.left).toBe(true);
-    expect(created.jackSides.top).toBe(false);
-    // MIDI preset drops MIDI ports on the bottom side.
-    expect(created.jackSides.midi_bottom).toBe(true);
+    // Default In + Out put audio on the top edge.
+    expect(created.jackSides.top).toBe(true);
+    expect(created.jackSides.right).toBe(false);
+    expect(created.jackSides.left).toBe(false);
+    // MIDI preset also drops MIDI ports on the top side.
+    expect(created.jackSides.midi_top).toBe(true);
+    expect(created.jackSides.midi_bottom).toBe(false);
     expect(created.powerSide).toBe('bottom');
   });
 });
