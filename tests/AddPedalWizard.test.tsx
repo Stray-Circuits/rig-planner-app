@@ -162,11 +162,11 @@ describe('AddPedalWizard', () => {
     fireEvent.click(screen.getByText('Continue'));
 
     fireEvent.click(screen.getByText('Add port'));
-    // Category picker → Control → Expression → TRS. Side step has been
+    // Category picker → Control → Expression In → TRS. Side step has been
     // consolidated away — the new port lands on the default side derived
     // from the role + the jack sides the user already declared.
     fireEvent.click(screen.getByText('Control'));
-    fireEvent.click(screen.getByText('Expression'));
+    fireEvent.click(screen.getByText('Expression In'));
     fireEvent.click(screen.getByText(/TRS \(stereo \/ balanced\)/));
 
     expect(screen.getByText(/Ports \(3\)/)).toBeInTheDocument();
@@ -175,12 +175,12 @@ describe('AddPedalWizard', () => {
     fireEvent.click(screen.getByText('Add to library'));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     const created = (await listPedals())[0]!;
-    const expr = created.ports.find((p) => p.role === 'expression');
+    const expr = created.ports.find((p) => p.role === 'expression_in');
     expect(expr).toBeDefined();
     expect(expr?.connector).toBe('trs');
     expect(expr?.signalType).toBe('expression');
-    // Expression has no preferred side — falls back to the first declared
-    // jack side. With default jacks (top only), expression lands on top.
+    // Expression In is an input role, so it prefers the right side; with
+    // default jacks (top only), it falls back to the first declared side.
     expect(expr?.side).toBe('top');
   });
 

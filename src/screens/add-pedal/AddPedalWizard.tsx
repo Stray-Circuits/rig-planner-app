@@ -1890,20 +1890,38 @@ const ROLE_GROUPS: { heading: string; options: RoleOption[] }[] = [
     heading: 'Control',
     options: [
       {
-        role: 'expression',
-        label: 'Expression',
+        role: 'expression_in',
+        label: 'Expression In',
         signalType: 'expression',
         connectors: ['trs', 'ts'],
       },
       {
-        role: 'remote',
-        label: 'Remote',
+        role: 'expression_out',
+        label: 'Expression Out',
+        signalType: 'expression',
+        connectors: ['trs', 'ts'],
+      },
+      {
+        role: 'remote_in',
+        label: 'Remote In',
         signalType: 'remote',
         connectors: ['ts', 'trs'],
       },
       {
-        role: 'cv',
-        label: 'CV',
+        role: 'remote_out',
+        label: 'Remote Out',
+        signalType: 'remote',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'cv_in',
+        label: 'CV In',
+        signalType: 'cv',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'cv_out',
+        label: 'CV Out',
         signalType: 'cv',
         connectors: ['ts', 'trs'],
       },
@@ -1952,6 +1970,9 @@ function defaultSideForRole(role: PortRole, draft: WizardDraft): Side {
     'input_r',
     'stereo_input',
     'fx_return',
+    'expression_in',
+    'cv_in',
+    'remote_in',
   ];
   const outputRoles: PortRole[] = [
     'output',
@@ -1959,6 +1980,9 @@ function defaultSideForRole(role: PortRole, draft: WizardDraft): Side {
     'output_r',
     'stereo_output',
     'fx_send',
+    'expression_out',
+    'cv_out',
+    'remote_out',
   ];
 
   let pref: Side | null = null;
@@ -1969,8 +1993,7 @@ function defaultSideForRole(role: PortRole, draft: WizardDraft): Side {
   } else if (isMidi) {
     pref = prefer(['top', 'bottom', 'right', 'left']);
   } else {
-    // expression / cv / remote — go wherever the user has room.
-    pref = prefer(['right', 'left', 'top', 'bottom']);
+    pref = prefer(['top', 'bottom', 'right', 'left']);
   }
   if (pref) return pref;
   // No declared jack-bearing side at all — match the "input on the right"

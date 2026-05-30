@@ -92,13 +92,39 @@ export function roleGroup(role: PortRole): number {
     case 'stereo_output':
     case 'fx_send':
       return 1;
-    case 'expression':
-    case 'cv':
-    case 'remote':
+    case 'expression_in':
+    case 'expression_out':
+    case 'cv_in':
+    case 'cv_out':
+    case 'remote_in':
+    case 'remote_out':
       return 2;
     case 'midi_in':
     case 'midi_out':
       return 3;
+  }
+}
+
+/**
+ * True for roles whose physical jack drives signal *out* of the pedal.
+ * Audio/MIDI outputs plus the *_out control roles all qualify. Used by
+ * the chain-mode picker filter, the connection-direction swap in
+ * tryConnectPorts, and the endpoint↔port direction check.
+ */
+export function isOutputRole(role: PortRole): boolean {
+  switch (role) {
+    case 'output':
+    case 'output_l':
+    case 'output_r':
+    case 'stereo_output':
+    case 'fx_send':
+    case 'midi_out':
+    case 'expression_out':
+    case 'cv_out':
+    case 'remote_out':
+      return true;
+    default:
+      return false;
   }
 }
 

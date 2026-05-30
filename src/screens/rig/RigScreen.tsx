@@ -17,6 +17,7 @@ import {
 import {
   computeUnconnectedRequiredPorts,
   connectionCompatibility,
+  isOutputRole,
   maxCablesForConnector,
 } from '../../lib/signalChainWarnings';
 import {
@@ -187,14 +188,6 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   useEffect(() => {
     if (!chainMode) setArmedPort(null);
   }, [chainMode]);
-
-  const isOutputRole = (role: string) =>
-    role === 'output' ||
-    role === 'output_l' ||
-    role === 'output_r' ||
-    role === 'stereo_output' ||
-    role === 'fx_send' ||
-    role === 'midi_out';
 
   // Returns a user-facing notice if the port is already at its cable
   // cap, or null if it has room. Per-connector caps live in
