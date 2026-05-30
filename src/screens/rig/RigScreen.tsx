@@ -119,6 +119,12 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingPedal, setEditingPedal] = useState<Pedal | null>(null);
+  // Where to return when the edit wizard closes. Editing from the
+  // library sheet should pop back into the library; editing from the
+  // canvas hold-menu should land back on the canvas.
+  const [editReturnTo, setEditReturnTo] = useState<'library' | 'canvas'>(
+    'library',
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chainMode, setChainMode] = useState(false);
   const [armed, setArmed] = useState<Armed | null>(null);
@@ -475,6 +481,13 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     closeActions();
   };
 
+  const handleEdit = () => {
+    if (!targetPedal) return;
+    setEditReturnTo('canvas');
+    setEditingPedal(targetPedal);
+    closeActions();
+  };
+
   const handleRemove = () => {
     if (!actionsFor) return;
     void removeAction(actionsFor);
@@ -568,6 +581,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           icon={<i className="ti ti-rotate-clockwise" aria-hidden />}
           label="Rotate 90°"
           onClick={handleRotate}
+        />
+        <SheetItem
+          icon={<i className="ti ti-pencil" aria-hidden />}
+          label="Edit pedal"
+          onClick={handleEdit}
         />
         <SheetItem
           icon={<i className="ti ti-copy" aria-hidden />}
@@ -686,6 +704,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         }}
         onStartEditPedal={(pedal) => {
           setLibraryOpen(false);
+          setEditReturnTo('library');
           setEditingPedal(pedal);
         }}
         onSeed={handleSeed}
@@ -741,15 +760,17 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           onCancel={() => {
             setWizardOpen(false);
             setEditingPedal(null);
-            // Reopen the library so the user lands back in context.
-            if (editingPedal) setLibraryOpen(true);
+            // Return to wherever the edit was launched from.
+            if (editingPedal && editReturnTo === 'library') {
+              setLibraryOpen(true);
+            }
           }}
           onCreated={(pedal) => {
             if (editingPedal) {
               // Edit flow: no auto-add, the pedal is already placed in
               // some rig(s). Stores reload themselves inside updatePedal.
               setEditingPedal(null);
-              setLibraryOpen(true);
+              if (editReturnTo === 'library') setLibraryOpen(true);
             } else {
               // New pedal lands on the board immediately so the user sees
               // what they just made; they can drag it from there.
