@@ -282,8 +282,8 @@ describe('AddPedalWizard', () => {
       target: { value: 'bottom' },
     });
 
-    // Append a MIDI preset — MIDI I/O ports land on `bottom` by default,
-    // so the derived jackSides should pick up MIDI on the bottom edge.
+    // Append a MIDI preset — MIDI I/O ports land on the top edge, so
+    // the derived jackSides should pick up MIDI on the top edge.
     fireEvent.click(screen.getByText('+ MIDI'));
 
     fireEvent.click(screen.getByText('Continue'));
@@ -295,8 +295,9 @@ describe('AddPedalWizard', () => {
     expect(created.jackSides.top).toBe(true);
     expect(created.jackSides.right).toBe(false);
     expect(created.jackSides.left).toBe(false);
-    // MIDI preset drops MIDI ports on the bottom side.
-    expect(created.jackSides.midi_bottom).toBe(true);
+    // MIDI preset also drops MIDI ports on the top side.
+    expect(created.jackSides.midi_top).toBe(true);
+    expect(created.jackSides.midi_bottom).toBe(false);
     expect(created.powerSide).toBe('bottom');
   });
 });

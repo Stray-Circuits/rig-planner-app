@@ -1719,13 +1719,16 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
     label: '+ MIDI',
     replaces: false,
     build: () => [
+      // Top edge with sideOrders bumped past the default In/Out so a
+      // user composing "Mono in/out + MIDI" gets Out, In, MIDI Out, MIDI
+      // In reading left-to-right along the top.
       mkPort({
         label: 'MIDI In',
         role: 'midi_in',
         signalType: 'midi',
         connector: 'midi_trs',
-        side: 'bottom',
-        sideOrder: 0,
+        side: 'top',
+        sideOrder: 3,
         optional: true,
       }),
       mkPort({
@@ -1733,8 +1736,8 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'midi_out',
         signalType: 'midi',
         connector: 'midi_trs',
-        side: 'bottom',
-        sideOrder: 1,
+        side: 'top',
+        sideOrder: 2,
         optional: true,
       }),
     ],
