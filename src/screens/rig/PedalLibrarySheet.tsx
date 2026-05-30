@@ -19,7 +19,6 @@ interface PedalLibrarySheetProps {
    * edit it. Optional — when absent, the Edit action is hidden.
    */
   onStartEditPedal?: (pedal: Pedal) => void;
-  onSeed: () => Promise<void>;
   /**
    * 'pick' (default) — tapping a row adds the pedal to the active rig.
    * 'manage' — tapping a row opens the actions menu (delete, etc.) directly,
@@ -41,11 +40,8 @@ export function PedalLibrarySheet({
   onAddPedal,
   onStartNewPedal,
   onStartEditPedal,
-  onSeed,
   mode = 'pick',
 }: PedalLibrarySheetProps) {
-  const [seeding, setSeeding] = useState(false);
-  const [seedError, setSeedError] = useState<string | null>(null);
   const [actionsFor, setActionsFor] = useState<Pedal | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{
     pedal: Pedal;
@@ -82,20 +78,6 @@ export function PedalLibrarySheet({
     if (!open) return;
     setQuotaFraction(getLocalStorageUsageFraction());
   }, [open, pedals.length]);
-
-  const handleSeed = () => {
-    void (async () => {
-      setSeeding(true);
-      setSeedError(null);
-      try {
-        await onSeed();
-      } catch (err) {
-        setSeedError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setSeeding(false);
-      }
-    })();
-  };
 
   const openActions = (pedal: Pedal) => setActionsFor(pedal);
   const closeActions = () => setActionsFor(null);
@@ -198,15 +180,6 @@ export function PedalLibrarySheet({
                 Your library is empty — tap <strong>Add new pedal</strong> below
                 to create one.
               </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSeed}
-                disabled={seeding}
-              >
-                {seeding ? 'Seeding…' : 'Or seed 6 sample pedals'}
-              </Button>
-              {seedError ? <p className={styles.error}>{seedError}</p> : null}
             </div>
           ) : null}
         </div>

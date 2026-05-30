@@ -66,7 +66,6 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const pedalsStatus = usePedalsStore((s) => s.status);
   const pedalImagesReady = usePedalsStore((s) => s.imagesReady);
   const loadPedals = usePedalsStore((s) => s.loadPedals);
-  const seedSamples = usePedalsStore((s) => s.seedSamples);
 
   const placed = usePlacedPedalsStore((s) => s.byRig[rig.id] ?? EMPTY_PLACED);
   const loadForRig = usePlacedPedalsStore((s) => s.loadForRig);
@@ -179,10 +178,6 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     const { xIn, yIn } = centeredOnRig(pedal, rig);
     void addPedalToRig(rig.id, pedal.id, xIn, yIn);
     setLibraryOpen(false);
-  };
-
-  const handleSeed = async (): Promise<void> => {
-    await seedSamples();
   };
 
   // Reset armed port when leaving chain mode.
@@ -704,7 +699,6 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           setEditReturnTo('library');
           setEditingPedal(pedal);
         }}
-        onSeed={handleSeed}
       />
 
       <SettingsSheet

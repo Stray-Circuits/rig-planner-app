@@ -1,14 +1,5 @@
-/**
- * Dev-only seed of 6 common pedals.
- *
- * Until the add-pedal wizard (phase 4) lands, this is how we get pedals into
- * the local library so we can exercise the canvas. Each pedal records its
- * placeholder color via `imagePath: "color:#RRGGBB"` — the canvas renderer
- * understands this prefix and draws a flat colored rectangle until a real
- * image is uploaded.
- */
-import type { CreatePedalInput } from './pedalsRepo';
-import { createPedal, listPedals } from './pedalsRepo';
+import type { CreatePedalInput } from '../../src/data/pedalsRepo';
+import { createPedal, listPedals } from '../../src/data/pedalsRepo';
 
 interface SeedSpec {
   id: string;
@@ -17,9 +8,7 @@ interface SeedSpec {
   widthIn: number;
   depthIn: number;
   color: string;
-  /** Stereo pedals get an output_l/output_r pair instead of a single output. */
   stereoOut?: boolean;
-  /** Adds MIDI in/out ports on the bottom edge. */
   midi?: boolean;
 }
 
@@ -81,7 +70,6 @@ const SEEDS: SeedSpec[] = [
 
 function specToInput(spec: SeedSpec): CreatePedalInput {
   const ports: CreatePedalInput['ports'] = [
-    // Mono input — top edge, rightmost (sideOrder=1 with the output at 0)
     {
       label: 'In',
       role: 'input',
@@ -169,8 +157,8 @@ function specToInput(spec: SeedSpec): CreatePedalInput {
 }
 
 /**
- * Adds any missing seed pedals to the local DB. Idempotent — pedals that
- * already exist (matched by id) are left alone.
+ * Test-only helper: populate the in-memory DB with 6 sample pedals.
+ * Idempotent — pedals already in the DB (matched by id) are skipped.
  */
 export async function seedSamplePedals(): Promise<{ added: number }> {
   const existing = await listPedals();
@@ -182,15 +170,4 @@ export async function seedSamplePedals(): Promise<{ added: number }> {
     added++;
   }
   return { added };
-}
-
-/**
- * Decode a pedal's imagePath. Returns a color string (for `color:#RRGGBB`
- * placeholders) or null if it's a real image URL / path (we'll wire image
- * loading in phase 4) or absent.
- */
-export function colorFromImagePath(imagePath: string | null): string | null {
-  if (!imagePath) return null;
-  if (imagePath.startsWith('color:')) return imagePath.slice('color:'.length);
-  return null;
 }

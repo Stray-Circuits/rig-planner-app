@@ -5,7 +5,6 @@ import {
   listPedals,
   pedalUsage as repoUsage,
 } from '../data/pedalsRepo';
-import { seedSamplePedals } from '../data/seedPedals';
 import { usePlacedPedalsStore } from './placedPedalsStore';
 import { useSignalChainStore } from './signalChainStore';
 
@@ -25,7 +24,6 @@ interface PedalsState {
   imagesReady: boolean;
 
   loadPedals: () => Promise<void>;
-  seedSamples: () => Promise<number>;
   /** Returns the rig ids that currently have a placed instance of this pedal. */
   usage: (pedalId: string) => Promise<string[]>;
   /** Cascades through placements + connections, then drops the pedal. */
@@ -77,17 +75,6 @@ export const usePedalsStore = create<PedalsState>((set, get) => ({
     } catch (err) {
       set({ status: 'error', error: errorMessage(err), imagesReady: true });
     }
-  },
-
-  seedSamples: async () => {
-    const { added } = await seedSamplePedals();
-    if (added > 0) {
-      const pedals = await listPedals();
-      set({ pedals, imagesReady: false });
-      await preloadPedalImages(pedals);
-      set({ imagesReady: true });
-    }
-    return added;
   },
 
   usage: async (pedalId) => {
