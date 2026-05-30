@@ -40,6 +40,7 @@ import {
   findPedalDimensionsByQuery,
   type ExtractedPedalMetadata,
 } from '../../lib/pedalMetadata';
+import { useBackHandler } from '../../lib/useBackHandler';
 import { Button, TextField, WizardShell } from '../../ui';
 import styles from './AddPedalWizard.module.css';
 
@@ -227,6 +228,14 @@ export function AddPedalWizard({
   const handleBack = () => {
     if (step > 0) setStep(step - 1);
   };
+
+  // Hardware/browser back walks the wizard backwards a step at a time,
+  // then closes on step 0 — matches the in-wizard Back button so the
+  // user's work doesn't vanish on a single Android-back tap.
+  useBackHandler(true, () => {
+    if (step > 0) setStep(step - 1);
+    else onCancel();
+  });
 
   const handleContinue = () => {
     if (!canAdvanceFromCurrent) return;

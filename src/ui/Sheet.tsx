@@ -5,6 +5,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import { useBackHandler } from '../lib/useBackHandler';
 import styles from './Sheet.module.css';
 
 interface SheetProps {
@@ -43,6 +44,13 @@ export function Sheet({
       }
     };
   }, [open]);
+
+  // Hardware/browser back closes the topmost open sheet first — matches
+  // the Escape key affordance and prevents Android back from exiting the
+  // app when a sheet is up.
+  useBackHandler(open, () => {
+    onClose();
+  });
 
   if (!open) return null;
 

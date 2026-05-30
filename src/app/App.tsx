@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { initDb } from '../data/db';
+import { useBackHandler } from '../lib/useBackHandler';
 import { useRigsStore } from '../stores/rigsStore';
 import { useUiStore } from '../stores/uiStore';
 import { NewRigWizard } from '../screens/new-rig/NewRigWizard';
@@ -57,6 +58,25 @@ export function App() {
       setRoute({ kind: 'rigs' });
     }
   }, [rigsStatus, rigs, lastRigId, route]);
+
+  // Hardware back navigates between top-level routes — rig → rigs list,
+  // new-rig (when rigs exist) → rigs list. Top-level back at the rigs
+  // list falls through to the OS so Tauri Android exits the app.
+  useBackHandler(
+    route !== null && (route.kind === 'rig' || route.kind === 'new-rig'),
+    () => {
+      if (!route) return false;
+      if (route.kind === 'rig') {
+        setRoute({ kind: 'rigs' });
+        return true;
+      }
+      if (route.kind === 'new-rig' && rigs.length > 0) {
+        setRoute({ kind: 'rigs' });
+        return true;
+      }
+      return false;
+    },
+  );
 
   if (boot.status === 'loading' || !route) {
     return (
