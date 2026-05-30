@@ -29,6 +29,8 @@ interface ChainOverlayProps {
   endpoints: ExternalEndpoint[];
   pxPerInch: number;
   armedPort: { placedId: string; portId: string } | null;
+  /** Currently-armed external endpoint chip, if any. Renders highlighted. */
+  armedEndpointId?: string | null;
   /** Set of "${placedId}:${portId}" keys to render as warnings. */
   unconnectedRequired: Set<string>;
   onEndpointTap?: (endpointId: string) => void;
@@ -292,6 +294,7 @@ export function ChainOverlay({
   endpoints,
   pxPerInch,
   armedPort,
+  armedEndpointId = null,
   unconnectedRequired,
   onEndpointTap,
 }: ChainOverlayProps) {
@@ -569,7 +572,8 @@ export function ChainOverlay({
        */}
       <div
         className={styles.endpointsRow}
-        style={{ top: -ENDPOINT_ROW_OFFSET, width: widthPx }}
+        style={{ width: widthPx }}
+        data-chip-strip
       >
         <div className={styles.endpointsCluster}>
           {endpoints
@@ -579,6 +583,7 @@ export function ChainOverlay({
                 key={ep.id}
                 ep={ep}
                 isSource={false}
+                isArmed={armedEndpointId === ep.id}
                 onTap={onEndpointTap}
                 registerTipRef={(el) => {
                   if (el) tipRefs.current.set(ep.id, el);
@@ -595,6 +600,7 @@ export function ChainOverlay({
                 key={ep.id}
                 ep={ep}
                 isSource={true}
+                isArmed={armedEndpointId === ep.id}
                 onTap={onEndpointTap}
                 registerTipRef={(el) => {
                   if (el) tipRefs.current.set(ep.id, el);
@@ -609,31 +615,46 @@ export function ChainOverlay({
 }
 
 /**
- * Pixel offset above the board where the endpoint chip row hovers. The fit
- * calculation in CanvasArea reserves matching vertical space so the row
- * stays visible at the default zoom.
- */
-const ENDPOINT_ROW_OFFSET = 44;
-
-/**
  * First-render fallback for the cable terminus when a chip hasn't been
- * measured yet. Approximates the tip's center as roughly the chip's
- * bottom edge: strip top (`-ENDPOINT_ROW_OFFSET`) + body (~22px) +
- * barrel (~10px) − half tip (~3px). Real placement is taken from the
- * tip's measured bbox once layout settles.
+ * measured yet. The strip is CSS-positioned at `bottom: 100%` with an
+ * ~8px margin, so the chip tip sits roughly 8px above the board top.
+ * Real placement is taken from the tip's measured bbox once layout
+ * settles.
  */
-const ENDPOINT_TIP_FALLBACK_PX = ENDPOINT_ROW_OFFSET - 29;
+const ENDPOINT_TIP_FALLBACK_PX = 8;
 
 interface EndpointChipProps {
   ep: ExternalEndpoint;
   isSource: boolean;
+  /** True while this chip is the armed source waiting for completion. */
+  isArmed: boolean;
   onTap: ((id: string) => void) | undefined;
   registerTipRef: (el: HTMLElement | null) => void;
 }
 
+/**
+ * Inline SVG path for the chip silhouette: a Dunlop Flow style pick —
+ * three slightly convex arcs (top, lower-right, lower-left) meeting at
+ * three rounded corners. The bottom corner is the cable's plug point.
+ * Authored against a 120×130 viewBox (taller than wide) so the chip
+ * reads as a real pick. `preserveAspectRatio="none"` lets the body
+ * stretch; the body is sized close to the authored aspect, keeping
+ * distortion mild.
+ */
+const PICK_PATH =
+  'M 25 15 ' +
+  'C 50 5 70 5 95 15 ' + // top arc (bulges up)
+  'C 110 22 118 32 118 45 ' + // top-right rounded corner
+  'C 118 75 100 108 70 124 ' + // lower-right arc (bulges right)
+  'C 65 132 55 132 50 124 ' + // bottom rounded point (lowest y = 130)
+  'C 20 108 2 75 2 45 ' + // lower-left arc (bulges left)
+  'C 2 32 10 22 25 15 ' + // top-left rounded corner
+  'Z';
+
 function EndpointChip({
   ep,
   isSource,
+  isArmed,
   onTap,
   registerTipRef,
 }: EndpointChipProps) {
@@ -643,7 +664,7 @@ function EndpointChip({
       type="button"
       className={`${styles.endpointChip} ${
         isSource ? styles.endpointSource : styles.endpointSink
-      }`}
+      } ${isArmed ? styles.endpointChipArmed : ''}`}
       onClick={(e) => {
         e.stopPropagation();
         onTap?.(ep.id);
@@ -651,11 +672,20 @@ function EndpointChip({
       title={label}
     >
       <span className={styles.endpointBody}>
+        <svg
+          className={styles.endpointShape}
+          viewBox="0 0 120 130"
+          preserveAspectRatio="none"
+          aria-hidden
+        >
+          <path d={PICK_PATH} />
+        </svg>
         <span className={styles.endpointLabel}>{label}</span>
       </span>
-      <span className={styles.endpointBarrel} aria-hidden>
-        <span ref={registerTipRef} className={styles.endpointTip} />
-      </span>
+      {/* Tip lives outside the body so the body's silhouette doesn't
+       * crop it. Positioned absolutely at the button's bottom-center,
+       * which coincides with the pentagon's point. */}
+      <span ref={registerTipRef} className={styles.endpointTip} aria-hidden />
     </button>
   );
 }

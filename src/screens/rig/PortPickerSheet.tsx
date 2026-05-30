@@ -1,4 +1,9 @@
-import type { Pedal, PlacedPedal, Port } from '../../data/schema';
+import type {
+  ExternalEndpoint,
+  Pedal,
+  PlacedPedal,
+  Port,
+} from '../../data/schema';
 import {
   connectionCompatibility,
   maxCablesForConnector,
@@ -9,21 +14,27 @@ import { colorForPort } from '../../lib/signalColors';
 import { Sheet } from '../../ui';
 import styles from './PortPickerSheet.module.css';
 
+/**
+ * Source side of a chain-mode connection in progress. Either a previously
+ * armed pedal port, or an armed external endpoint chip. When set, the
+ * picker is in "complete the connection" mode: rows filter to ports whose
+ * direction + signal family can validly receive from this source.
+ */
+export type ArmedSource =
+  | { kind: 'port'; placedId: string; pedal: Pedal; port: Port }
+  | {
+      kind: 'endpoint';
+      endpoint: ExternalEndpoint;
+      /** True for guitar / amp FX send (signal originates here). */
+      isSource: boolean;
+    };
+
 interface PortPickerSheetProps {
   open: boolean;
   /** Pedal whose ports the user is picking from. */
   placed: PlacedPedal | null;
   pedal: Pedal | null;
-  /**
-   * The port previously armed elsewhere (on a different pedal). When
-   * set, the picker is in "to" mode: rows are filtered to ports whose
-   * direction and signal family can validly complete the connection.
-   */
-  armedFromPort: {
-    placedId: string;
-    pedal: Pedal;
-    port: Port;
-  } | null;
+  armedSource: ArmedSource | null;
   /**
    * Number of existing cables touching each "${placedId}:${portId}".
    * Drives the per-row "connected" hint and the disconnect-count display
@@ -50,7 +61,7 @@ export function PortPickerSheet({
   open,
   placed,
   pedal,
-  armedFromPort,
+  armedSource,
   cableCountByPort,
   onClose,
   onPickPort,
@@ -58,20 +69,41 @@ export function PortPickerSheet({
 }: PortPickerSheetProps) {
   if (!pedal || !placed) return null;
 
-  const isCompletingConnection =
-    armedFromPort !== null && armedFromPort.placedId !== placed.id;
-  const isSelfPedal = armedFromPort?.placedId === placed.id;
+  const isSelfPedal =
+    armedSource?.kind === 'port' && armedSource.placedId === placed.id;
+  const isCompletingConnection = armedSource !== null && !isSelfPedal;
 
-  const armedIsOutput = armedFromPort
-    ? isOutputRole(armedFromPort.port.role)
-    : null;
+  // For port sources, "is the source an output?" comes from the port
+  // role. For endpoint sources, signal-originating endpoints (guitar /
+  // FX send) act as outputs; sink endpoints (amp in / FX return) act
+  // as inputs. The picker then filters this pedal's ports to the
+  // opposite direction.
+  const armedIsOutput: boolean | null =
+    armedSource?.kind === 'port'
+      ? isOutputRole(armedSource.port.role)
+      : armedSource?.kind === 'endpoint'
+        ? armedSource.isSource
+        : null;
+  // Signal type of the source side, used for the per-row compat check.
+  // External endpoints route audio, so 'instrument' stands in.
+  const armedSignalType =
+    armedSource?.kind === 'port'
+      ? armedSource.port.signalType
+      : armedSource?.kind === 'endpoint'
+        ? 'instrument'
+        : null;
+  const armedSourceLabel =
+    armedSource?.kind === 'port'
+      ? `${armedSource.pedal.name} · ${armedSource.port.label}`
+      : armedSource?.kind === 'endpoint'
+        ? `${armedSource.isSource ? 'From' : 'To'} ${armedSource.endpoint.label}`
+        : '';
 
-  const subtitle =
-    isCompletingConnection && armedFromPort
-      ? `Connect to ${pedal.name} from ${armedFromPort.pedal.name} · ${armedFromPort.port.label}`
-      : isSelfPedal
-        ? 'You started here — pick this port again to cancel'
-        : 'Pick a port to start a connection';
+  const subtitle = isCompletingConnection
+    ? `Connect to ${pedal.name} from ${armedSourceLabel}`
+    : isSelfPedal
+      ? 'You started here — pick this port again to cancel'
+      : 'Pick a port to start a connection';
 
   return (
     <Sheet open={open} onClose={onClose} title={`${pedal.brand} ${pedal.name}`}>
@@ -93,13 +125,13 @@ export function PortPickerSheet({
             const isDisconnectAction =
               !isCompletingConnection && cableCount >= portMax;
             let disabledReason: string | null = null;
-            if (isCompletingConnection && armedFromPort) {
+            if (isCompletingConnection && armedSource && armedSignalType) {
               const compat = connectionCompatibility(
-                armedFromPort.port.signalType,
+                armedSignalType,
                 port.signalType,
               );
               if (!compat.ok) {
-                disabledReason = `incompatible with ${armedFromPort.port.label}`;
+                disabledReason = `incompatible with ${armedSourceLabel}`;
               } else if (armedIsOutput !== null) {
                 const portIsOutput = isOutputRole(port.role);
                 if (portIsOutput === armedIsOutput) {
