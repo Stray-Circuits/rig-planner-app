@@ -137,14 +137,15 @@ describe('AddPedalWizard', () => {
 
     fireEvent.click(screen.getByText('Dual mono stereo'));
     fireEvent.click(screen.getByText('+ MIDI'));
-    expect(screen.getByText(/Ports \(5\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Ports \(6\)/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Add to library'));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     const created = (await listPedals())[0]!;
     expect(created.ports.map((p) => p.role).sort()).toEqual([
-      'input',
+      'input_l',
+      'input_r',
       'midi_in',
       'midi_out',
       'output_l',

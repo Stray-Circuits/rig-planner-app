@@ -1635,14 +1635,26 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
     label: 'Dual mono stereo',
     replaces: true,
     build: () => [
+      // True dual-mono: separate L+R input and L+R output jacks. Right
+      // channels are optional so the pedal still validates when used
+      // mono-only (left channel as the primary path).
       mkPort({
-        label: 'In',
-        role: 'input',
+        label: 'In L',
+        role: 'input_l',
         signalType: 'instrument',
         connector: 'ts',
         side: 'top',
         sideOrder: 2,
         optional: false,
+      }),
+      mkPort({
+        label: 'In R',
+        role: 'input_r',
+        signalType: 'instrument',
+        connector: 'ts',
+        side: 'top',
+        sideOrder: 3,
+        optional: true,
       }),
       mkPort({
         label: 'Out L',
@@ -1719,16 +1731,16 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
     label: '+ MIDI',
     replaces: false,
     build: () => [
-      // Top edge with sideOrders bumped past the default In/Out so a
-      // user composing "Mono in/out + MIDI" gets Out, In, MIDI Out, MIDI
-      // In reading left-to-right along the top.
+      // Top edge with sideOrders well past the widest audio preset
+      // (dual-mono uses 0-3) so MIDI sits to the right of audio when
+      // composing "Dual mono stereo + MIDI".
       mkPort({
         label: 'MIDI In',
         role: 'midi_in',
         signalType: 'midi',
         connector: 'midi_trs',
         side: 'top',
-        sideOrder: 3,
+        sideOrder: 5,
         optional: true,
       }),
       mkPort({
@@ -1737,7 +1749,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         signalType: 'midi',
         connector: 'midi_trs',
         side: 'top',
-        sideOrder: 2,
+        sideOrder: 4,
         optional: true,
       }),
     ],
