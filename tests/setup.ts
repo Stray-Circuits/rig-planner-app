@@ -10,8 +10,15 @@ if (typeof HTMLCanvasElement !== 'undefined') {
 }
 
 // jsdom also lacks ResizeObserver, which the canvas-area uses for fit-to-view.
+// Declare the constructor explicitly so the fake matches the real DOM API
+// signature (callback in, observer out). CodeQL otherwise infers a 0-arg
+// default constructor from this class and flags every production
+// `new ResizeObserver(cb)` call site as a superfluous-argument issue.
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class FakeResizeObserver {
+    constructor(_callback: ResizeObserverCallback) {
+      /* fake never fires; callback is intentionally unused */
+    }
     observe(): void {
       /* no-op */
     }

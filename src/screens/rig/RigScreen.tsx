@@ -32,7 +32,11 @@ import { useSignalChainStore } from '../../stores/signalChainStore';
 import { Sheet, SheetItem } from '../../ui';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from './PedalLibrarySheet';
-import { PortPickerSheet } from './PortPickerSheet';
+import { PortPickerSheet, type ArmedSource } from './PortPickerSheet';
+import {
+  EndpointActionsSheet,
+  type EndpointCable,
+} from './EndpointActionsSheet';
 import { SettingsSheet } from './SettingsSheet';
 import styles from './RigScreen.module.css';
 
@@ -41,6 +45,15 @@ import styles from './RigScreen.module.css';
 const EMPTY_PLACED: PlacedPedal[] = [];
 const EMPTY_CONNECTIONS: Connection[] = [];
 const EMPTY_ENDPOINTS: ExternalEndpoint[] = [];
+
+/**
+ * Chain-mode "armed" source — the first thing the user tapped, waiting
+ * for a second tap to complete a connection. Can be either a pedal port
+ * or an external endpoint chip; both are valid starting points.
+ */
+type Armed =
+  | { kind: 'port'; placedId: string; portId: string }
+  | { kind: 'endpoint'; endpointId: string };
 
 interface RigScreenProps {
   rig: Rig;
@@ -91,6 +104,10 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   // Pedal whose port picker is currently open in chain mode.
   const [pickerFor, setPickerFor] = useState<string | null>(null);
+  // Endpoint chip whose actions sheet (disconnect + arm) is open.
+  const [endpointActionsFor, setEndpointActionsFor] = useState<string | null>(
+    null,
+  );
   // Short-lived non-blocking message shown above the canvas (e.g. when we
   // refuse a rotation that wouldn't fit). Auto-dismisses after a few seconds.
   const [notice, setNotice] = useState<string | null>(null);
@@ -104,10 +121,16 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const [editingPedal, setEditingPedal] = useState<Pedal | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chainMode, setChainMode] = useState(false);
-  const [armedPort, setArmedPort] = useState<{
-    placedId: string;
-    portId: string;
-  } | null>(null);
+  const [armed, setArmed] = useState<Armed | null>(null);
+  // Legacy aliases — `armedPort` is the pedal-port view, used by the
+  // picker subtitle, port-dot highlight, and the older arm/unarm
+  // callsites. `setArmedPort` is the same shape so existing setters
+  // don't have to know about the endpoint variant.
+  const armedPort = armed?.kind === 'port' ? armed : null;
+  const armedEndpointId = armed?.kind === 'endpoint' ? armed.endpointId : null;
+  const setArmedPort = (next: { placedId: string; portId: string } | null) => {
+    setArmed(next === null ? null : { kind: 'port', ...next });
+  };
 
   useEffect(() => {
     if (pedalsStatus === 'idle') void loadPedals();
@@ -253,31 +276,35 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   };
 
   const handlePortTap = (placedId: string, portId: string) => {
-    if (!armedPort) {
+    if (!armed) {
       setArmedPort({ placedId, portId });
       return;
     }
-    if (armedPort.placedId === placedId && armedPort.portId === portId) {
+    if (armed.kind === 'endpoint') {
+      // Endpoint was armed first; complete the connection through this
+      // pedal port. Direction + compatibility are validated inside the
+      // helper, which sets a notice on failure.
+      const ok = tryConnectEndpointToPort(armed.endpointId, placedId, portId);
+      setArmed(null);
+      void ok;
+      return;
+    }
+    if (armed.placedId === placedId && armed.portId === portId) {
       setArmedPort(null);
       return;
     }
-    const ok = tryConnectPorts(
-      armedPort.placedId,
-      armedPort.portId,
-      placedId,
-      portId,
-    );
+    const ok = tryConnectPorts(armed.placedId, armed.portId, placedId, portId);
     if (!ok) {
       setArmedPort(null);
       return;
     }
-    if (sourcePortFullAfterAdd(armedPort.placedId, armedPort.portId)) {
+    if (sourcePortFullAfterAdd(armed.placedId, armed.portId)) {
       setArmedPort(null);
     }
   };
 
   const handleCanvasBackgroundClick = () => {
-    if (chainMode && armedPort) setArmedPort(null);
+    if (chainMode && armed) setArmed(null);
   };
 
   const handleDisconnectPort = (placedId: string, portId: string) => {
@@ -295,64 +322,111 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     for (const t of targets) void removeConnection(rig.id, t.id);
   };
 
-  const handleEndpointTap = (endpointId: string) => {
-    if (!armedPort) return;
+  /**
+   * Validate and persist a connection between an external endpoint and
+   * a pedal port. Shared by the two entry points: tap pedal-port then
+   * endpoint chip, and tap endpoint chip then pedal-port. Returns true
+   * on success so callers can decide whether to clear / preserve arm
+   * state for chained operations.
+   */
+  const tryConnectEndpointToPort = (
+    endpointId: string,
+    placedId: string,
+    portId: string,
+  ): boolean => {
     const ep = endpoints.find((e) => e.id === endpointId);
-    if (!ep) return;
-    const armed = placed.find((p) => p.id === armedPort.placedId);
-    const armedPortDef = armed
-      ? pedalsById
-          .get(armed.pedalId)
-          ?.ports.find((p) => p.id === armedPort.portId)
+    if (!ep) return false;
+    const owner = placed.find((p) => p.id === placedId);
+    const portDef = owner
+      ? pedalsById.get(owner.pedalId)?.ports.find((p) => p.id === portId)
       : null;
-    if (!armedPortDef) {
-      setArmedPort(null);
-      return;
-    }
-    // External endpoints (guitar / amp jacks) are all audio. A MIDI/control
-    // pedal port routing to one is meaningless — block + warn. 'custom'
-    // endpoints have no declared family so we let them through.
+    if (!portDef) return false;
+    // External endpoints (guitar / amp jacks) are all audio. A
+    // MIDI/control pedal port routing to one is meaningless — block +
+    // warn. 'custom' endpoints have no declared family so they pass.
     if (ep.kind !== 'custom') {
-      const compat = connectionCompatibility(
-        armedPortDef.signalType,
-        'instrument',
-      );
+      const compat = connectionCompatibility(portDef.signalType, 'instrument');
       if (!compat.ok) {
         setNotice(compat.reason);
-        setArmedPort(null);
-        return;
+        return false;
       }
     }
-    // External endpoints have no cable cap, but the armed source port
-    // still does. Same gate that tryConnectPorts uses pedal-to-pedal.
-    const armedFull = portFullReason(
-      armedPortDef,
-      armedPort.placedId,
-      armedPort.portId,
+    const portFull = portFullReason(portDef, placedId, portId);
+    if (portFull) {
+      setNotice(portFull);
+      return false;
+    }
+    const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
+    // Reject backwards cables (two sources, or two sinks). The picker
+    // sheet already disables the matching rows for the endpoint-first
+    // flow, but tapping a chip directly while a port is armed skips
+    // that filter — we have to enforce direction here too.
+    const portIsOutput = isOutputRole(portDef.role);
+    if (portIsOutput === endpointIsSource) {
+      setNotice(
+        endpointIsSource
+          ? `${portDef.label} is an output — pick an input to connect from ${ep.label}`
+          : `${portDef.label} is an input — pick an output to connect to ${ep.label}`,
+      );
+      return false;
+    }
+    void addConnection({
+      rigId: rig.id,
+      fromNodeKind: endpointIsSource ? 'external' : 'pedal',
+      fromNodeId: endpointIsSource ? ep.id : placedId,
+      fromPortId: endpointIsSource ? null : portId,
+      toNodeKind: endpointIsSource ? 'pedal' : 'external',
+      toNodeId: endpointIsSource ? placedId : ep.id,
+      toPortId: endpointIsSource ? portId : null,
+    });
+    return true;
+  };
+
+  const handleEndpointTap = (endpointId: string) => {
+    // First tap with nothing armed:
+    //   - If this endpoint already has 1+ cables, open the actions sheet
+    //     so the user can disconnect them — same affordance as tapping a
+    //     pedal opens its port picker, which shows disconnect rows for
+    //     saturated ports. The sheet also exposes a "start a new
+    //     connection" action that arms the endpoint.
+    //   - If it has no cables yet, arm it immediately. (No useful actions
+    //     to surface in the sheet otherwise.)
+    if (!armed) {
+      const connectedCount = connections.filter(
+        (c) =>
+          (c.fromNodeKind === 'external' && c.fromNodeId === endpointId) ||
+          (c.toNodeKind === 'external' && c.toNodeId === endpointId),
+      ).length;
+      if (connectedCount > 0) {
+        setEndpointActionsFor(endpointId);
+      } else {
+        setArmed({ kind: 'endpoint', endpointId });
+      }
+      return;
+    }
+    // Tap the already-armed endpoint again to cancel.
+    if (armed.kind === 'endpoint' && armed.endpointId === endpointId) {
+      setArmed(null);
+      return;
+    }
+    // Tap a different endpoint while one is armed → switch arm.
+    // Endpoint-to-endpoint connections aren't a thing in this app.
+    if (armed.kind === 'endpoint') {
+      setArmed({ kind: 'endpoint', endpointId });
+      return;
+    }
+    // Pedal-port armed first → complete via the shared helper. Preserve
+    // arm state when the source port still has capacity (TRS splitter).
+    const ok = tryConnectEndpointToPort(
+      endpointId,
+      armed.placedId,
+      armed.portId,
     );
-    if (armedFull) {
-      setNotice(armedFull);
+    if (!ok) {
       setArmedPort(null);
       return;
     }
-    const armedIsOutput = isOutputRole(armedPortDef.role);
-    const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
-    // Endpoint is "from" if it's a source; otherwise the pedal port is the source.
-    const fromIsEndpoint = endpointIsSource;
-    void addConnection({
-      rigId: rig.id,
-      fromNodeKind: fromIsEndpoint ? 'external' : 'pedal',
-      fromNodeId: fromIsEndpoint ? ep.id : armedPort.placedId,
-      fromPortId: fromIsEndpoint ? null : armedPort.portId,
-      toNodeKind: fromIsEndpoint ? 'pedal' : 'external',
-      toNodeId: fromIsEndpoint ? armedPort.placedId : ep.id,
-      toPortId: fromIsEndpoint ? armedPort.portId : null,
-    });
-    // Avoid the "unused" warning when armedIsOutput is later relevant. The
-    // direction is currently determined by endpoint kind alone, so we
-    // intentionally ignore the port role here.
-    void armedIsOutput;
-    if (sourcePortFullAfterAdd(armedPort.placedId, armedPort.portId)) {
+    if (sourcePortFullAfterAdd(armed.placedId, armed.portId)) {
       setArmedPort(null);
     }
   };
@@ -428,6 +502,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         connections={connections}
         endpoints={endpoints}
         armedPort={armedPort}
+        armedEndpointId={armedEndpointId}
         unconnectedRequired={unconnectedRequired}
         onPedalTap={setPickerFor}
         onEndpointTap={handleEndpointTap}
@@ -514,22 +589,28 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         const pedalForPicker = placedForPicker
           ? (pedalsById.get(placedForPicker.pedalId) ?? null)
           : null;
-        const armedDetail = (() => {
-          if (!armedPort) return null;
-          const ow = placed.find((p) => p.id === armedPort.placedId);
-          if (!ow) return null;
-          const def = pedalsById.get(ow.pedalId);
-          if (!def) return null;
-          const port = def.ports.find((p) => p.id === armedPort.portId);
-          if (!port) return null;
-          return { placedId: ow.id, pedal: def, port };
+        const armedSource: ArmedSource | null = (() => {
+          if (!armed) return null;
+          if (armed.kind === 'port') {
+            const ow = placed.find((p) => p.id === armed.placedId);
+            if (!ow) return null;
+            const def = pedalsById.get(ow.pedalId);
+            if (!def) return null;
+            const port = def.ports.find((p) => p.id === armed.portId);
+            if (!port) return null;
+            return { kind: 'port', placedId: ow.id, pedal: def, port };
+          }
+          const ep = endpoints.find((e) => e.id === armed.endpointId);
+          if (!ep) return null;
+          const isSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
+          return { kind: 'endpoint', endpoint: ep, isSource };
         })();
         return (
           <PortPickerSheet
             open={pickerFor !== null}
             placed={placedForPicker}
             pedal={pedalForPicker}
-            armedFromPort={armedDetail}
+            armedSource={armedSource}
             cableCountByPort={cableCountByPort}
             onClose={() => setPickerFor(null)}
             onPickPort={(placedId, portId) => {
@@ -539,6 +620,56 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             onDisconnectPort={(placedId, portId) => {
               handleDisconnectPort(placedId, portId);
               setPickerFor(null);
+            }}
+          />
+        );
+      })()}
+
+      {(() => {
+        const ep = endpointActionsFor
+          ? (endpoints.find((e) => e.id === endpointActionsFor) ?? null)
+          : null;
+        const cables: EndpointCable[] = ep
+          ? connections.flatMap((c) => {
+              const epIsFrom =
+                c.fromNodeKind === 'external' && c.fromNodeId === ep.id;
+              const epIsTo =
+                c.toNodeKind === 'external' && c.toNodeId === ep.id;
+              if (!epIsFrom && !epIsTo) return [];
+              const placedId = epIsFrom ? c.toNodeId : c.fromNodeId;
+              const portId = epIsFrom ? c.toPortId : c.fromPortId;
+              if (!portId) return [];
+              const pl = placed.find((p) => p.id === placedId);
+              const def = pl ? pedalsById.get(pl.pedalId) : null;
+              const port = def?.ports.find((p) => p.id === portId);
+              if (!pl || !def || !port) return [];
+              return [
+                {
+                  connectionId: c.id,
+                  pedal: def,
+                  placed: pl,
+                  port,
+                },
+              ];
+            })
+          : [];
+        const isSource = ep
+          ? ep.kind === 'guitar' || ep.kind === 'amp_fx_send'
+          : false;
+        return (
+          <EndpointActionsSheet
+            open={ep !== null}
+            endpoint={ep}
+            isSource={isSource}
+            cables={cables}
+            onClose={() => setEndpointActionsFor(null)}
+            onArm={(endpointId) => {
+              setArmed({ kind: 'endpoint', endpointId });
+              setEndpointActionsFor(null);
+            }}
+            onDisconnect={(connectionId) => {
+              void removeConnection(rig.id, connectionId);
+              setEndpointActionsFor(null);
             }}
           />
         );
@@ -644,6 +775,7 @@ interface CanvasAreaProps {
   connections: Connection[];
   endpoints: ExternalEndpoint[];
   armedPort: { placedId: string; portId: string } | null;
+  armedEndpointId: string | null;
   unconnectedRequired: Set<string>;
   onPedalTap: (placedId: string) => void;
   onEndpointTap: (endpointId: string) => void;
@@ -664,6 +796,7 @@ function CanvasArea({
   connections,
   endpoints,
   armedPort,
+  armedEndpointId,
   unconnectedRequired,
   onPedalTap,
   onEndpointTap,
@@ -673,6 +806,7 @@ function CanvasArea({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<BoardCanvasHandle | null>(null);
   const [pxPerInch, setPxPerInch] = useState(18);
+  const [chipStripHeight, setChipStripHeight] = useState(0);
   const { viewport, pointerHandlers, attachWheel, reset, setScale } =
     useViewport({
       onPinchStart: () => boardRef.current?.cancelActiveDrag(),
@@ -684,12 +818,15 @@ function CanvasArea({
     const fit = () => {
       // Reserve enough space on each side that the board's edges always
       // clear the corner FABs at the default centered/unzoomed view —
-      // i.e. the board "dodges" the floating buttons. Flex centering then
-      // distributes the reserve symmetrically. Bottom FABs are the tallest
-      // (Add/Chain at 64px + 24px inset ≈ 88px), so mirror that vertically.
-      // Side reserves stay small — corner FABs already clear horizontally
-      // via the vertical reserve.
-      const vertReserve = 92;
+      // i.e. the board "dodges" the floating buttons. Bottom FABs are
+      // 88px tall, so 92 covers them with a bit of breathing room. When
+      // chain mode is on, the chip strip sits above the board and may
+      // wrap to multiple rows; use the larger of (FAB reserve, measured
+      // strip height + clearance) so chips always fit above the board
+      // without overlapping it.
+      const fabReserve = 92;
+      const chipReserve = chipStripHeight > 0 ? chipStripHeight + 12 : 0;
+      const vertReserve = Math.max(fabReserve, chipReserve);
       const sideReserve = 14;
       const availW = el.clientWidth - sideReserve * 2;
       const availH = el.clientHeight - vertReserve * 2;
@@ -701,7 +838,41 @@ function CanvasArea({
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [rig.widthIn, rig.depthIn]);
+  }, [rig.widthIn, rig.depthIn, chipStripHeight]);
+
+  // Track the chain-mode chip strip's height so the canvas reserves
+  // enough room above the board to fit it (including any wrapped rows).
+  // The strip is rendered by ChainOverlay with a `data-chip-strip`
+  // attribute; we query for it inside the wrap and observe its size.
+  // Re-attaches when chainMode toggles or the wrap node changes.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || !chainMode) {
+      setChipStripHeight(0);
+      return;
+    }
+    const findStrip = () =>
+      wrap.querySelector<HTMLElement>('[data-chip-strip]');
+    const measure = () => {
+      const strip = findStrip();
+      setChipStripHeight(strip?.offsetHeight ?? 0);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    const strip = findStrip();
+    if (strip) ro.observe(strip);
+    // Watch the wrap for the strip mounting/unmounting as well.
+    const mo = new MutationObserver(() => {
+      measure();
+      const next = findStrip();
+      if (next) ro.observe(next);
+    });
+    mo.observe(wrap, { childList: true, subtree: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [chainMode]);
 
   const wrapRefCallback = useCallback(
     (el: HTMLDivElement | null) => {
@@ -754,6 +925,7 @@ function CanvasArea({
           connections={connections}
           endpoints={endpoints}
           armedPort={armedPort}
+          armedEndpointId={armedEndpointId}
           unconnectedRequired={unconnectedRequired}
           onPedalTap={onPedalTap}
           onEndpointTap={onEndpointTap}

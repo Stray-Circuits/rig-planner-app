@@ -57,12 +57,19 @@
   }
 }
 
+/* Anchored to the board's top edge (via `bottom: 100%`) with a small
+ * margin gap so chips visibly hover above the board. With
+ * `wrap-reverse` on the clusters, extra rows pile UP rather than DOWN,
+ * which guarantees chips never overlap the board itself when there are
+ * more endpoints than fit in a single row. */
 .endpointsRow {
   position: absolute;
+  bottom: 100%;
   left: 0;
+  margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
   pointer-events: none;
 }
@@ -70,52 +77,146 @@
 .endpointsCluster {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: wrap-reverse;
+  align-items: flex-end;
 }
 
+/*
+ * Endpoint chip is an upside-down pentagon: rectangular top with a
+ * triangular point at the bottom. The whole shape is solid-color
+ * (source = success, sink = primary) so it reads as a real touch target
+ * — not a label. The pentagon's bottom point is the cable terminus; a
+ * small tip dot sits there as the visible plug, and ChainOverlay
+ * measures its bbox to route cables exactly to its center.
+ *
+ * Sized for thumb taps on mobile: ~110×54px is well over the 44pt iOS
+ * minimum and scales to roughly a pedal's worth of board real estate at
+ * default zoom.
+ */
 .endpointChip {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-floating);
-  border: 0.5px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--fg);
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  background: transparent;
+  border: none;
   cursor: pointer;
   pointer-events: auto;
-  white-space: nowrap;
+  /* Reserve the tip's vertical bleed so adjacent chips don't crop or
+   * jostle when they wrap. */
+  margin-bottom: 4px;
 }
 
-.endpointChip:hover {
-  background: var(--surface);
+.endpointBody {
+  position: relative;
+  /* Width is capped so long labels WRAP onto multiple lines instead of
+   * stretching the chip silhouette. The pick SVG fills the body and
+   * stretches vertically as the body grows with extra lines, so the
+   * silhouette stays pick-shaped regardless of label length. */
+  min-width: 100px;
+  max-width: 130px;
+  padding: 42px 14px 52px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.2;
+  text-align: center;
+  /* `anywhere` lets us break inside very long single tokens (e.g. an
+   * amp name with no spaces) instead of overflowing the chip. */
+  overflow-wrap: anywhere;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
 }
 
-.endpointDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+/* Narrower viewports get a noticeably smaller chip — comparable to a
+ * standard-size pedal at typical mobile pxPerInch (~30) rather than
+ * dwarfing them. Still a 44pt+ touch target. */
+@media (max-width: 720px) {
+  .endpointBody {
+    min-width: 70px;
+    max-width: 100px;
+    padding: 28px 10px 32px;
+    font-size: 10px;
+  }
+  .endpointTip {
+    width: 8px;
+    height: 8px;
+    border-width: 1.5px;
+  }
 }
 
-.endpointSource .endpointDot {
-  background: var(--success);
+/* The pentagon silhouette is painted by the inline SVG; the body is
+ * just a positioning context that the label sits in. The SVG fills the
+ * body and stretches to its dimensions (`preserveAspectRatio="none"`),
+ * so the body's padding controls the chip's visible size. */
+.endpointShape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
-.endpointSink .endpointDot {
-  background: var(--primary);
+.endpointChip:hover .endpointBody {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5)) brightness(1.08);
 }
 
-.endpointSource {
-  color: var(--success-fg);
+/* Armed = this chip is the source the user just tapped, waiting for a
+ * pedal-port pick to complete the connection. Pulse + brighten so it
+ * reads as "this is the live end of the cable in progress." */
+.endpointChipArmed .endpointBody {
+  filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0.9))
+    drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+  animation: endpointChipArm 1.4s ease-in-out infinite;
+}
+.endpointChipArmed .endpointTip {
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.9),
+    0 0 0 5px var(--primary);
+  transform: translate(-50%, 50%) scale(1.15);
+}
+@keyframes endpointChipArm {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0.9))
+      drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.7))
+      drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5)) brightness(1.12);
+  }
 }
 
-.endpointSink {
-  color: var(--primary-fg);
+.endpointSource .endpointShape {
+  fill: var(--success);
+}
+
+.endpointSink .endpointShape {
+  fill: var(--primary);
 }
 
 .endpointLabel {
-  line-height: 1;
+  position: relative;
+  display: block;
+  line-height: 1.2;
+}
+
+/* Tip dot — the cable terminus. Lives outside the body so the body's
+ * clip-path doesn't crop it. Positioned at the button wrapper's
+ * bottom-center, which coincides with the pentagon point. Centered on
+ * that point so the visible dot reads as the jack on the pentagon's
+ * tip. White fill + colored border so it reads as a "receptacle" the
+ * cable plugs into, against any chip body color. */
+.endpointTip {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--cable-instrument);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }

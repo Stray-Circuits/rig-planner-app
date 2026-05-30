@@ -58,6 +58,8 @@ interface BoardCanvasProps {
   onEndpointTap?: (endpointId: string) => void;
   /** Currently-armed port (highlighted), if any. */
   armedPort?: { placedId: string; portId: string } | null;
+  /** Currently-armed external endpoint chip (highlighted), if any. */
+  armedEndpointId?: string | null;
   /** Set of "${placedId}:${portId}" keys to render as warnings. */
   unconnectedRequired?: Set<string>;
 }
@@ -116,6 +118,7 @@ function BoardCanvasInner(
     onPedalTap,
     onEndpointTap,
     armedPort = null,
+    armedEndpointId = null,
     unconnectedRequired,
   }: BoardCanvasProps,
   ref: ForwardedRef<BoardCanvasHandle>,
@@ -445,6 +448,7 @@ function BoardCanvasInner(
           endpoints={endpoints}
           pxPerInch={pxPerInch}
           armedPort={armedPort}
+          armedEndpointId={armedEndpointId}
           unconnectedRequired={warnings}
           {...(onEndpointTap ? { onEndpointTap } : {})}
         />

@@ -29,6 +29,8 @@ interface ChainOverlayProps {
   endpoints: ExternalEndpoint[];
   pxPerInch: number;
   armedPort: { placedId: string; portId: string } | null;
+  /** Currently-armed external endpoint chip, if any. Renders highlighted. */
+  armedEndpointId?: string | null;
   /** Set of "${placedId}:${portId}" keys to render as warnings. */
   unconnectedRequired: Set<string>;
   onEndpointTap?: (endpointId: string) => void;
@@ -292,18 +294,18 @@ export function ChainOverlay({
   endpoints,
   pxPerInch,
   armedPort,
+  armedEndpointId = null,
   unconnectedRequired,
   onEndpointTap,
 }: ChainOverlayProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  // Measured chip positions (board-px) — the chip strip uses flex so each
-  // chip takes its natural width; we read the rendered position after
-  // layout and use it as the cable termination point for that endpoint.
-  // Falls back to a per-cluster default on the first render (before the
-  // measurement effect fires).
-  const chipRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const [chipCenters, setChipCenters] = useState<
-    Map<string, { x: number; bottomY: number }>
+  // Measured tip positions (board-px) — each chip ends in a plug-tip dot;
+  // we read the rendered tip center after layout and use it as the cable
+  // termination point for that endpoint. Falls back to a per-cluster
+  // default on the first render (before the measurement effect fires).
+  const tipRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const [tipCenters, setTipCenters] = useState<
+    Map<string, { x: number; y: number }>
   >(new Map());
   // Build a {placedId -> {portId -> ResolvedPort}} map for fast lookups.
   const portIndex = new Map<string, Map<string, ResolvedPort>>();
@@ -345,31 +347,31 @@ export function ChainOverlay({
   useLayoutEffect(() => {
     const svgRect = svgRef.current?.getBoundingClientRect();
     if (!svgRect) return;
-    const next = new Map<string, { x: number; bottomY: number }>();
-    for (const [id, btn] of chipRefs.current) {
-      if (!btn.isConnected) continue;
-      const r = btn.getBoundingClientRect();
+    const next = new Map<string, { x: number; y: number }>();
+    for (const [id, tip] of tipRefs.current) {
+      if (!tip.isConnected) continue;
+      const r = tip.getBoundingClientRect();
       next.set(id, {
         x: r.left + r.width / 2 - svgRect.left,
-        bottomY: r.bottom - svgRect.top,
+        y: r.top + r.height / 2 - svgRect.top,
       });
     }
-    let changed = next.size !== chipCenters.size;
+    let changed = next.size !== tipCenters.size;
     if (!changed) {
       for (const [id, pos] of next) {
-        const prev = chipCenters.get(id);
+        const prev = tipCenters.get(id);
         if (
           !prev ||
           Math.abs(prev.x - pos.x) > 0.5 ||
-          Math.abs(prev.bottomY - pos.bottomY) > 0.5
+          Math.abs(prev.y - pos.y) > 0.5
         ) {
           changed = true;
           break;
         }
       }
     }
-    if (changed) setChipCenters(next);
-  }, [endpoints, pxPerInch, widthPx, heightPx, chipCenters]);
+    if (changed) setTipCenters(next);
+  }, [endpoints, pxPerInch, widthPx, heightPx, tipCenters]);
 
   // Pre-route every cable in render order so each successive cable can
   // see which Y/X lanes prior cables took, biasing the router toward
@@ -404,7 +406,7 @@ export function ChainOverlay({
         c.fromPortId,
         portIndex,
         endpointById,
-        chipCenters,
+        tipCenters,
         rig,
         pxPerInch,
       );
@@ -414,7 +416,7 @@ export function ChainOverlay({
         c.toPortId,
         portIndex,
         endpointById,
-        chipCenters,
+        tipCenters,
         rig,
         pxPerInch,
       );
@@ -503,23 +505,29 @@ export function ChainOverlay({
                 />
                 {/* End-caps: colored dots at each pedal port. Slightly
                   larger than the cable stroke so the connection visibly
-                  "plugs into" the pedal edge. */}
-                <circle
-                  cx={fromCx}
-                  cy={fromCy}
-                  r={4}
-                  fill={fromColor}
-                  stroke="rgba(255,255,255,0.9)"
-                  strokeWidth={1}
-                />
-                <circle
-                  cx={toCx}
-                  cy={toCy}
-                  r={4}
-                  fill={toColor}
-                  stroke="rgba(255,255,255,0.9)"
-                  strokeWidth={1}
-                />
+                  "plugs into" the pedal edge. External endpoints render
+                  their own jack-tip dot, so suppress the SVG cap there
+                  to avoid a doubled / misaligned terminus. */}
+                {c.fromNodeKind === 'pedal' ? (
+                  <circle
+                    cx={fromCx}
+                    cy={fromCy}
+                    r={4}
+                    fill={fromColor}
+                    stroke="rgba(255,255,255,0.9)"
+                    strokeWidth={1}
+                  />
+                ) : null}
+                {c.toNodeKind === 'pedal' ? (
+                  <circle
+                    cx={toCx}
+                    cy={toCy}
+                    r={4}
+                    fill={toColor}
+                    stroke="rgba(255,255,255,0.9)"
+                    strokeWidth={1}
+                  />
+                ) : null}
               </g>
             );
           },
@@ -564,7 +572,8 @@ export function ChainOverlay({
        */}
       <div
         className={styles.endpointsRow}
-        style={{ top: -ENDPOINT_ROW_OFFSET, width: widthPx }}
+        style={{ width: widthPx }}
+        data-chip-strip
       >
         <div className={styles.endpointsCluster}>
           {endpoints
@@ -574,10 +583,11 @@ export function ChainOverlay({
                 key={ep.id}
                 ep={ep}
                 isSource={false}
+                isArmed={armedEndpointId === ep.id}
                 onTap={onEndpointTap}
-                registerRef={(el) => {
-                  if (el) chipRefs.current.set(ep.id, el);
-                  else chipRefs.current.delete(ep.id);
+                registerTipRef={(el) => {
+                  if (el) tipRefs.current.set(ep.id, el);
+                  else tipRefs.current.delete(ep.id);
                 }}
               />
             ))}
@@ -590,10 +600,11 @@ export function ChainOverlay({
                 key={ep.id}
                 ep={ep}
                 isSource={true}
+                isArmed={armedEndpointId === ep.id}
                 onTap={onEndpointTap}
-                registerRef={(el) => {
-                  if (el) chipRefs.current.set(ep.id, el);
-                  else chipRefs.current.delete(ep.id);
+                registerTipRef={(el) => {
+                  if (el) tipRefs.current.set(ep.id, el);
+                  else tipRefs.current.delete(ep.id);
                 }}
               />
             ))}
@@ -604,46 +615,78 @@ export function ChainOverlay({
 }
 
 /**
- * Pixel offset above the board where the endpoint chip row hovers. The fit
- * calculation in CanvasArea reserves matching vertical space so the row
- * stays visible at the default zoom.
+ * First-render fallback for the cable terminus when a chip hasn't been
+ * measured yet. The strip is CSS-positioned at `bottom: 100%` with an
+ * ~8px margin, so the chip tip sits roughly 8px above the board top.
+ * Real placement is taken from the tip's measured bbox once layout
+ * settles.
  */
-const ENDPOINT_ROW_OFFSET = 36;
-
-/**
- * Approximate pixel offset above the board of the chip's BOTTOM edge —
- * = strip top (`-ENDPOINT_ROW_OFFSET`) + chip height (~22px from 11px
- * font + 6px*2 vertical padding + 0.5px border). Cables terminating at
- * an external endpoint anchor at this y so the end-cap sits flush with
- * the chip's underside, matching where a real jack would plug in. If
- * the chip CSS in ChainOverlay.module.css changes, retune this.
- */
-const ENDPOINT_CHIP_BOTTOM_PX = ENDPOINT_ROW_OFFSET - 23;
+const ENDPOINT_TIP_FALLBACK_PX = 8;
 
 interface EndpointChipProps {
   ep: ExternalEndpoint;
   isSource: boolean;
+  /** True while this chip is the armed source waiting for completion. */
+  isArmed: boolean;
   onTap: ((id: string) => void) | undefined;
-  registerRef: (el: HTMLButtonElement | null) => void;
+  registerTipRef: (el: HTMLElement | null) => void;
 }
 
-function EndpointChip({ ep, isSource, onTap, registerRef }: EndpointChipProps) {
+/**
+ * Inline SVG path for the chip silhouette: a Dunlop Flow style pick —
+ * three slightly convex arcs (top, lower-right, lower-left) meeting at
+ * three rounded corners. The bottom corner is the cable's plug point.
+ * Authored against a 120×130 viewBox (taller than wide) so the chip
+ * reads as a real pick. `preserveAspectRatio="none"` lets the body
+ * stretch; the body is sized close to the authored aspect, keeping
+ * distortion mild.
+ */
+const PICK_PATH =
+  'M 25 15 ' +
+  'C 50 5 70 5 95 15 ' + // top arc (bulges up)
+  'C 110 22 118 32 118 45 ' + // top-right rounded corner
+  'C 118 75 100 108 70 124 ' + // lower-right arc (bulges right)
+  'C 65 132 55 132 50 124 ' + // bottom rounded point (lowest y = 130)
+  'C 20 108 2 75 2 45 ' + // lower-left arc (bulges left)
+  'C 2 32 10 22 25 15 ' + // top-left rounded corner
+  'Z';
+
+function EndpointChip({
+  ep,
+  isSource,
+  isArmed,
+  onTap,
+  registerTipRef,
+}: EndpointChipProps) {
   const label = isSource ? `From ${ep.label}` : `To ${ep.label}`;
   return (
     <button
-      ref={registerRef}
       type="button"
       className={`${styles.endpointChip} ${
         isSource ? styles.endpointSource : styles.endpointSink
-      }`}
+      } ${isArmed ? styles.endpointChipArmed : ''}`}
+      aria-pressed={isArmed}
       onClick={(e) => {
         e.stopPropagation();
         onTap?.(ep.id);
       }}
       title={label}
     >
-      <span className={styles.endpointDot} aria-hidden />
-      <span className={styles.endpointLabel}>{label}</span>
+      <span className={styles.endpointBody}>
+        <svg
+          className={styles.endpointShape}
+          viewBox="0 0 120 130"
+          preserveAspectRatio="none"
+          aria-hidden
+        >
+          <path d={PICK_PATH} />
+        </svg>
+        <span className={styles.endpointLabel}>{label}</span>
+      </span>
+      {/* Tip lives outside the body so the body's silhouette doesn't
+       * crop it. Positioned absolutely at the button's bottom-center,
+       * which coincides with the pentagon's point. */}
+      <span ref={registerTipRef} className={styles.endpointTip} aria-hidden />
     </button>
   );
 }
@@ -663,7 +706,7 @@ function lookupConnectionEnd(
   portId: string | null,
   portIndex: Map<string, Map<string, ResolvedPort>>,
   endpointById: Map<string, ExternalEndpoint>,
-  chipCenters: Map<string, { x: number; bottomY: number }>,
+  tipCenters: Map<string, { x: number; y: number }>,
   rig: Rig,
   pxPerInch: number,
 ): ConnectionEnd | null {
@@ -679,25 +722,25 @@ function lookupConnectionEnd(
       port: resolved.port,
     };
   }
-  // External endpoint — anchor at the actual rendered chip. The chip
+  // External endpoint — anchor at the chip's plug-tip dot. The chip
   // strip is flex-laid-out, so chip widths depend on label text; we
-  // measure each chip's bbox after layout (chipCenters) and terminate
-  // the cable at its center-bottom. Without per-chip measurement,
-  // multiple chips in one cluster collapse to a single cable anchor.
+  // measure each tip's bbox after layout (tipCenters) and terminate the
+  // cable at its center. Without per-tip measurement, multiple chips in
+  // one cluster collapse to a single cable anchor.
   //
   // First-render fallback (before useLayoutEffect runs): anchor near
   // the cluster edge so a cable still draws.
   const ep = endpointById.get(nodeId);
   if (!ep) return null;
-  const measured = chipCenters.get(nodeId);
+  const measured = tipCenters.get(nodeId);
   if (measured) {
     return {
       xIn: measured.x / pxPerInch,
-      yIn: measured.bottomY / pxPerInch,
+      yIn: measured.y / pxPerInch,
       side: 'bottom',
     };
   }
-  const yIn = -ENDPOINT_CHIP_BOTTOM_PX / pxPerInch;
+  const yIn = -ENDPOINT_TIP_FALLBACK_PX / pxPerInch;
   const isLeftCluster = ep.kind === 'amp_in' || ep.kind === 'amp_fx_return';
   const xIn = isLeftCluster ? 0.75 : rig.widthIn - 0.75;
   return { xIn, yIn, side: 'bottom' };
