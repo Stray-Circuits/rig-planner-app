@@ -100,8 +100,12 @@ describe('computeUnconnectedRequiredPorts', () => {
     expect(roleGroup('fx_return')).toBe(0);
     expect(roleGroup('output')).toBe(1);
     expect(roleGroup('fx_send')).toBe(1);
-    expect(roleGroup('expression')).toBe(2);
-    expect(roleGroup('cv')).toBe(2);
+    expect(roleGroup('expression_in')).toBe(2);
+    expect(roleGroup('expression_out')).toBe(2);
+    expect(roleGroup('cv_in')).toBe(2);
+    expect(roleGroup('cv_out')).toBe(2);
+    expect(roleGroup('remote_in')).toBe(2);
+    expect(roleGroup('remote_out')).toBe(2);
     expect(roleGroup('midi_in')).toBe(3);
     expect(roleGroup('midi_out')).toBe(3);
   });

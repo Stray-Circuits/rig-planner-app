@@ -179,9 +179,12 @@ export function portLayoutGroup(role: Port['role']): number {
     case 'midi_in':
     case 'midi_out':
       return 3;
-    case 'expression':
-    case 'cv':
-    case 'remote':
+    case 'expression_in':
+    case 'expression_out':
+    case 'cv_in':
+    case 'cv_out':
+    case 'remote_in':
+    case 'remote_out':
       return 4;
   }
 }

@@ -6,6 +6,7 @@ import type {
 } from '../../data/schema';
 import {
   connectionCompatibility,
+  isOutputRole,
   maxCablesForConnector,
   type SignalFamily,
   signalFamily,
@@ -179,17 +180,6 @@ export function PortPickerSheet({
         )}
       </ul>
     </Sheet>
-  );
-}
-
-function isOutputRole(role: Port['role']): boolean {
-  return (
-    role === 'output' ||
-    role === 'output_l' ||
-    role === 'output_r' ||
-    role === 'stereo_output' ||
-    role === 'fx_send' ||
-    role === 'midi_out'
   );
 }
 

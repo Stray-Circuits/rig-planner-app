@@ -57,10 +57,25 @@ const VALID_ROLES: readonly PortRole[] = [
   'fx_return',
   'midi_in',
   'midi_out',
-  'expression',
-  'remote',
-  'cv',
+  'expression_in',
+  'expression_out',
+  'remote_in',
+  'remote_out',
+  'cv_in',
+  'cv_out',
 ];
+
+// Legacy direction-less control roles → input variants. Pedals saved
+// before the direction split (issue #46) used these undirected names;
+// the overwhelming majority of in-the-wild "expression / remote / cv"
+// jacks on pedals are inputs (you plug an expression pedal *into* a
+// delay's EXP jack), so mapping the legacy values to the *_in variant
+// matches user intent for almost all existing data.
+const LEGACY_ROLE_ALIASES: Record<string, PortRole> = {
+  expression: 'expression_in',
+  remote: 'remote_in',
+  cv: 'cv_in',
+};
 const VALID_SIGNAL: readonly SignalType[] = [
   'instrument',
   'line',
@@ -86,6 +101,8 @@ function assertSide(s: string): Side {
 }
 function assertRole(s: string): PortRole {
   if ((VALID_ROLES as readonly string[]).includes(s)) return s as PortRole;
+  const aliased = LEGACY_ROLE_ALIASES[s];
+  if (aliased) return aliased;
   throw new Error(`Unknown port role "${s}"`);
 }
 function assertSignal(s: string): SignalType {

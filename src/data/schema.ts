@@ -18,9 +18,12 @@ export type PortRole =
   | 'fx_return'
   | 'midi_in'
   | 'midi_out'
-  | 'expression'
-  | 'remote'
-  | 'cv';
+  | 'expression_in'
+  | 'expression_out'
+  | 'remote_in'
+  | 'remote_out'
+  | 'cv_in'
+  | 'cv_out';
 
 export type SignalType =
   | 'instrument'

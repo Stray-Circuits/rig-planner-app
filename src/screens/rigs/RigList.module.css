@@ -260,41 +260,36 @@
   color: var(--muted);
 }
 
-/* Footer link to the user's pedal collection. Lives below the rig grid
-   per "add new item lives in the visual flow, not in a header". */
-.collectionLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 20px;
-  padding: 12px 14px;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-  border-radius: var(--radius-md);
+/* Pedal collection lives in its own section below the rig grid — it's
+   not a rig but should match the rig-card tap target so it's not easy
+   to miss on mobile. */
+.collectionSection {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 0.5px solid var(--border);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
 }
 
-.collectionLink:hover {
-  color: var(--fg);
+@media (min-width: 540px) {
+  .collectionSection {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Variant thumbs for the non-rig action cards, so each card reads as
+   a distinct affordance without losing the shared layout. */
+.importThumb {
   background: var(--surface-alt);
+  color: var(--primary);
+  border: 1px dashed var(--border-strong);
 }
 
-.collectionLink i {
-  font-size: 18px;
-}
-
-.footerActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 12px;
-}
-
-.footerActions .collectionLink {
-  margin-top: 0;
+.collectionThumb {
+  background: var(--surface-alt);
+  color: var(--fg);
+  border: 0.5px solid var(--border-strong);
 }
 
 .importError {

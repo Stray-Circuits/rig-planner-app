@@ -141,24 +141,47 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
                 </div>
               </button>
             </li>
+            <li>
+              <button
+                type="button"
+                className={styles.newRigCard}
+                onClick={() => importInputRef.current?.click()}
+              >
+                <span
+                  className={`${styles.newRigThumb} ${styles.importThumb}`}
+                  aria-hidden
+                >
+                  <i className="ti ti-upload" />
+                </span>
+                <div className={styles.newRigMeta}>
+                  <div className={styles.newRigName}>Import rig</div>
+                  <div className={styles.newRigSub}>
+                    Load a .rig.json export
+                  </div>
+                </div>
+              </button>
+            </li>
           </ul>
         )}
         {status === 'ready' ? (
-          <div className={styles.footerActions}>
+          <section className={styles.collectionSection}>
             <button
               type="button"
-              className={styles.collectionLink}
+              className={styles.newRigCard}
               onClick={() => setLibraryOpen(true)}
             >
-              <i className="ti ti-list-details" aria-hidden /> Your pedal
-              collection ({pedals.length})
-            </button>
-            <button
-              type="button"
-              className={styles.collectionLink}
-              onClick={() => importInputRef.current?.click()}
-            >
-              <i className="ti ti-upload" aria-hidden /> Import rig
+              <span
+                className={`${styles.newRigThumb} ${styles.collectionThumb}`}
+                aria-hidden
+              >
+                <i className="ti ti-list-details" />
+              </span>
+              <div className={styles.newRigMeta}>
+                <div className={styles.newRigName}>Your pedal collection</div>
+                <div className={styles.newRigSub}>
+                  {pedals.length} pedal{pedals.length === 1 ? '' : 's'}
+                </div>
+              </div>
             </button>
             <input
               ref={importInputRef}
@@ -172,7 +195,7 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
                 if (file) handleImportFilePicked(file);
               }}
             />
-          </div>
+          </section>
         ) : null}
         {importError ? (
           <p className={styles.importError} role="alert">

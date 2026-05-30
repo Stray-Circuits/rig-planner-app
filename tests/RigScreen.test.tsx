@@ -180,7 +180,6 @@ describe('RigScreen', () => {
     });
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Continue'));
-    fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Add to library'));
 
     await waitFor(() => {

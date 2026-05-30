@@ -74,15 +74,14 @@ interface WizardDraft {
   name: string;
   widthIn: string;
   depthIn: string;
-  jackSides: JackSides;
   powerSide: Side | null;
   ports: DraftPort[];
 }
 
 const DEFAULT_COLOR = '#666666';
 
-const DEFAULT_JACKS: JackSides = {
-  top: true,
+const EMPTY_JACKS: JackSides = {
+  top: false,
   bottom: false,
   left: false,
   right: false,
@@ -92,14 +91,17 @@ const DEFAULT_JACKS: JackSides = {
   midi_right: false,
 };
 
+// Right-to-left signal flow is the app's convention: input on the right,
+// output on the left. New presets and freshly-added ports follow that
+// default; the user can move ports later via the inline editor.
 const DEFAULT_PORTS: DraftPort[] = [
   {
     label: 'In',
     role: 'input' satisfies PortRole,
     signalType: 'instrument' satisfies SignalType,
     connector: 'ts' satisfies Connector,
-    side: 'top',
-    sideOrder: 1,
+    side: 'right',
+    sideOrder: 0,
     optional: false,
   },
   {
@@ -107,13 +109,13 @@ const DEFAULT_PORTS: DraftPort[] = [
     role: 'output' satisfies PortRole,
     signalType: 'instrument' satisfies SignalType,
     connector: 'ts' satisfies Connector,
-    side: 'top',
+    side: 'left',
     sideOrder: 0,
     optional: false,
   },
 ];
 
-const STEPS = ['Image', 'Name & size', 'Jacks', 'Connections', 'Review'];
+const STEPS = ['Image', 'Name & size', 'Connections', 'Review'];
 
 function initialDraft(): WizardDraft {
   return {
@@ -125,7 +127,6 @@ function initialDraft(): WizardDraft {
     name: '',
     widthIn: '',
     depthIn: '',
-    jackSides: { ...DEFAULT_JACKS },
     powerSide: 'top',
     ports: DEFAULT_PORTS.map((p) => ({ ...p })),
   };
@@ -153,7 +154,6 @@ function draftFromPedal(pedal: Pedal): WizardDraft {
     name: pedal.name,
     widthIn: String(pedal.widthIn),
     depthIn: String(pedal.depthIn),
-    jackSides: { ...pedal.jackSides },
     powerSide: pedal.powerSide,
     ports: pedal.ports.map(({ id: _id, pedalId: _pedalId, ...rest }) => rest),
   };
@@ -270,7 +270,10 @@ export function AddPedalWizard({
         // Only persist a source URL when we actually have a photo to point
         // back at. Color placeholders drop the URL.
         imageSourceUrl: draft.photoDataUrl ? draft.photoSourceUrl : null,
-        jackSides: draft.jackSides,
+        // jackSides is derived from the port list — the dedicated Jacks
+        // step was retired in #52 in favor of a live preview alongside
+        // the port list. Persist what the ports actually say.
+        jackSides: derivedJackSides(draft.ports),
         powerSide: draft.powerSide,
         ports: draft.ports,
       };
@@ -357,9 +360,8 @@ export function AddPedalWizard({
         />
       )}
       {step === 1 && <NameSizeStep draft={draft} setDraft={setDraft} />}
-      {step === 2 && <JacksStep draft={draft} setDraft={setDraft} />}
-      {step === 3 && <ConnectionsStep draft={draft} setDraft={setDraft} />}
-      {step === 4 && <ReviewStep draft={draft} setDraft={setDraft} />}
+      {step === 2 && <ConnectionsStep draft={draft} setDraft={setDraft} />}
+      {step === 3 && <ReviewStep draft={draft} setDraft={setDraft} />}
       {error ? (
         <div className={styles.errorBox} role="alert">
           <i className="ti ti-alert-triangle" aria-hidden /> {error}
@@ -376,10 +378,8 @@ function titleForStep(step: number): string {
     case 1:
       return 'Name & Size';
     case 2:
-      return 'Jack Placement';
-    case 3:
       return 'Connections';
-    case 4:
+    case 3:
       return 'Review';
     default:
       return STEPS[step] ?? '';
@@ -393,10 +393,8 @@ function subtitleForStep(step: number): string {
     case 1:
       return 'Tell us what the pedal is and how big it is.';
     case 2:
-      return 'Which sides have audio and MIDI jacks?';
-    case 3:
       return 'What ports does the pedal expose?';
-    case 4:
+    case 3:
       return 'Looks right? Submit to add it to your library.';
     default:
       return '';
@@ -1528,87 +1526,28 @@ const MIDI_SIDE_KEY: Record<Side, keyof JackSides> = {
   right: 'midi_right',
 };
 
-function JacksStep({ draft, setDraft }: StepProps) {
-  const toggle = (key: keyof JackSides) =>
-    setDraft((d) => ({
-      ...d,
-      jackSides: { ...d.jackSides, [key]: !d.jackSides[key] },
-    }));
-
-  return (
-    <div className={styles.jacksStep}>
-      <JackPreview draft={draft} />
-
-      <div className={styles.jackSectionLabel}>Audio jacks</div>
-      <div className={styles.jackGrid}>
-        {SIDES_IN_ORDER.map(({ side, label }) => {
-          const active = draft.jackSides[AUDIO_SIDE_KEY[side]];
-          return (
-            <button
-              key={`audio-${side}`}
-              type="button"
-              className={`${styles.jackChip} ${active ? styles.jackChipActive : ''}`}
-              aria-pressed={active}
-              onClick={() => toggle(AUDIO_SIDE_KEY[side])}
-            >
-              <span
-                className={styles.jackDotAudio}
-                aria-hidden
-                style={{ opacity: active ? 1 : 0.3 }}
-              />
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className={styles.jackSectionLabel}>MIDI jacks</div>
-      <div className={styles.jackGrid}>
-        {SIDES_IN_ORDER.map(({ side, label }) => {
-          const active = draft.jackSides[MIDI_SIDE_KEY[side]];
-          return (
-            <button
-              key={`midi-${side}`}
-              type="button"
-              className={`${styles.jackChip} ${active ? styles.jackChipActiveMidi : ''}`}
-              aria-pressed={active}
-              onClick={() => toggle(MIDI_SIDE_KEY[side])}
-            >
-              <span
-                className={styles.jackDotMidi}
-                aria-hidden
-                style={{ opacity: active ? 1 : 0.3 }}
-              />
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      <label className={styles.field}>
-        <span className={styles.label}>Power side</span>
-        <select
-          className={styles.select}
-          value={draft.powerSide ?? ''}
-          onChange={(e) =>
-            setDraft((d) => ({
-              ...d,
-              powerSide: (e.target.value || null) as Side | null,
-            }))
-          }
-        >
-          <option value="">No external power</option>
-          <option value="top">Top</option>
-          <option value="bottom">Bottom</option>
-          <option value="left">Left</option>
-          <option value="right">Right</option>
-        </select>
-      </label>
-    </div>
-  );
+/**
+ * Project draft ports onto a JackSides bitmap — replaces the dedicated
+ * Jacks step. A port on `right` with an audio signal type implies an
+ * audio jack on the right; same for MIDI on its own bitmap channels.
+ */
+function derivedJackSides(ports: DraftPort[]): JackSides {
+  const out: JackSides = { ...EMPTY_JACKS };
+  for (const p of ports) {
+    const isMidi = p.role === 'midi_in' || p.role === 'midi_out';
+    if (isMidi) out[MIDI_SIDE_KEY[p.side]] = true;
+    else out[AUDIO_SIDE_KEY[p.side]] = true;
+  }
+  return out;
 }
 
-function JackPreview({ draft }: { draft: WizardDraft }) {
+function JackPreview({
+  jackSides,
+  color,
+}: {
+  jackSides: JackSides;
+  color: string;
+}) {
   const renderDot = (
     side: Side,
     position: 'audio' | 'midi',
@@ -1636,18 +1575,13 @@ function JackPreview({ draft }: { draft: WizardDraft }) {
 
   return (
     <div className={styles.jackPreviewWrap}>
-      <div
-        className={styles.jackPreviewBox}
-        style={{ background: draft.color }}
-      >
+      <div className={styles.jackPreviewBox} style={{ background: color }}>
         {SIDES_IN_ORDER.map(({ side }) => (
           <span key={side}>
-            {draft.jackSides[AUDIO_SIDE_KEY[side]]
+            {jackSides[AUDIO_SIDE_KEY[side]]
               ? renderDot(side, 'audio', 0)
               : null}
-            {draft.jackSides[MIDI_SIDE_KEY[side]]
-              ? renderDot(side, 'midi', 0)
-              : null}
+            {jackSides[MIDI_SIDE_KEY[side]] ? renderDot(side, 'midi', 0) : null}
           </span>
         ))}
       </div>
@@ -1678,8 +1612,8 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'input',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'top',
-        sideOrder: 1,
+        side: 'right',
+        sideOrder: 0,
         optional: false,
       }),
       mkPort({
@@ -1687,7 +1621,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'output',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'top',
+        side: 'left',
         sideOrder: 0,
         optional: false,
       }),
@@ -1703,8 +1637,8 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'input',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'top',
-        sideOrder: 2,
+        side: 'right',
+        sideOrder: 0,
         optional: false,
       }),
       mkPort({
@@ -1712,7 +1646,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'output_l',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'top',
+        side: 'left',
         sideOrder: 0,
         optional: false,
       }),
@@ -1721,7 +1655,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'output_r',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'top',
+        side: 'left',
         sideOrder: 1,
         optional: true,
       }),
@@ -1737,8 +1671,8 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'stereo_input',
         signalType: 'stereo',
         connector: 'trs',
-        side: 'top',
-        sideOrder: 1,
+        side: 'right',
+        sideOrder: 0,
         optional: false,
       }),
       mkPort({
@@ -1746,7 +1680,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'stereo_output',
         signalType: 'stereo',
         connector: 'trs',
-        side: 'top',
+        side: 'left',
         sideOrder: 0,
         optional: false,
       }),
@@ -1899,20 +1833,38 @@ const ROLE_GROUPS: { heading: string; options: RoleOption[] }[] = [
     heading: 'Control',
     options: [
       {
-        role: 'expression',
-        label: 'Expression',
+        role: 'expression_in',
+        label: 'Expression In',
         signalType: 'expression',
         connectors: ['trs', 'ts'],
       },
       {
-        role: 'remote',
-        label: 'Remote',
+        role: 'expression_out',
+        label: 'Expression Out',
+        signalType: 'expression',
+        connectors: ['trs', 'ts'],
+      },
+      {
+        role: 'remote_in',
+        label: 'Remote In',
         signalType: 'remote',
         connectors: ['ts', 'trs'],
       },
       {
-        role: 'cv',
-        label: 'CV',
+        role: 'remote_out',
+        label: 'Remote Out',
+        signalType: 'remote',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'cv_in',
+        label: 'CV In',
+        signalType: 'cv',
+        connectors: ['ts', 'trs'],
+      },
+      {
+        role: 'cv_out',
+        label: 'CV Out',
         signalType: 'cv',
         connectors: ['ts', 'trs'],
       },
@@ -1928,63 +1880,38 @@ const CONNECTOR_LABELS: Record<Connector, string> = {
   midi_trs: 'TRS MIDI',
 };
 
-function pickDefaultSide(draft: WizardDraft): Side {
-  // Land new ports on the first declared jack side, falling back to top.
-  const sides: Side[] = ['top', 'bottom', 'left', 'right'];
-  for (const s of sides) {
-    if (draft.jackSides[AUDIO_SIDE_KEY[s]]) return s;
+/**
+ * Where to land a freshly-added port. Inputs on the right and outputs on
+ * the left — the app-wide right-to-left signal-flow convention. MIDI and
+ * other control roles default to top (real-pedal back-edge convention).
+ * The user can move ports later via the inline editor.
+ */
+function defaultSideForRole(role: PortRole): Side {
+  if (
+    role === 'output' ||
+    role === 'output_l' ||
+    role === 'output_r' ||
+    role === 'stereo_output' ||
+    role === 'fx_send' ||
+    role === 'expression_out' ||
+    role === 'cv_out' ||
+    role === 'remote_out'
+  ) {
+    return 'left';
+  }
+  if (
+    role === 'input' ||
+    role === 'input_l' ||
+    role === 'input_r' ||
+    role === 'stereo_input' ||
+    role === 'fx_return' ||
+    role === 'expression_in' ||
+    role === 'cv_in' ||
+    role === 'remote_in'
+  ) {
+    return 'right';
   }
   return 'top';
-}
-
-/**
- * Picks the most plausible side for a freshly-added port, so users don't
- * have to answer the same "which side?" question again that they already
- * answered in the Jacks step. The convention "input on the right, output
- * on the left" is the strong default; falls back to the first jack side
- * the user declared if that direction isn't actually available on this
- * pedal.
- */
-function defaultSideForRole(role: PortRole, draft: WizardDraft): Side {
-  const isMidi = role === 'midi_in' || role === 'midi_out';
-  const sideHasJack = (s: Side): boolean =>
-    draft.jackSides[isMidi ? MIDI_SIDE_KEY[s] : AUDIO_SIDE_KEY[s]];
-
-  const prefer = (sides: Side[]): Side | null => {
-    for (const s of sides) if (sideHasJack(s)) return s;
-    return null;
-  };
-
-  const inputRoles: PortRole[] = [
-    'input',
-    'input_l',
-    'input_r',
-    'stereo_input',
-    'fx_return',
-  ];
-  const outputRoles: PortRole[] = [
-    'output',
-    'output_l',
-    'output_r',
-    'stereo_output',
-    'fx_send',
-  ];
-
-  let pref: Side | null = null;
-  if (inputRoles.includes(role)) {
-    pref = prefer(['right', 'top', 'bottom', 'left']);
-  } else if (outputRoles.includes(role)) {
-    pref = prefer(['left', 'top', 'bottom', 'right']);
-  } else if (isMidi) {
-    pref = prefer(['top', 'bottom', 'right', 'left']);
-  } else {
-    // expression / cv / remote — go wherever the user has room.
-    pref = prefer(['right', 'left', 'top', 'bottom']);
-  }
-  if (pref) return pref;
-  // No declared jack-bearing side at all — match the "input on the right"
-  // convention so the port at least lands somewhere sensible.
-  return inputRoles.includes(role) ? 'right' : 'left';
 }
 
 function ConnectionsStep({ draft, setDraft }: StepProps) {
@@ -2083,8 +2010,32 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
     setPickedConnector(null);
   };
 
+  const derivedJacks = derivedJackSides(draft.ports);
+
   return (
     <div className={styles.connectionsStep}>
+      <JackPreview jackSides={derivedJacks} color={draft.color} />
+
+      <label className={styles.field}>
+        <span className={styles.label}>Power side</span>
+        <select
+          className={styles.select}
+          value={draft.powerSide ?? ''}
+          onChange={(e) =>
+            setDraft((d) => ({
+              ...d,
+              powerSide: (e.target.value || null) as Side | null,
+            }))
+          }
+        >
+          <option value="">No external power</option>
+          <option value="top">Top</option>
+          <option value="bottom">Bottom</option>
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
+      </label>
+
       <div className={styles.jackSectionLabel}>Quick presets</div>
       <div className={styles.presetChips}>
         {CONNECTION_PRESETS.map((p) => (
@@ -2212,7 +2163,9 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
           pickedCategory={pickedCategory}
           pickedRole={pickedRole}
           pickedConnector={pickedConnector}
-          defaultSide={pickDefaultSide(draft)}
+          defaultSide={
+            pickedRole ? defaultSideForRole(pickedRole.role) : 'right'
+          }
           onPickCategory={(heading) => {
             setPickedCategory(heading);
             setPickerStep('role');
@@ -2222,11 +2175,12 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
             setPickerStep('connector');
           }}
           onPickConnector={(connector) => {
-            // Skip the side step: derive it from the role + the user's
-            // already-declared jack sides. They can still nudge a port to
-            // a different side later via the inline editor.
+            // Skip the side step: derive it from the role using the app's
+            // right-to-left convention (inputs right, outputs left). The
+            // user can still nudge a port to a different side later via
+            // the inline editor.
             if (pickedRole) {
-              const side = defaultSideForRole(pickedRole.role, draft);
+              const side = defaultSideForRole(pickedRole.role);
               addCustomPort(pickedRole, connector, side);
             }
           }}
