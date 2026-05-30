@@ -1706,13 +1706,16 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
     label: '+ FX loop',
     replaces: false,
     build: () => [
+      // Top edge with sideOrders past the widest audio preset (dual-
+      // mono uses 0-3) so FX Send/Return sit beside the audio ports
+      // rather than colliding with them.
       mkPort({
         label: 'FX Send',
         role: 'fx_send',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'right',
-        sideOrder: 0,
+        side: 'top',
+        sideOrder: 6,
         optional: true,
       }),
       mkPort({
@@ -1720,8 +1723,8 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'fx_return',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'right',
-        sideOrder: 1,
+        side: 'top',
+        sideOrder: 7,
         optional: true,
       }),
     ],
