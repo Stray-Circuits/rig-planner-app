@@ -91,17 +91,20 @@ const EMPTY_JACKS: JackSides = {
   midi_right: false,
 };
 
-// Right-to-left signal flow is the app's convention: input on the right,
-// output on the left. New presets and freshly-added ports follow that
-// default; the user can move ports later via the inline editor.
+// Modern pedals (Stray Circuits and most boutique builds) put jacks on
+// the top edge by default, so fresh ports land there. The inline editor
+// lets the user move them to a side edge for older / side-jack pedals.
+// Out comes first (sideOrder 0) so that on a top-mounted row the order
+// reads Out, In from left to right — matching the right-to-left signal
+// flow convention used everywhere else in the app.
 const DEFAULT_PORTS: DraftPort[] = [
   {
     label: 'In',
     role: 'input' satisfies PortRole,
     signalType: 'instrument' satisfies SignalType,
     connector: 'ts' satisfies Connector,
-    side: 'right',
-    sideOrder: 0,
+    side: 'top',
+    sideOrder: 1,
     optional: false,
   },
   {
@@ -109,7 +112,7 @@ const DEFAULT_PORTS: DraftPort[] = [
     role: 'output' satisfies PortRole,
     signalType: 'instrument' satisfies SignalType,
     connector: 'ts' satisfies Connector,
-    side: 'left',
+    side: 'top',
     sideOrder: 0,
     optional: false,
   },
@@ -1612,8 +1615,8 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'input',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'right',
-        sideOrder: 0,
+        side: 'top',
+        sideOrder: 1,
         optional: false,
       }),
       mkPort({
@@ -1621,7 +1624,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'output',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'left',
+        side: 'top',
         sideOrder: 0,
         optional: false,
       }),
@@ -1637,8 +1640,8 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'input',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'right',
-        sideOrder: 0,
+        side: 'top',
+        sideOrder: 2,
         optional: false,
       }),
       mkPort({
@@ -1646,7 +1649,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'output_l',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'left',
+        side: 'top',
         sideOrder: 0,
         optional: false,
       }),
@@ -1655,7 +1658,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'output_r',
         signalType: 'instrument',
         connector: 'ts',
-        side: 'left',
+        side: 'top',
         sideOrder: 1,
         optional: true,
       }),
@@ -1671,8 +1674,8 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'stereo_input',
         signalType: 'stereo',
         connector: 'trs',
-        side: 'right',
-        sideOrder: 0,
+        side: 'top',
+        sideOrder: 1,
         optional: false,
       }),
       mkPort({
@@ -1680,7 +1683,7 @@ const CONNECTION_PRESETS: ConnectionPreset[] = [
         role: 'stereo_output',
         signalType: 'stereo',
         connector: 'trs',
-        side: 'left',
+        side: 'top',
         sideOrder: 0,
         optional: false,
       }),
@@ -1881,36 +1884,12 @@ const CONNECTOR_LABELS: Record<Connector, string> = {
 };
 
 /**
- * Where to land a freshly-added port. Inputs on the right and outputs on
- * the left — the app-wide right-to-left signal-flow convention. MIDI and
- * other control roles default to top (real-pedal back-edge convention).
- * The user can move ports later via the inline editor.
+ * Where to land a freshly-added port. Modern pedals (Stray Circuits and
+ * most boutique builds) jack everything on the top edge, so that's the
+ * default for every role. The user can move ports later via the inline
+ * editor for older / side-jack pedals.
  */
-function defaultSideForRole(role: PortRole): Side {
-  if (
-    role === 'output' ||
-    role === 'output_l' ||
-    role === 'output_r' ||
-    role === 'stereo_output' ||
-    role === 'fx_send' ||
-    role === 'expression_out' ||
-    role === 'cv_out' ||
-    role === 'remote_out'
-  ) {
-    return 'left';
-  }
-  if (
-    role === 'input' ||
-    role === 'input_l' ||
-    role === 'input_r' ||
-    role === 'stereo_input' ||
-    role === 'fx_return' ||
-    role === 'expression_in' ||
-    role === 'cv_in' ||
-    role === 'remote_in'
-  ) {
-    return 'right';
-  }
+function defaultSideForRole(_role: PortRole): Side {
   return 'top';
 }
 
@@ -2163,9 +2142,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
           pickedCategory={pickedCategory}
           pickedRole={pickedRole}
           pickedConnector={pickedConnector}
-          defaultSide={
-            pickedRole ? defaultSideForRole(pickedRole.role) : 'right'
-          }
+          defaultSide={pickedRole ? defaultSideForRole(pickedRole.role) : 'top'}
           onPickCategory={(heading) => {
             setPickedCategory(heading);
             setPickerStep('role');
