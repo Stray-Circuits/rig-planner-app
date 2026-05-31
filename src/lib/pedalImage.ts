@@ -1,4 +1,12 @@
-import { colorFromImagePath } from '../data/seedPedals';
+/**
+ * Decode a pedal's imagePath. Returns a color string (for `color:#RRGGBB`
+ * placeholders) or null if it's a real image URL / path or absent.
+ */
+export function colorFromImagePath(imagePath: string | null): string | null {
+  if (!imagePath) return null;
+  if (imagePath.startsWith('color:')) return imagePath.slice('color:'.length);
+  return null;
+}
 
 /**
  * Resolve a Pedal.imagePath into CSS style props for rendering it.

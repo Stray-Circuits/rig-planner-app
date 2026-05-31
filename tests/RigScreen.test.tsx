@@ -10,6 +10,7 @@ import { __resetDbForTests } from '../src/data/db';
 import { __clearMemoryAdapterStorage } from '../src/data/memoryAdapter';
 import { createRig, listRigs } from '../src/data/rigsRepo';
 import { createPedal } from '../src/data/pedalsRepo';
+import { seedSamplePedals } from './helpers/seedPedals';
 import { RigScreen } from '../src/screens/rig/RigScreen';
 import { usePedalsStore } from '../src/stores/pedalsStore';
 import { usePlacedPedalsStore } from '../src/stores/placedPedalsStore';
@@ -56,25 +57,25 @@ describe('RigScreen', () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
-  it('opens the pedal library sheet and seeds samples on first open', async () => {
+  it('opens the pedal library sheet and lists existing pedals', async () => {
+    await seedSamplePedals();
+    render(<RigScreen rig={rig} onBack={() => undefined} />);
+    fireEvent.click(screen.getByLabelText('Add pedal'));
+    expect(await screen.findByText('DS-1')).toBeInTheDocument();
+  });
+
+  it('shows the empty-library state when no pedals exist', async () => {
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
     expect(
       await screen.findByText(/Your library is empty/),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Or seed 6 sample pedals'));
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/Your library is empty/),
-      ).not.toBeInTheDocument();
-    });
-    expect(screen.getByText('DS-1')).toBeInTheDocument();
   });
 
   it('tapping a pedal in the library adds it to the rig and closes the sheet', async () => {
+    await seedSamplePedals();
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     const ds1 = await screen.findByText('DS-1');
     fireEvent.click(ds1);
     await waitFor(() => {
@@ -89,10 +90,9 @@ describe('RigScreen', () => {
   });
 
   it('right-click on a placed pedal opens the action sheet', async () => {
-    // Seed + add a pedal first.
+    await seedSamplePedals();
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     fireEvent.click(await screen.findByText('DS-1'));
     await waitFor(() => {
       expect(
@@ -192,9 +192,9 @@ describe('RigScreen', () => {
   });
 
   it('tap-to-connect: arm an output, tap an input → connection created', async () => {
+    await seedSamplePedals();
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     // Add two pedals to the rig.
     fireEvent.click(await screen.findByText('DS-1'));
     await waitFor(() => {
@@ -223,9 +223,9 @@ describe('RigScreen', () => {
   });
 
   it('endpoint chip: arm an input → tap From Guitar creates external→pedal connection', async () => {
+    await seedSamplePedals();
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     fireEvent.click(await screen.findByText('DS-1'));
     await waitFor(() => {
       expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
@@ -245,9 +245,9 @@ describe('RigScreen', () => {
   });
 
   it('endpoint chip: arming an output then tapping From Guitar is rejected (two sources)', async () => {
+    await seedSamplePedals();
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     fireEvent.click(await screen.findByText('DS-1'));
     await waitFor(() => {
       expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);
@@ -335,9 +335,9 @@ describe('RigScreen', () => {
   });
 
   it('signal-chain FAB toggles chain mode + port dots', async () => {
+    await seedSamplePedals();
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     fireEvent.click(await screen.findByText('DS-1'));
     await waitFor(() => {
       expect(
@@ -360,9 +360,9 @@ describe('RigScreen', () => {
   });
 
   it('removing a pedal from the library cascades through placements + connections', async () => {
+    await seedSamplePedals();
     render(<RigScreen rig={rig} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     // Place DS-1 on the rig.
     fireEvent.click(await screen.findByText('DS-1'));
     await waitFor(() => {
@@ -420,9 +420,9 @@ describe('RigScreen', () => {
       error: null,
     });
 
+    await seedSamplePedals();
     render(<RigScreen rig={narrow} onBack={() => undefined} />);
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     fireEvent.click(await screen.findByText('DS-1'));
     await waitFor(() => {
       expect(usePlacedPedalsStore.getState().byRig[narrow.id]?.length).toBe(1);
@@ -444,10 +444,10 @@ describe('RigScreen', () => {
 
   it('Delete Rig in Settings cascades and routes back', async () => {
     const onBack = vi.fn();
+    await seedSamplePedals();
     render(<RigScreen rig={rig} onBack={onBack} />);
-    // Seed + place a pedal so we exercise the cascade warning.
+    // Place a pedal so we exercise the cascade warning.
     fireEvent.click(screen.getByLabelText('Add pedal'));
-    fireEvent.click(await screen.findByText('Or seed 6 sample pedals'));
     fireEvent.click(await screen.findByText('DS-1'));
     await waitFor(() => {
       expect(usePlacedPedalsStore.getState().byRig[rig.id]?.length).toBe(1);

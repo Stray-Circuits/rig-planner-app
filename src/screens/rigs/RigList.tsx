@@ -27,7 +27,6 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
   const pedalsStatus = usePedalsStore((s) => s.status);
   const pedalImagesReady = usePedalsStore((s) => s.imagesReady);
   const loadPedals = usePedalsStore((s) => s.loadPedals);
-  const seedSamples = usePedalsStore((s) => s.seedSamples);
   const loadPlacedForRig = usePlacedPedalsStore((s) => s.loadForRig);
   const loadSignalChain = useSignalChainStore((s) => s.loadForRig);
 
@@ -283,9 +282,6 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
         onStartEditPedal={(pedal) => {
           setLibraryOpen(false);
           setEditingPedal(pedal);
-        }}
-        onSeed={async () => {
-          await seedSamples();
         }}
       />
 
