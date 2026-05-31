@@ -166,6 +166,73 @@ describe('geometry', () => {
     expect(medium.depthIn).toBeLessThan(large.depthIn);
   });
 
+  it('keepOutRect uses jackSize for TRS-MIDI ports and 15mm for DIN-MIDI ports', () => {
+    // A pedal with both kinds of MIDI port: a TRS-MIDI on top (1/4"
+    // plug, should follow the user jack size) and a 5-pin DIN MIDI on
+    // bottom (fixed 15mm body).
+    const placed: PlacedPedal = {
+      id: 'pl',
+      rigId: 'r',
+      pedalId: 'p',
+      xIn: 0,
+      yIn: 0,
+      rotation: 0,
+    };
+    const midiMixed: Pedal = {
+      ...pedal,
+      // jackSides reflect what the wizard would derive from the ports,
+      // but the connector-aware logic doesn't actually need them now.
+      jackSides: {
+        top: false,
+        bottom: false,
+        left: false,
+        right: false,
+        midi_top: true,
+        midi_bottom: true,
+        midi_left: false,
+        midi_right: false,
+      },
+      ports: [
+        {
+          id: 'midi-trs',
+          pedalId: 'p',
+          label: 'MIDI TRS',
+          role: 'midi_in',
+          signalType: 'midi',
+          connector: 'midi_trs',
+          side: 'top',
+          sideOrder: 0,
+          optional: false,
+        },
+        {
+          id: 'midi-din',
+          pedalId: 'p',
+          label: 'MIDI DIN',
+          role: 'midi_in',
+          signalType: 'midi',
+          connector: 'midi_din',
+          side: 'bottom',
+          sideOrder: 0,
+          optional: false,
+        },
+      ],
+    };
+    const small = keepOutRect(placed, midiMixed, 'small');
+    const large = keepOutRect(placed, midiMixed, 'large');
+    // Top side has only a TRS-MIDI port — pad should track jackSize
+    // exactly (small = 0.25", large = 0.625"), NOT the 15mm DIN
+    // constant the legacy boolean fallback would have used.
+    expect(-small.yIn).toBeCloseTo(JACK_SIZE_INCHES.small, 6);
+    expect(-large.yIn).toBeCloseTo(JACK_SIZE_INCHES.large, 6);
+    // Bottom side has only a DIN MIDI port — pad stays at 15mm
+    // regardless of the user's jack-size selection.
+    // depthIn = pedal.depth (5) + topPad + bottomPad.
+    const smallBottomPad = small.depthIn - 5 - JACK_SIZE_INCHES.small;
+    const largeBottomPad = large.depthIn - 5 - JACK_SIZE_INCHES.large;
+    expect(smallBottomPad).toBeCloseTo(KEEP_OUT_MIDI_INCHES, 6);
+    expect(largeBottomPad).toBeCloseTo(KEEP_OUT_MIDI_INCHES, 6);
+  });
+
   it('keepOutRect respects the powerSide alone', () => {
     const placed: PlacedPedal = {
       id: 'pl',
