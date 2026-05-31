@@ -39,10 +39,31 @@ export interface RemoveBackgroundOptions {
   signal?: AbortSignal;
 }
 
+// One long-lived worker shared across all bg-removal calls. The library's
+// model bytes, parsed ONNX graph, and ORT WASM runtime live in this worker's
+// module-level state. Spawning a fresh worker per call would re-download the
+// model (the lib has no persistent caching of its own — pure `fetch()`).
+let sharedWorker: Worker | null = null;
+function getWorker(): Worker | null {
+  if (sharedWorker) return sharedWorker;
+  try {
+    sharedWorker = new BgRemovalWorker();
+    return sharedWorker;
+  } catch {
+    // Worker unavailable (e.g. test env).
+    return null;
+  }
+}
+function disposeWorker(): void {
+  sharedWorker?.terminate();
+  sharedWorker = null;
+}
+
 /**
  * Run background removal on a File or Blob. Resolves to a transparent PNG
  * Blob; rejects if the user cancels via the AbortSignal or if the worker
- * fails to load.
+ * fails to load. Calls are serialized through the shared worker — overlapping
+ * invocations would clobber each other's message handlers.
  */
 export async function removeBackground(
   source: Blob,
@@ -55,24 +76,34 @@ export async function removeBackground(
   }
 
   onProgress?.({ phase: 'loading-library', fraction: null });
-
-  const worker = prewarmedWorker ?? new BgRemovalWorker();
-  prewarmedWorker = null;
+  const worker = getWorker();
+  if (!worker) {
+    throw new Error('Web Worker unavailable in this environment');
+  }
 
   return new Promise<Blob>((resolve, reject) => {
     let phase: BgRemovalPhase = 'initializing-runtime';
 
-    const settle = (fn: () => void) => {
-      worker.terminate();
+    const cleanup = () => {
+      worker.onmessage = null;
+      worker.onerror = null;
       signal?.removeEventListener('abort', onAbort);
-      fn();
     };
-    const onAbort = () =>
-      settle(() => reject(new DOMException('Aborted', 'AbortError')));
+    const onAbort = () => {
+      // Can't surgically cancel an in-flight inference inside the worker;
+      // terminate so a fresh worker spawns next call.
+      disposeWorker();
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
     signal?.addEventListener('abort', onAbort);
 
-    worker.onerror = (e) =>
-      settle(() => reject(new Error(e.message || 'Worker error')));
+    worker.onerror = (e) => {
+      // Worker may be in a broken state; drop the shared ref.
+      disposeWorker();
+      cleanup();
+      reject(new Error(e.message || 'Worker error'));
+    };
     worker.onmessage = (e: MessageEvent<WorkerOutbound>) => {
       const msg = e.data;
       if (msg.type === 'progress') {
@@ -83,9 +114,11 @@ export async function removeBackground(
         const fraction = msg.total > 0 ? msg.current / msg.total : null;
         onProgress?.({ phase, fraction });
       } else if (msg.type === 'result') {
-        settle(() => resolve(msg.blob));
+        cleanup();
+        resolve(msg.blob);
       } else {
-        settle(() => reject(new Error(msg.message)));
+        cleanup();
+        reject(new Error(msg.message));
       }
     };
 
@@ -95,19 +128,11 @@ export async function removeBackground(
 }
 
 /**
- * Pre-spawn the bg-removal worker so the chunk + lib import are warm by the
- * time the user picks a file. Safe to call repeatedly; we only keep one
- * prewarm worker around and terminate it on the next `removeBackground`
- * call (which spawns a fresh one).
+ * Pre-spawn the shared bg-removal worker so the lib + ORT WASM import is
+ * warm by the time the user picks a file. Idempotent.
  */
-let prewarmedWorker: Worker | null = null;
 export function prefetchBgRemoval(): void {
-  if (prewarmedWorker) return;
-  try {
-    prewarmedWorker = new BgRemovalWorker();
-  } catch {
-    // Worker unavailable (e.g. test env) — best-effort, ignore.
-  }
+  getWorker();
 }
 
 /**
