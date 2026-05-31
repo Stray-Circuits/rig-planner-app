@@ -152,6 +152,14 @@ function computeCableChannels(
     return portIndex.get(nodeId)?.get(portId)?.port ?? null;
   };
 
+  const channelFromRole = (port: Port | null): 'L' | 'R' | null => {
+    if (!port) return null;
+    if (port.role === 'input_l' || port.role === 'output_l') return 'L';
+    if (port.role === 'input_r' || port.role === 'output_r') return 'R';
+    return null;
+  };
+
+  // Pass 1: cables that directly touch a stereo TRS port.
   for (const c of connections) {
     const fromPort = portFor(c.fromNodeKind, c.fromNodeId, c.fromPortId);
     const toPort = portFor(c.toNodeKind, c.toNodeId, c.toPortId);
@@ -165,16 +173,10 @@ function computeCableChannels(
     // Exactly one end is stereo — figure out which channel this leg
     // carries. Prefer an explicit L/R role on the other end; fall back
     // to deferred per-port indexing.
-    const otherPort = fromStereo ? toPort : fromPort;
-    if (otherPort) {
-      if (otherPort.role === 'input_r' || otherPort.role === 'output_r') {
-        out.set(c.id, 'R');
-        continue;
-      }
-      if (otherPort.role === 'input_l' || otherPort.role === 'output_l') {
-        out.set(c.id, 'L');
-        continue;
-      }
+    const otherChannel = channelFromRole(fromStereo ? toPort : fromPort);
+    if (otherChannel) {
+      out.set(c.id, otherChannel);
+      continue;
     }
     const stereoKey = fromStereo
       ? `${c.fromNodeId}:${c.fromPortId}`
@@ -183,7 +185,6 @@ function computeCableChannels(
     arr.push(c.id);
     pendingByStereoPort.set(stereoKey, arr);
   }
-
   for (const ids of pendingByStereoPort.values()) {
     // Stable order by connection id so the L/R assignment doesn't
     // shuffle as unrelated cables are added/removed elsewhere.
@@ -192,6 +193,78 @@ function computeCableChannels(
       out.set(id, idx === 0 ? 'L' : 'R');
     });
   }
+
+  // Pass 2: cables anchored to an explicit L/R port role anywhere in
+  // the chain (e.g. an output_r feeding the next pedal's input_r).
+  for (const c of connections) {
+    if (out.has(c.id)) continue;
+    const fromPort = portFor(c.fromNodeKind, c.fromNodeId, c.fromPortId);
+    const toPort = portFor(c.toNodeKind, c.toNodeId, c.toPortId);
+    const ch = channelFromRole(fromPort) ?? channelFromRole(toPort);
+    if (ch) out.set(c.id, ch);
+  }
+
+  // Pass 3: propagate channel through pedals. A mono pedal that
+  // receives a single-channel signal on its input should send that
+  // same channel out — so a left-leg Y-split feeding into a tube
+  // screamer keeps the left color all the way to whatever the tube
+  // screamer feeds next. Iterate until stable; bail out at a
+  // generous cap in case the graph is more tangled than expected.
+  const inbound = new Map<string, string[]>();
+  const outbound = new Map<string, string[]>();
+  for (const c of connections) {
+    if (c.toNodeKind === 'pedal') {
+      const arr = inbound.get(c.toNodeId) ?? [];
+      arr.push(c.id);
+      inbound.set(c.toNodeId, arr);
+    }
+    if (c.fromNodeKind === 'pedal') {
+      const arr = outbound.get(c.fromNodeId) ?? [];
+      arr.push(c.id);
+      outbound.set(c.fromNodeId, arr);
+    }
+  }
+  const connectionsById = new Map(connections.map((c) => [c.id, c]));
+  const ITERATION_CAP = 32;
+  for (let iter = 0; iter < ITERATION_CAP; iter++) {
+    let changed = false;
+    for (const [placedId, inIds] of inbound) {
+      // Dominant inbound channel: every channeled inbound cable agrees,
+      // OR there's one inbound cable and it has a channel. Mixed L+R
+      // means the pedal sums to mono → no propagation.
+      let dominant: 'L' | 'R' | null = null;
+      let mixed = false;
+      for (const cid of inIds) {
+        const ch = out.get(cid);
+        if (ch === 'L' || ch === 'R') {
+          if (dominant === null) dominant = ch;
+          else if (dominant !== ch) {
+            mixed = true;
+            break;
+          }
+        }
+      }
+      if (mixed || dominant === null) continue;
+      const outIds = outbound.get(placedId) ?? [];
+      for (const cid of outIds) {
+        if (out.has(cid)) continue;
+        const conn = connectionsById.get(cid);
+        if (!conn) continue;
+        const fromPort = portFor(
+          conn.fromNodeKind,
+          conn.fromNodeId,
+          conn.fromPortId,
+        );
+        // Skip stereo TRS source outputs — those are handled in pass 1
+        // and shouldn't be overwritten with a single-channel tag.
+        if (fromPort?.signalType === 'stereo') continue;
+        out.set(cid, dominant);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+
   return out;
 }
 
@@ -677,10 +750,24 @@ export function ChainOverlay({
             // channel cues as a pair of mono Y-split cables would.
             const dashArray = isExternal ? '5 3' : undefined;
             // TRS↔TRS (isStereo) renders both L and R on one cable
-            // path. Y-split legs (channel = 'L' / 'R') each render as a
-            // single strand offset to the matching side so the two
-            // legs emerge from the TRS port in parallel rather than
-            // overlapping at the same centerline.
+            // path. Y-split legs (channel = 'L' / 'R' AND directly
+            // touching a stereo TRS port) render as a single strand
+            // offset to the matching side so the two legs emerge from
+            // the shared TRS port in parallel rather than overlapping.
+            // Cables that picked up L/R via downstream propagation
+            // (mono pedal carrying a channeled signal forward) get the
+            // matching color but stay centered — no companion strand
+            // to pair with along their own routing.
+            const touchesStereoTRS =
+              from.port?.signalType === 'stereo' ||
+              to.port?.signalType === 'stereo';
+            const offsetSign = channel === 'L' ? +1 : channel === 'R' ? -1 : 0;
+            const channelColor =
+              channel === 'L'
+                ? STEREO_STRAND_COLORS[0]
+                : channel === 'R'
+                  ? STEREO_STRAND_COLORS[1]
+                  : cableColor;
             const strands: {
               path: { xIn: number; yIn: number }[];
               color: string;
@@ -695,26 +782,23 @@ export function ChainOverlay({
                     color: STEREO_STRAND_COLORS[1],
                   },
                 ]
-              : channel === 'L'
+              : offsetSign !== 0 && touchesStereoTRS
                 ? [
                     {
-                      path: offsetPolyline(path, STEREO_STRAND_OFFSET_IN),
-                      color: STEREO_STRAND_COLORS[0],
+                      path: offsetPolyline(
+                        path,
+                        offsetSign * STEREO_STRAND_OFFSET_IN,
+                      ),
+                      color: channelColor,
                     },
                   ]
-                : channel === 'R'
-                  ? [
-                      {
-                        path: offsetPolyline(path, -STEREO_STRAND_OFFSET_IN),
-                        color: STEREO_STRAND_COLORS[1],
-                      },
-                    ]
-                  : [{ path, color: cableColor }];
-            // Use the stereo strand width for Y-split legs too so the
-            // pair coming off a TRS port reads as a matched set; both
-            // strands feel like the conductors of one stereo plug.
+                : [{ path, color: channelColor }];
+            // Stereo strand width applies to TRS↔TRS strands and to
+            // Y-split legs paired at the TRS port. Propagated mono
+            // cables keep the normal 2.5px so they don't look weirdly
+            // thinner than their neighbours mid-chain.
             const strandWidth =
-              isStereo || channel === 'L' || channel === 'R'
+              isStereo || (touchesStereoTRS && offsetSign !== 0)
                 ? STEREO_STRAND_WIDTH_PX
                 : 2.5;
             return (
@@ -741,7 +825,11 @@ export function ChainOverlay({
                     cx={fromCx}
                     cy={fromCy}
                     r={4}
-                    fill={fromColor}
+                    fill={
+                      from.port?.signalType === 'stereo'
+                        ? fromColor
+                        : channelColor
+                    }
                     stroke="rgba(255,255,255,0.9)"
                     strokeWidth={1}
                   />
@@ -751,7 +839,9 @@ export function ChainOverlay({
                     cx={toCx}
                     cy={toCy}
                     r={4}
-                    fill={toColor}
+                    fill={
+                      to.port?.signalType === 'stereo' ? toColor : channelColor
+                    }
                     stroke="rgba(255,255,255,0.9)"
                     strokeWidth={1}
                   />
