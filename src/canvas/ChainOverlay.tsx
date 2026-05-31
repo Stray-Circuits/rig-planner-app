@@ -492,8 +492,12 @@ export function ChainOverlay({
       const cableColor = fromColor;
       const isExternal =
         c.fromNodeKind === 'external' || c.toNodeKind === 'external';
+      // Parallel strands only when BOTH ends are stereo — i.e. a true
+      // TRS→TRS single cable carrying L+R. A TRS port split into two
+      // mono TS connections (Y-cable / insert split) is two separate
+      // single-conductor cables and should render normally.
       const isStereo =
-        from.port?.signalType === 'stereo' || to.port?.signalType === 'stereo';
+        from.port?.signalType === 'stereo' && to.port?.signalType === 'stereo';
       const fromLaneIdx = leaderLanes.get(`${c.id}:from`) ?? 0;
       const toLaneIdx = leaderLanes.get(`${c.id}:to`) ?? 0;
       const path = routeCableWithLeader(
