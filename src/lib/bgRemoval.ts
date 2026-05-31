@@ -71,6 +71,12 @@ export async function removeBackground(
 
   let phase: BgRemovalPhase = 'initializing-runtime';
   const result = await mod.removeBackground(source, {
+    // Per Pixel 8 Pro trace (issue #23): default runs ISNet fp16 ("medium")
+    // synchronously on the main thread, producing a 22s UI freeze. Switching
+    // to the int8-quantized small variant and proxying to a worker is a
+    // single-digit-cost change that addresses both axes.
+    model: 'isnet_quint8',
+    proxyToWorker: true,
     output: { format: 'image/png', quality: 1 },
     progress: (key: string, current: number, total: number) => {
       // Library keys look like `fetch:<filename>` while downloading and
