@@ -621,6 +621,7 @@ export function ChainOverlay({
         toColor,
         isExternal,
         isStereo,
+        channel,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -654,6 +655,7 @@ export function ChainOverlay({
             toColor,
             isExternal,
             isStereo,
+            channel,
           }) => {
             const toD = (pts: readonly { xIn: number; yIn: number }[]) =>
               pts
@@ -674,6 +676,11 @@ export function ChainOverlay({
             // from STEREO_STRAND_COLORS so the cable carries the same
             // channel cues as a pair of mono Y-split cables would.
             const dashArray = isExternal ? '5 3' : undefined;
+            // TRS↔TRS (isStereo) renders both L and R on one cable
+            // path. Y-split legs (channel = 'L' / 'R') each render as a
+            // single strand offset to the matching side so the two
+            // legs emerge from the TRS port in parallel rather than
+            // overlapping at the same centerline.
             const strands: {
               path: { xIn: number; yIn: number }[];
               color: string;
@@ -688,8 +695,28 @@ export function ChainOverlay({
                     color: STEREO_STRAND_COLORS[1],
                   },
                 ]
-              : [{ path, color: cableColor }];
-            const strandWidth = isStereo ? STEREO_STRAND_WIDTH_PX : 2.5;
+              : channel === 'L'
+                ? [
+                    {
+                      path: offsetPolyline(path, STEREO_STRAND_OFFSET_IN),
+                      color: STEREO_STRAND_COLORS[0],
+                    },
+                  ]
+                : channel === 'R'
+                  ? [
+                      {
+                        path: offsetPolyline(path, -STEREO_STRAND_OFFSET_IN),
+                        color: STEREO_STRAND_COLORS[1],
+                      },
+                    ]
+                  : [{ path, color: cableColor }];
+            // Use the stereo strand width for Y-split legs too so the
+            // pair coming off a TRS port reads as a matched set; both
+            // strands feel like the conductors of one stereo plug.
+            const strandWidth =
+              isStereo || channel === 'L' || channel === 'R'
+                ? STEREO_STRAND_WIDTH_PX
+                : 2.5;
             return (
               <g key={c.id}>
                 {strands.map((strand, i) => (
