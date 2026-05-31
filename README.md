@@ -155,16 +155,17 @@ attached).
   plug in, accept the RSA prompt. `adb devices` should list the serial.
   `tauri android dev` runs `adb reverse tcp:1420 tcp:1420` automatically so
   the device's `localhost:1420` tunnels back to the host Vite server.
-- **Wi-Fi device:** pass `--host` so Vite binds to your LAN IP and the
-  device loads the dev URL over the network. Find your IP with
-  `ipconfig getifaddr en0`, then run `pnpm tauri:android:dev --host
-  <that-ip>`. Phone and Mac must be on the same network.
+- **Wi-Fi device:** phone and Mac on the same network. Tauri usually
+  auto-detects a LAN IP and rewrites the dev URL to it (look for
+  `Using <ip> to access the development server` in the output). If
+  auto-detection picks the wrong interface, override with
+  `TAURI_DEV_HOST=$(ipconfig getifaddr en0) pnpm tauri:android:dev`
+  or pass `--host <ip>`.
 
 ### Run it
 
 ```sh
-pnpm tauri:android:dev          # emulator or USB device
-pnpm tauri:android:dev --host 192.168.1.42   # Wi-Fi device
+pnpm tauri:android:dev
 ```
 
 First launch compiles the Rust shell for the target ABI (slow); subsequent
@@ -182,4 +183,18 @@ adb logcat -c                                              # clear buffer
 Chrome DevTools attaches to the in-app webview via
 `chrome://inspect/#devices` (USB device or emulator must be visible to
 `adb devices`).
+
+### Troubleshooting
+
+- **`INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match`** — the
+  container build and `tauri android dev` sign with different debug
+  keystores, so you can't update one with the other. Uninstall first:
+  `adb uninstall com.straycircuits.rigplanner`, then rerun.
+- **Dev URL points at `localhost` and the device can't load it** — Tauri
+  usually auto-detects a LAN IP for you (look for `Using <ip> to access
+  the development server` in the dev output). If it doesn't, set
+  `TAURI_DEV_HOST=$(ipconfig getifaddr en0)` or pass `--host <ip>`.
+- **Build fails with cargo lock errors** — the host and container builds
+  share `src-tauri/target/`. Stop any container build / `pnpm tauri:dev`
+  before launching `pnpm tauri:android:dev`.
 
