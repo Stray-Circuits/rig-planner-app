@@ -505,6 +505,14 @@ export function routeCablePath(
   const best5 = shortestClean(cand5, obstacles, options, from.side, to.side);
   if (best5) return dedupeColinear(best5);
 
+  // Discrete candidates exhausted. Run an A* on the visibility grid
+  // formed by obstacle edges so the router can still find a clean path
+  // around multiple pedals (any number of detour bends). This recovers
+  // the cases where 3-seg and 5-seg both crash into a third pedal —
+  // the original failure mode of #41.
+  const aStar = routeAStar(from, to, obstacles, options);
+  if (aStar) return dedupeColinear(aStar);
+
   // No candidate avoids obstacles. Still prefer a U-turn-free topology
   // over a clean-looking U-turn — a cable that crosses a pedal edge
   // reads as a routing problem, but a cable that doubles back on its own
@@ -978,6 +986,285 @@ function transitCandidates(
   for (const d of [0.4, 0.8, 1.2]) {
     out.push(lo - d);
     out.push(hi + d);
+  }
+  return out;
+}
+
+/**
+ * Visibility-grid A* router. Used as a third tier after the 3-segment
+ * and 5-segment generators fail to find a clean path. Builds a sparse
+ * grid from obstacle edges + endpoint coordinates, then searches over
+ * (xi, yi, incomingDir) states with a turn penalty so the result
+ * minimises corners ("unnecessary squiggles" per #41).
+ *
+ * Returns null when no clean orthogonal path exists between the leader
+ * endpoints — callers should fall through to the dirty fallback in that
+ * case.
+ *
+ * The grid resolution is intentionally coarse: nodes only sit at
+ * obstacle edges (with a small epsilon margin) and at the supplied
+ * endpoints. By a classical visibility-graph result, the optimal
+ * orthogonal path's corners always lie on those lines, so a finer grid
+ * would just slow A* down without finding better paths.
+ *
+ * U-turn avoidance: the first move out of the start node and the last
+ * move into the end node are masked so the cable can't double back over
+ * its own leader at either pedal.
+ */
+function routeAStar(
+  from: { xIn: number; yIn: number; side: Side },
+  to: { xIn: number; yIn: number; side: Side },
+  obstacles: readonly ObstacleRect[],
+  options: RouteOptions,
+): { xIn: number; yIn: number }[] | null {
+  const EDGE_EPS = 0.02;
+  const xsRaw: number[] = [from.xIn, to.xIn];
+  const ysRaw: number[] = [from.yIn, to.yIn];
+  for (const r of obstacles) {
+    xsRaw.push(r.xIn - EDGE_EPS, r.xIn + r.widthIn + EDGE_EPS);
+    ysRaw.push(r.yIn - EDGE_EPS, r.yIn + r.depthIn + EDGE_EPS);
+  }
+  // Include a small "outer rail" past the board edge so paths can wrap
+  // around obstacles that touch the rim without leaving the grid.
+  if (options.boardWidthIn !== undefined) {
+    xsRaw.push(-0.5, options.boardWidthIn + 0.5);
+  }
+  if (options.boardDepthIn !== undefined) {
+    ysRaw.push(-0.5, options.boardDepthIn + 0.5);
+  }
+  const xs = sortedDedupNumbers(xsRaw, 0.005);
+  const ys = sortedDedupNumbers(ysRaw, 0.005);
+  const nx = xs.length;
+  const ny = ys.length;
+  if (nx < 2 || ny < 2) return null;
+  const findIdx = (arr: number[], v: number): number => {
+    let best = 0;
+    let bestD = Math.abs(arr[0]! - v);
+    for (let i = 1; i < arr.length; i++) {
+      const d = Math.abs(arr[i]! - v);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  };
+  const startXi = findIdx(xs, from.xIn);
+  const startYi = findIdx(ys, from.yIn);
+  const endXi = findIdx(xs, to.xIn);
+  const endYi = findIdx(ys, to.yIn);
+
+  const segmentClear = (
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+  ): boolean => {
+    const a = { xIn: ax, yIn: ay };
+    const b = { xIn: bx, yIn: by };
+    for (const r of obstacles) {
+      if (segmentHitsRect(a, b, r)) return false;
+    }
+    return true;
+  };
+
+  // Direction codes: 0=up (yi-1), 1=down (yi+1), 2=left (xi-1), 3=right
+  // (xi+1). dir=4 is the "no incoming direction" state used only at the
+  // start node so the first move doesn't pay a turn penalty.
+  const DIRS = 5;
+  const dirDelta: readonly (readonly [number, number])[] = [
+    [0, -1],
+    [0, 1],
+    [-1, 0],
+    [1, 0],
+  ];
+  const reverseDir = (d: number): number => {
+    if (d === 0) return 1;
+    if (d === 1) return 0;
+    if (d === 2) return 3;
+    return 2;
+  };
+  const sideDir = (side: Side): number => {
+    switch (side) {
+      case 'top':
+        return 0;
+      case 'bottom':
+        return 1;
+      case 'left':
+        return 2;
+      case 'right':
+        return 3;
+    }
+  };
+  const fromOutDir = sideDir(from.side);
+  const toOutDir = sideDir(to.side);
+  // First move out of the start node can't reverse the leader (the
+  // leader already extended in fromOutDir — reversing it walks back
+  // into the source pedal). The last move into the end node can't be
+  // in toOutDir (that would arrive going outward past the leader-tip
+  // and U-turn into the dest pedal).
+  const bannedFromStart = reverseDir(fromOutDir);
+  const bannedIntoEnd = toOutDir;
+
+  const TURN_PENALTY = 0.5;
+  const LANE_TOL = 0.3;
+  const LANE_PENALTY = 1.5;
+  const OFF_BOARD_PENALTY = 5.0;
+  const claimedY = options.claimedY ?? [];
+  const claimedX = options.claimedX ?? [];
+  const boardW = options.boardWidthIn;
+  const boardD = options.boardDepthIn;
+
+  const nodeIdx = (xi: number, yi: number): number => xi * ny + yi;
+  const stateIdx = (xi: number, yi: number, dir: number): number =>
+    nodeIdx(xi, yi) * DIRS + dir;
+  const numStates = nx * ny * DIRS;
+  const g = new Float64Array(numStates);
+  g.fill(Number.POSITIVE_INFINITY);
+  const parent = new Int32Array(numStates);
+  parent.fill(-1);
+
+  interface HeapItem {
+    f: number;
+    state: number;
+  }
+  const heap: HeapItem[] = [];
+  const heapPush = (item: HeapItem): void => {
+    heap.push(item);
+    let i = heap.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (heap[p]!.f <= heap[i]!.f) break;
+      const tmp = heap[p]!;
+      heap[p] = heap[i]!;
+      heap[i] = tmp;
+      i = p;
+    }
+  };
+  const heapPop = (): HeapItem | undefined => {
+    if (heap.length === 0) return undefined;
+    const top = heap[0]!;
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let i = 0;
+      const n = heap.length;
+      while (true) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let smallest = i;
+        if (l < n && heap[l]!.f < heap[smallest]!.f) smallest = l;
+        if (r < n && heap[r]!.f < heap[smallest]!.f) smallest = r;
+        if (smallest === i) break;
+        const tmp = heap[smallest]!;
+        heap[smallest] = heap[i]!;
+        heap[i] = tmp;
+        i = smallest;
+      }
+    }
+    return top;
+  };
+
+  const heuristic = (xi: number, yi: number): number =>
+    Math.abs(xs[xi]! - xs[endXi]!) + Math.abs(ys[yi]! - ys[endYi]!);
+
+  const startState = stateIdx(startXi, startYi, 4);
+  g[startState] = 0;
+  heapPush({ f: heuristic(startXi, startYi), state: startState });
+
+  let foundState = -1;
+  // Generous safety bound: state space is small (≤ 5 * nx * ny) but
+  // capping prevents runaway in pathological fixtures.
+  const ITERATION_CAP = numStates * 4;
+  let iterations = 0;
+  while (heap.length > 0 && iterations < ITERATION_CAP) {
+    iterations += 1;
+    const top = heapPop()!;
+    const state = top.state;
+    const dir = state % DIRS;
+    const node = (state - dir) / DIRS;
+    const yi = node % ny;
+    const xi = (node - yi) / ny;
+    // Stale heap entry — accept the current best and move on.
+    if (top.f > g[state]! + heuristic(xi, yi) + 1e-6) continue;
+    if (xi === endXi && yi === endYi && dir !== bannedIntoEnd) {
+      foundState = state;
+      break;
+    }
+    for (let nd = 0; nd < 4; nd++) {
+      // Block the U-turn moves at start / end.
+      if (dir === 4 && nd === bannedFromStart) continue;
+      const delta = dirDelta[nd]!;
+      const nxi = xi + delta[0];
+      const nyi = yi + delta[1];
+      if (nxi < 0 || nxi >= nx || nyi < 0 || nyi >= ny) continue;
+      if (!segmentClear(xs[xi]!, ys[yi]!, xs[nxi]!, ys[nyi]!)) continue;
+      const dx = Math.abs(xs[nxi]! - xs[xi]!);
+      const dy = Math.abs(ys[nyi]! - ys[yi]!);
+      const segLen = dx + dy;
+      if (segLen < 1e-6) continue; // duplicate node from dedup edge case
+      let edge = segLen;
+      if (dir !== 4 && dir !== nd) edge += TURN_PENALTY;
+      // Lane penalty — match `pathScore`'s biasing so A* spreads onto
+      // unclaimed lanes when multiple equal-length paths exist.
+      if (delta[1] !== 0) {
+        // Vertical move — segment lives at xs[xi].
+        const x = xs[xi]!;
+        for (const cx of claimedX) {
+          const d = Math.abs(x - cx);
+          if (d < LANE_TOL) edge += LANE_PENALTY * (1 - d / LANE_TOL);
+        }
+      } else {
+        const y = ys[yi]!;
+        for (const cy of claimedY) {
+          const d = Math.abs(y - cy);
+          if (d < LANE_TOL) edge += LANE_PENALTY * (1 - d / LANE_TOL);
+        }
+      }
+      if (boardW !== undefined && boardD !== undefined) {
+        const px = xs[nxi]!;
+        const py = ys[nyi]!;
+        const overshoot =
+          Math.max(0, -px) +
+          Math.max(0, px - boardW) +
+          Math.max(0, -py) +
+          Math.max(0, py - boardD);
+        if (overshoot > 0) edge += OFF_BOARD_PENALTY * overshoot;
+      }
+      const newG = g[state]! + edge;
+      const newState = stateIdx(nxi, nyi, nd);
+      if (newG < g[newState]!) {
+        g[newState] = newG;
+        parent[newState] = state;
+        heapPush({ f: newG + heuristic(nxi, nyi), state: newState });
+      }
+    }
+  }
+
+  if (foundState === -1) return null;
+
+  // Reconstruct path back to start.
+  const pts: { xIn: number; yIn: number }[] = [];
+  let cur = foundState;
+  while (cur !== -1) {
+    const dir = cur % DIRS;
+    const node = (cur - dir) / DIRS;
+    const yi = node % ny;
+    const xi = (node - yi) / ny;
+    pts.push({ xIn: xs[xi]!, yIn: ys[yi]! });
+    cur = parent[cur]!;
+  }
+  pts.reverse();
+  return pts;
+}
+
+function sortedDedupNumbers(values: number[], tol: number): number[] {
+  const sorted = [...values].sort((a, b) => a - b);
+  const out: number[] = [];
+  for (const v of sorted) {
+    if (out.length === 0 || Math.abs(v - out[out.length - 1]!) > tol) {
+      out.push(v);
+    }
   }
   return out;
 }
