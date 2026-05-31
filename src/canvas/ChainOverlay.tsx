@@ -39,6 +39,13 @@ interface ChainOverlayProps {
 /** Base perpendicular leader length (inches) before any lane offset. */
 const LEADER_BASE_IN = 0.4;
 /**
+ * Stereo cables render as two parallel strands offset perpendicular to
+ * the routed path. Half-gap between strand centerlines, in inches.
+ * Sized so the two strands read as distinct conductors at default zoom
+ * (~50px/in → ~6px gap) without overflowing the lane the router carved.
+ */
+const STEREO_STRAND_OFFSET_IN = 0.06;
+/**
  * Per-lane increment added to the leader length so cables touching the
  * same pedal-side stack on parallel Y lanes. At default zoom (~50px/in)
  * each lane is ~6px apart — visibly distinct from the 2.5px cable
@@ -127,6 +134,61 @@ const LANE_RENDER_SHIFT_IN = 0.2;
 
 interface RoutedCable {
   path: { xIn: number; yIn: number }[];
+}
+
+/**
+ * Miter-offset a polyline perpendicular to its direction of travel.
+ * Used to draw stereo cables as two parallel strands. Offsets each
+ * vertex along its bisector with the standard miter formula so 90°
+ * corners preserve the offset distance on both adjacent segments.
+ *
+ * `offsetIn` is the perpendicular displacement (positive = "left" of
+ * travel direction); pass the negation for the other strand.
+ */
+function offsetPolyline(
+  path: readonly { xIn: number; yIn: number }[],
+  offsetIn: number,
+): { xIn: number; yIn: number }[] {
+  if (path.length < 2) return path.map((p) => ({ xIn: p.xIn, yIn: p.yIn }));
+  const perp = (
+    a: { xIn: number; yIn: number },
+    b: { xIn: number; yIn: number },
+  ) => {
+    const dx = b.xIn - a.xIn;
+    const dy = b.yIn - a.yIn;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: -dy / len, y: dx / len };
+  };
+  const result: { xIn: number; yIn: number }[] = [];
+  for (let i = 0; i < path.length; i++) {
+    const before = i > 0 ? perp(path[i - 1]!, path[i]!) : null;
+    const after = i < path.length - 1 ? perp(path[i]!, path[i + 1]!) : null;
+    let nx: number;
+    let ny: number;
+    if (before && after) {
+      const sx = before.x + after.x;
+      const sy = before.y + after.y;
+      const denom = 1 + before.x * after.x + before.y * after.y;
+      if (Math.abs(denom) < 1e-6) {
+        nx = before.x;
+        ny = before.y;
+      } else {
+        nx = sx / denom;
+        ny = sy / denom;
+      }
+    } else if (before) {
+      nx = before.x;
+      ny = before.y;
+    } else {
+      nx = after!.x;
+      ny = after!.y;
+    }
+    result.push({
+      xIn: path[i]!.xIn + nx * offsetIn,
+      yIn: path[i]!.yIn + ny * offsetIn,
+    });
+  }
+  return result;
 }
 
 /**
@@ -430,6 +492,8 @@ export function ChainOverlay({
       const cableColor = fromColor;
       const isExternal =
         c.fromNodeKind === 'external' || c.toNodeKind === 'external';
+      const isStereo =
+        from.port?.signalType === 'stereo' || to.port?.signalType === 'stereo';
       const fromLaneIdx = leaderLanes.get(`${c.id}:from`) ?? 0;
       const toLaneIdx = leaderLanes.get(`${c.id}:to`) ?? 0;
       const path = routeCableWithLeader(
@@ -449,7 +513,17 @@ export function ChainOverlay({
       const lanes = pathLanes(path);
       for (const y of lanes.horizontalY) claimedY.push(y);
       for (const x of lanes.verticalX) claimedX.push(x);
-      return { c, from, to, path, cableColor, fromColor, toColor, isExternal };
+      return {
+        c,
+        from,
+        to,
+        path,
+        cableColor,
+        fromColor,
+        toColor,
+        isExternal,
+        isStereo,
+      };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
@@ -481,28 +555,45 @@ export function ChainOverlay({
             fromColor,
             toColor,
             isExternal,
+            isStereo,
           }) => {
-            const d = path
-              .map((p, i) => {
-                const cmd = i === 0 ? 'M' : 'L';
-                return `${cmd} ${p.xIn * pxPerInch} ${p.yIn * pxPerInch}`;
-              })
-              .join(' ');
+            const toD = (pts: readonly { xIn: number; yIn: number }[]) =>
+              pts
+                .map((p, i) => {
+                  const cmd = i === 0 ? 'M' : 'L';
+                  return `${cmd} ${p.xIn * pxPerInch} ${p.yIn * pxPerInch}`;
+                })
+                .join(' ');
             const fromCx = from.xIn * pxPerInch;
             const fromCy = from.yIn * pxPerInch;
             const toCx = to.xIn * pxPerInch;
             const toCy = to.yIn * pxPerInch;
+            // Stereo cables render as two parallel strands so they read
+            // as two conductors at a glance. Each strand is a thinner
+            // stroke than the mono 2.5px line; together they cover the
+            // same visual weight while encoding the physical reality.
+            const dashArray = isExternal ? '5 3' : undefined;
+            const strandPaths = isStereo
+              ? [
+                  offsetPolyline(path, STEREO_STRAND_OFFSET_IN),
+                  offsetPolyline(path, -STEREO_STRAND_OFFSET_IN),
+                ]
+              : [path];
+            const strandWidth = isStereo ? 1.6 : 2.5;
             return (
               <g key={c.id}>
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={cableColor}
-                  strokeWidth={2.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeDasharray={isExternal ? '5 3' : undefined}
-                />
+                {strandPaths.map((strand, i) => (
+                  <path
+                    key={i}
+                    d={toD(strand)}
+                    fill="none"
+                    stroke={cableColor}
+                    strokeWidth={strandWidth}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray={dashArray}
+                  />
+                ))}
                 {/* End-caps: colored dots at each pedal port. Slightly
                   larger than the cable stroke so the connection visibly
                   "plugs into" the pedal edge. External endpoints render
