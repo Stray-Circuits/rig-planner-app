@@ -1,4 +1,11 @@
-import type { Pedal, PlacedPedal, Port, Rig, Side } from '../data/schema';
+import type {
+  JackSize,
+  Pedal,
+  PlacedPedal,
+  Port,
+  Rig,
+  Side,
+} from '../data/schema';
 
 /** Footprint of a placed pedal, accounting for 90/270 rotation. */
 export function placedFootprint(
@@ -39,7 +46,7 @@ export function clampToBoard(
  * should clip to rig bounds when rendering.
  *
  * Per-jack barrel lengths come from real-world plug bodies:
- *   - Audio: 15.88mm (~0.625"), the body of a standard 1/4" jack plug.
+ *   - Audio: rig-configurable (see {@link JACK_SIZE_INCHES}).
  *   - MIDI:  15mm    (~0.5906"), a typical 5-pin DIN / TRS-MIDI barrel.
  *   - Power: 12mm    (~0.4724"), a standard center-negative 2.1mm barrel.
  *
@@ -47,15 +54,27 @@ export function clampToBoard(
  * largest of the present types (they don't sum — only the longest plug
  * dictates how much room cables actually need).
  */
-export const KEEP_OUT_AUDIO_INCHES = 0.625; // ~15.88 mm
+/**
+ * Audio jack barrel length per {@link JackSize}. Sizes from issue #16:
+ *   - small  = EBS / flat ribbon (~0.25")
+ *   - medium = pancake / Switchcraft 228 (~0.4375")
+ *   - large  = standard Switchcraft 226 (~0.625")
+ */
+export const JACK_SIZE_INCHES: Record<JackSize, number> = {
+  small: 0.25,
+  medium: 0.4375,
+  large: 0.625,
+};
 export const KEEP_OUT_MIDI_INCHES = 15 / 25.4;
 export const KEEP_OUT_POWER_INCHES = 12 / 25.4;
 
 export function keepOutRect(
   placed: PlacedPedal,
   pedal: Pedal,
+  jackSize: JackSize,
 ): { xIn: number; yIn: number; widthIn: number; depthIn: number } {
   const { widthIn, depthIn } = placedFootprint(pedal, placed.rotation);
+  const audioPad = JACK_SIZE_INCHES[jackSize];
   // Translate each logical jack-bearing side to its visual side after
   // rotation, then take the largest required pad per visual side.
   const padBySide: Record<Side, number> = {
@@ -69,10 +88,10 @@ export function keepOutRect(
     if (value > padBySide[v]) padBySide[v] = value;
   };
   const j = pedal.jackSides;
-  if (j.top) bump('top', KEEP_OUT_AUDIO_INCHES);
-  if (j.bottom) bump('bottom', KEEP_OUT_AUDIO_INCHES);
-  if (j.left) bump('left', KEEP_OUT_AUDIO_INCHES);
-  if (j.right) bump('right', KEEP_OUT_AUDIO_INCHES);
+  if (j.top) bump('top', audioPad);
+  if (j.bottom) bump('bottom', audioPad);
+  if (j.left) bump('left', audioPad);
+  if (j.right) bump('right', audioPad);
   if (j.midi_top) bump('top', KEEP_OUT_MIDI_INCHES);
   if (j.midi_bottom) bump('bottom', KEEP_OUT_MIDI_INCHES);
   if (j.midi_left) bump('left', KEEP_OUT_MIDI_INCHES);
@@ -107,11 +126,12 @@ export function rectsOverlap(
 export function overlappingPlacedIds(
   placed: readonly PlacedPedal[],
   pedalsById: Map<string, Pedal>,
+  jackSize: JackSize,
 ): Set<string> {
   const rects = placed
     .map((p) => {
       const def = pedalsById.get(p.pedalId);
-      return def ? { id: p.id, rect: keepOutRect(p, def) } : null;
+      return def ? { id: p.id, rect: keepOutRect(p, def, jackSize) } : null;
     })
     .filter(
       (x): x is { id: string; rect: ReturnType<typeof keepOutRect> } =>

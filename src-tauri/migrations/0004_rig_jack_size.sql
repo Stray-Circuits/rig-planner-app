@@ -1,0 +1,1 @@
+ALTER TABLE rigs ADD COLUMN jack_size TEXT NOT NULL DEFAULT 'large';

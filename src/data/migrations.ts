@@ -109,4 +109,11 @@ export const MIGRATIONS: Migration[] = [
     description: 'rigs: track which BoardPreset the user picked',
     statements: [`ALTER TABLE rigs ADD COLUMN preset_id TEXT`],
   },
+  {
+    version: 4,
+    description: 'rigs: per-rig patch-cable jack size',
+    statements: [
+      `ALTER TABLE rigs ADD COLUMN jack_size TEXT NOT NULL DEFAULT 'large'`,
+    ],
+  },
 ];

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Rig } from '../data/schema';
+import type { JackSize, Rig } from '../data/schema';
 import {
   createRig as repoCreate,
   deleteRig as repoDelete,
@@ -9,6 +9,7 @@ import {
   touchRig as repoTouch,
   updateRigBoard as repoUpdateBoard,
   updateRigDimensions as repoUpdateDimensions,
+  updateRigJackSize as repoUpdateJackSize,
   updateRigStyle as repoUpdateStyle,
 } from '../data/rigsRepo';
 import { useUiStore } from './uiStore';
@@ -42,6 +43,7 @@ interface RigsState {
     style: Rig['style'],
     presetId: string | null,
   ) => Promise<void>;
+  updateJackSize: (id: string, jackSize: JackSize) => Promise<void>;
   duplicateRig: (id: string) => Promise<Rig>;
   deleteRig: (id: string) => Promise<void>;
   openRig: (id: string) => Promise<void>;
@@ -104,6 +106,13 @@ export const useRigsStore = create<RigsState>((set, get) => ({
       rigs: get().rigs.map((r) =>
         r.id === id ? { ...r, widthIn, depthIn, style, presetId } : r,
       ),
+    });
+  },
+
+  updateJackSize: async (id, jackSize) => {
+    await repoUpdateJackSize(id, jackSize);
+    set({
+      rigs: get().rigs.map((r) => (r.id === id ? { ...r, jackSize } : r)),
     });
   },
 

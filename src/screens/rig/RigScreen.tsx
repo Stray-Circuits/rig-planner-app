@@ -80,6 +80,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
 
   const renameRig = useRigsStore((s) => s.renameRig);
   const updateBoard = useRigsStore((s) => s.updateBoard);
+  const updateJackSize = useRigsStore((s) => s.updateJackSize);
   const deleteRig = useRigsStore((s) => s.deleteRig);
 
   const connections = useSignalChainStore(
@@ -723,6 +724,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             pedalsById,
           );
         }}
+        onChangeJackSize={(jackSize) => updateJackSize(rig.id, jackSize)}
         onDelete={async () => {
           await deleteRig(rig.id);
           setSettingsOpen(false);

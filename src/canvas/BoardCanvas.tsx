@@ -125,8 +125,8 @@ function BoardCanvasInner(
 ) {
   const warnings = unconnectedRequired ?? EMPTY_WARNING_SET;
   const overlapping = useMemo(
-    () => overlappingPlacedIds(placed, pedalsById),
-    [placed, pedalsById],
+    () => overlappingPlacedIds(placed, pedalsById, rig.jackSize),
+    [placed, pedalsById, rig.jackSize],
   );
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -381,7 +381,7 @@ function BoardCanvasInner(
         {placed.map((p) => {
           const def = pedalsById.get(p.pedalId);
           if (!def) return null;
-          const r = keepOutRect(p, def);
+          const r = keepOutRect(p, def, rig.jackSize);
           const isOverlapping = overlapping.has(p.id);
           return (
             <div

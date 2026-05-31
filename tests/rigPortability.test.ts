@@ -22,6 +22,7 @@ function makeRig(overrides: Partial<Rig> = {}): Rig {
     depthIn: 16,
     style: 'rail',
     presetId: null,
+    jackSize: 'large',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
     ...overrides,
