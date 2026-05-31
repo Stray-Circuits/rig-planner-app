@@ -155,6 +155,7 @@ export const usePlacedPedalsStore = create<PlacedState>((set, get) => ({
       depthIn: rig.depthIn,
       style: 'plain',
       presetId: null,
+      jackSize: 'large',
       createdAt: '',
       updatedAt: '',
     };

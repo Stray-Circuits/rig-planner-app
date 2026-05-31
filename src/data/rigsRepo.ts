@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import type { BoardStyle, Rig } from './schema';
+import type { BoardStyle, JackSize, Rig } from './schema';
 import { newId } from '../lib/ids';
 
 interface RigRow {
@@ -9,14 +9,22 @@ interface RigRow {
   depth_in: number;
   style: string;
   preset_id: string | null | undefined;
+  jack_size: string | null | undefined;
   created_at: string;
   updated_at: string;
 }
 
 const VALID_STYLES: readonly BoardStyle[] = ['rail', 'plain', 'wood', 'holes'];
+const VALID_JACK_SIZES: readonly JackSize[] = ['small', 'medium', 'large'];
 
 function isStyle(s: string): s is BoardStyle {
   return (VALID_STYLES as readonly string[]).includes(s);
+}
+
+function isJackSize(s: unknown): s is JackSize {
+  return (
+    typeof s === 'string' && (VALID_JACK_SIZES as readonly string[]).includes(s)
+  );
 }
 
 function fromRow(r: RigRow): Rig {
@@ -30,6 +38,7 @@ function fromRow(r: RigRow): Rig {
     depthIn: r.depth_in,
     style: r.style,
     presetId: r.preset_id ?? null,
+    jackSize: isJackSize(r.jack_size) ? r.jack_size : 'large',
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -41,6 +50,7 @@ export interface CreateRigInput {
   depthIn: number;
   style: BoardStyle;
   presetId?: string | null;
+  jackSize?: JackSize;
 }
 
 export async function listRigs(): Promise<Rig[]> {
@@ -67,8 +77,8 @@ export async function createRig(input: CreateRigInput): Promise<Rig> {
   const id = newId();
   const db = await getDb();
   await db.execute(
-    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       name,
@@ -76,6 +86,7 @@ export async function createRig(input: CreateRigInput): Promise<Rig> {
       input.depthIn,
       input.style,
       input.presetId ?? null,
+      input.jackSize ?? 'large',
     ],
   );
   const created = await getRig(id);
@@ -119,6 +130,17 @@ export async function updateRigDimensions(
   );
 }
 
+export async function updateRigJackSize(
+  id: string,
+  jackSize: JackSize,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE rigs SET jack_size = ?, updated_at = datetime('now') WHERE id = ?`,
+    [jackSize, id],
+  );
+}
+
 /** Atomically swap board dimensions + style + preset. Used when "changing the board" via the picker. */
 export async function updateRigBoard(
   id: string,
@@ -143,8 +165,8 @@ export async function duplicateRig(id: string): Promise<Rig> {
   const newRigId = newId();
   const db = await getDb();
   await db.execute(
-    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       newRigId,
       `${source.name} (copy)`,
@@ -152,6 +174,7 @@ export async function duplicateRig(id: string): Promise<Rig> {
       source.depthIn,
       source.style,
       source.presetId,
+      source.jackSize,
     ],
   );
   // Copy placed pedals, external endpoints, connections. IDs are remapped

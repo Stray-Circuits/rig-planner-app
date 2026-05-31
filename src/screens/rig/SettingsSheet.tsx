@@ -3,6 +3,7 @@ import type {
   BoardStyle,
   ExternalEndpoint,
   ExternalEndpointKind,
+  JackSize,
   Rig,
 } from '../../data/schema';
 import { findPreset, resolveBoardImageSrc } from '../../data/boardPresets';
@@ -32,6 +33,7 @@ interface SettingsSheetProps {
     presetId: string | null,
   ) => Promise<void>;
   onChangeFloor: (style: FloorStyle) => void;
+  onChangeJackSize: (jackSize: JackSize) => Promise<void>;
   onAddEndpoint: (kind: ExternalEndpointKind, label: string) => Promise<void>;
   onRemoveEndpoint: (endpointId: string) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -46,6 +48,25 @@ const ENDPOINT_KIND_LABELS: Record<ExternalEndpointKind, string> = {
   amp_fx_return: 'FX return',
   custom: 'Custom',
 };
+
+interface JackSizeOption {
+  id: JackSize;
+  label: string;
+  /** Example product the size mirrors, kept short to fit the chip. */
+  example: string;
+}
+
+/**
+ * Jack size options surfaced in Settings. Display order is small → large
+ * so users read the spectrum left-to-right; the default is 'large'
+ * (mirrors the conservative real-world Switchcraft 226 barrel that the
+ * keep-out rect was originally tuned for).
+ */
+const JACK_SIZE_OPTIONS: readonly JackSizeOption[] = [
+  { id: 'small', label: 'Small', example: 'EBS / flat ribbon' },
+  { id: 'medium', label: 'Medium', example: 'Pancake / SC 228' },
+  { id: 'large', label: 'Large', example: 'Switchcraft 226' },
+];
 
 /**
  * Settings sheet for the active rig.
@@ -66,6 +87,7 @@ export function SettingsSheet({
   onRename,
   onChangeBoard,
   onChangeFloor,
+  onChangeJackSize,
   onAddEndpoint,
   onRemoveEndpoint,
   onDelete,
@@ -364,6 +386,36 @@ export function SettingsSheet({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className={styles.field}>
+            <span className={styles.label}>Patch cable jack size</span>
+            <div className={styles.jackChips} role="radiogroup">
+              {JACK_SIZE_OPTIONS.map((opt) => {
+                const active = rig.jackSize === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`${styles.jackChip} ${
+                      active ? styles.jackChipActive : ''
+                    }`}
+                    onClick={() => {
+                      if (!active) void onChangeJackSize(opt.id);
+                    }}
+                  >
+                    <span className={styles.jackChipName}>{opt.label}</span>
+                    <span className={styles.jackChipMeta}>{opt.example}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className={styles.jackHint}>
+              Sets the keep-out space around each pedal so cables fit. Pick the
+              bulkiest plug you actually run.
+            </p>
           </div>
 
           <div className={styles.field}>

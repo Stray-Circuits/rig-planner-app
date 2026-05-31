@@ -24,6 +24,12 @@ pub fn run() {
             sql: include_str!("../migrations/0003_rig_preset_id.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "rigs: per-rig patch-cable jack size",
+            sql: include_str!("../migrations/0004_rig_jack_size.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
