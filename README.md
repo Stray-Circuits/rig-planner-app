@@ -99,3 +99,87 @@ today.
 
 Docker picks the host architecture by default. Override with
 `RIG_PLANNER_ANDROID_PLATFORM=linux/amd64` if you need to cross-build.
+
+## Android live-reload dev loop (host SDK)
+
+The container path above only builds debug APKs. To get live-reload + adb
+logcat on a connected device or emulator, you need a full host Android
+toolchain. This is the path to use when debugging Android-specific issues
+(e.g. anything where you need real-time webview console output or a profiler
+attached).
+
+> Heads-up: don't run `pnpm tauri:android:dev` while a container build is in
+> flight — both share `src-tauri/target/` and cargo will trip over the lock.
+
+### One-time host setup (macOS)
+
+1. **Install Android Studio** from <https://developer.android.com/studio>.
+   Open it once so it can finish first-run setup.
+2. **Install SDK components** via Android Studio → Settings → Languages &
+   Frameworks → Android SDK:
+   - SDK Platforms tab → check **Android 14 (API 34)**.
+   - SDK Tools tab → check **Android SDK Build-Tools**, **Android SDK
+     Platform-Tools** (adb), **Android SDK Command-line Tools (latest)**,
+     **CMake**, and **NDK (Side by side)** — install NDK **26.3.11579264**
+     to match the version pinned in the container Dockerfile. Apply.
+3. **Set toolchain env vars** in your shell rc (`~/.zshrc`):
+
+   ```sh
+   export ANDROID_HOME="$HOME/Library/Android/sdk"
+   export NDK_HOME="$ANDROID_HOME/ndk/26.3.11579264"
+   export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+   ```
+
+   Reload your shell, then sanity-check: `adb --version` and `ls "$NDK_HOME"`
+   should both succeed.
+4. **Install Rust Android targets:**
+
+   ```sh
+   rustup target add aarch64-linux-android armv7-linux-androideabi \
+     i686-linux-android x86_64-linux-android
+   ```
+5. **Generate the Android project** (skip if `src-tauri/gen/android/`
+   already exists from a prior container init):
+
+   ```sh
+   pnpm tauri:android:init
+   ```
+
+### Pick a device
+
+- **Emulator:** Android Studio → Device Manager → create a Pixel-class AVD
+  on API 34, start it. `adb devices` should list `emulator-5554`. The
+  emulator reaches the host dev server through its `10.0.2.2` alias, which
+  Tauri handles for you when you launch dev without `--host`.
+- **USB device:** enable Developer Options → USB debugging on the phone,
+  plug in, accept the RSA prompt. `adb devices` should list the serial.
+  `tauri android dev` runs `adb reverse tcp:1420 tcp:1420` automatically so
+  the device's `localhost:1420` tunnels back to the host Vite server.
+- **Wi-Fi device:** pass `--host` so Vite binds to your LAN IP and the
+  device loads the dev URL over the network. Find your IP with
+  `ipconfig getifaddr en0`, then run `pnpm tauri:android:dev --host
+  <that-ip>`. Phone and Mac must be on the same network.
+
+### Run it
+
+```sh
+pnpm tauri:android:dev          # emulator or USB device
+pnpm tauri:android:dev --host 192.168.1.42   # Wi-Fi device
+```
+
+First launch compiles the Rust shell for the target ABI (slow); subsequent
+launches reuse `src-tauri/target/`. Vite HMR pushes JS/CSS changes without a
+reinstall; changes to Rust code or `tauri.conf.json` trigger a rebuild and
+reinstall.
+
+### Logs
+
+```sh
+adb logcat -s RustStdoutStderr Tauri Chromium WebView     # native + webview console
+adb logcat -c                                              # clear buffer
+```
+
+Chrome DevTools attaches to the in-app webview via
+`chrome://inspect/#devices` (USB device or emulator must be visible to
+`adb devices`).
+
