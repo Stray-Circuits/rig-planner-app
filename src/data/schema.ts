@@ -40,6 +40,17 @@ export type Connector = 'ts' | 'trs' | 'xlr' | 'midi_din' | 'midi_trs';
 
 export type BoardStyle = 'rail' | 'plain' | 'wood' | 'holes';
 
+/**
+ * Patch-cable jack body size. Drives the per-side keep-out pad on every
+ * pedal in the rig. Sizes mirror real-world plug bodies (issue #16):
+ *   - small  = EBS-ribbon / flat ribbon (~0.25" / 6.35mm)
+ *   - medium = pancake / Switchcraft 228 (~0.4375" / 11.11mm)
+ *   - large  = standard angled Switchcraft 226 (~0.625" / 15.88mm)
+ * "large" is the default because it's the conservative case — picking
+ * smaller cables only ever frees up space, never overflows it.
+ */
+export type JackSize = 'small' | 'medium' | 'large';
+
 export type ExternalEndpointKind =
   | 'guitar'
   | 'amp_in'
@@ -133,6 +144,13 @@ export interface Rig {
    * renderer falls back to the closest Pedaltrain image, scaled.
    */
   presetId: string | null;
+  /**
+   * Per-rig patch-cable jack body size (see {@link JackSize}). Defaults
+   * to 'large'. Pedals get a keep-out pad sized for this value on every
+   * side that has an audio jack; MIDI and power barrels still use their
+   * own physical-spec sizes (longer of the two wins per side).
+   */
+  jackSize: JackSize;
   createdAt: string;
   updatedAt: string;
 }

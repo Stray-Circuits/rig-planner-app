@@ -25,6 +25,7 @@ const mkRig = (
   depthIn: 8,
   style: 'rail',
   presetId: null,
+  jackSize: 'large',
   createdAt: '',
   updatedAt: '',
   ...overrides,

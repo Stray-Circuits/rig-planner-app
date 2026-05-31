@@ -64,7 +64,15 @@ describe('rigsRepo.createRig', () => {
     });
 
     const insert = db.executes.find((c) => c.sql.includes('INSERT INTO rigs'));
-    expect(insert?.params).toEqual([created.id, 'My rig', 24, 8, 'rail', null]);
+    expect(insert?.params).toEqual([
+      created.id,
+      'My rig',
+      24,
+      8,
+      'rail',
+      null,
+      'large',
+    ]);
     expect(created.name).toBe('My rig');
   });
 
@@ -92,6 +100,7 @@ describe('rigsRepo.createRig', () => {
       5.5,
       'rail',
       'pedaltrain-nano',
+      'large',
     ]);
     expect(created.presetId).toBe('pedaltrain-nano');
   });

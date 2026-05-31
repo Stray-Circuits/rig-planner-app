@@ -12,6 +12,7 @@ const baseRow = (id: string, name = 'A') => ({
   width_in: 24,
   depth_in: 8,
   style: 'rail',
+  jack_size: 'large',
   created_at: '2026-01-01 00:00:00',
   updated_at: '2026-01-02 00:00:00',
 });
@@ -56,6 +57,7 @@ describe('rigsStore', () => {
           depthIn: 8,
           style: 'rail',
           presetId: null,
+          jackSize: 'large',
           createdAt: '',
           updatedAt: '',
         },
@@ -75,6 +77,7 @@ describe('rigsStore', () => {
           depthIn: 8,
           style: 'rail',
           presetId: null,
+          jackSize: 'large',
           createdAt: '',
           updatedAt: '',
         },

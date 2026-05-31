@@ -153,7 +153,17 @@ export function parseRigExport(text: string): RigExport {
   const presetIdRaw = rigObj.presetId;
   const presetId: string | null =
     typeof presetIdRaw === 'string' ? presetIdRaw : null;
-  const rig = { ...rigObj, presetId } as unknown as Rig;
+  // jackSize is optional in older exports — default to the conservative
+  // 'large' size when missing so existing rigs keep their previous
+  // keep-out spacing.
+  const jackSizeRaw = rigObj.jackSize;
+  const jackSize: Rig['jackSize'] =
+    jackSizeRaw === 'small' ||
+    jackSizeRaw === 'medium' ||
+    jackSizeRaw === 'large'
+      ? jackSizeRaw
+      : 'large';
+  const rig = { ...rigObj, presetId, jackSize } as unknown as Rig;
 
   const pedals = requireArray(raw, 'pedals') as Pedal[];
   const placedPedals = requireArray(raw, 'placedPedals') as PlacedPedal[];

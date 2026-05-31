@@ -159,7 +159,7 @@ export async function importRig(exp: RigExport): Promise<ImportRigResult> {
   if (existing) {
     await clearRigChildren(exp.rig.id);
     await db.execute(
-      `UPDATE rigs SET name = ?, width_in = ?, depth_in = ?, style = ?, preset_id = ?, updated_at = datetime('now')
+      `UPDATE rigs SET name = ?, width_in = ?, depth_in = ?, style = ?, preset_id = ?, jack_size = ?, updated_at = datetime('now')
        WHERE id = ?`,
       [
         exp.rig.name,
@@ -167,13 +167,14 @@ export async function importRig(exp: RigExport): Promise<ImportRigResult> {
         exp.rig.depthIn,
         exp.rig.style,
         exp.rig.presetId ?? null,
+        exp.rig.jackSize,
         exp.rig.id,
       ],
     );
   } else {
     await db.execute(
-      `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         exp.rig.id,
         exp.rig.name,
@@ -181,6 +182,7 @@ export async function importRig(exp: RigExport): Promise<ImportRigResult> {
         exp.rig.depthIn,
         exp.rig.style,
         exp.rig.presetId ?? null,
+        exp.rig.jackSize,
       ],
     );
   }
