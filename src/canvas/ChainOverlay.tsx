@@ -17,7 +17,11 @@ import {
   routeCableWithLeader,
   type ObstacleRect,
 } from '../lib/geometry';
-import { colorForPort, colorForSignal } from '../lib/signalColors';
+import {
+  colorForPort,
+  colorForSignal,
+  STEREO_STRAND_COLORS,
+} from '../lib/signalColors';
 import { sortConnectionsForRender } from '../lib/signalChainWarnings';
 import styles from './ChainOverlay.module.css';
 
@@ -489,15 +493,24 @@ export function ChainOverlay({
       const toColor = to.port
         ? colorForPort(to.port)
         : colorForSignal(to.signalType ?? 'instrument');
-      const cableColor = fromColor;
       const isExternal =
         c.fromNodeKind === 'external' || c.toNodeKind === 'external';
       // Parallel strands only when BOTH ends are stereo — i.e. a true
       // TRS→TRS single cable carrying L+R. A TRS port split into two
       // mono TS connections (Y-cable / insert split) is two separate
       // single-conductor cables and should render normally.
-      const isStereo =
-        from.port?.signalType === 'stereo' && to.port?.signalType === 'stereo';
+      const fromIsStereo = from.port?.signalType === 'stereo';
+      const toIsStereo = to.port?.signalType === 'stereo';
+      const isStereo = fromIsStereo && toIsStereo;
+      // When one end is a stereo TRS Y-split into a mono TS, the cable
+      // color follows the L/R channel of the mono end (the stereo end
+      // alone doesn't know which channel this leg carries).
+      const cableColor =
+        fromIsStereo && !toIsStereo
+          ? toColor
+          : toIsStereo && !fromIsStereo
+            ? fromColor
+            : fromColor;
       const fromLaneIdx = leaderLanes.get(`${c.id}:from`) ?? 0;
       const toLaneIdx = leaderLanes.get(`${c.id}:to`) ?? 0;
       const path = routeCableWithLeader(
@@ -576,22 +589,34 @@ export function ChainOverlay({
             // as two conductors at a glance. Each strand is a thinner
             // stroke than the mono 2.5px line; together they cover the
             // same visual weight while encoding the physical reality.
+            // The two strands are colored L (green) + R (vermillion)
+            // from STEREO_STRAND_COLORS so the cable carries the same
+            // channel cues as a pair of mono Y-split cables would.
             const dashArray = isExternal ? '5 3' : undefined;
-            const strandPaths = isStereo
+            const strands: {
+              path: { xIn: number; yIn: number }[];
+              color: string;
+            }[] = isStereo
               ? [
-                  offsetPolyline(path, STEREO_STRAND_OFFSET_IN),
-                  offsetPolyline(path, -STEREO_STRAND_OFFSET_IN),
+                  {
+                    path: offsetPolyline(path, STEREO_STRAND_OFFSET_IN),
+                    color: STEREO_STRAND_COLORS[0],
+                  },
+                  {
+                    path: offsetPolyline(path, -STEREO_STRAND_OFFSET_IN),
+                    color: STEREO_STRAND_COLORS[1],
+                  },
                 ]
-              : [path];
+              : [{ path, color: cableColor }];
             const strandWidth = isStereo ? 1.6 : 2.5;
             return (
               <g key={c.id}>
-                {strandPaths.map((strand, i) => (
+                {strands.map((strand, i) => (
                   <path
                     key={i}
-                    d={toD(strand)}
+                    d={toD(strand.path)}
                     fill="none"
-                    stroke={cableColor}
+                    stroke={strand.color}
                     strokeWidth={strandWidth}
                     strokeLinecap="round"
                     strokeLinejoin="round"
