@@ -45,10 +45,15 @@ const LEADER_BASE_IN = 0.4;
 /**
  * Stereo cables render as two parallel strands offset perpendicular to
  * the routed path. Half-gap between strand centerlines, in inches.
- * Sized so the two strands read as distinct conductors at default zoom
- * (~50px/in → ~6px gap) without overflowing the lane the router carved.
+ * At default zoom (~50px/in) this is ~4.5px centre-to-centre, leaving
+ * ~2px of background showing between the two 2.2px strokes — closer
+ * and chunkier than the first pass so the cable reads as one solid
+ * stereo pair rather than two faint lines.
  */
-const STEREO_STRAND_OFFSET_IN = 0.06;
+const STEREO_STRAND_OFFSET_IN = 0.045;
+/** Stroke width per stereo strand. Tighter than the mono 2.5px but
+ *  the pair together carries more visual weight. */
+const STEREO_STRAND_WIDTH_PX = 2.2;
 /**
  * Per-lane increment added to the leader length so cables touching the
  * same pedal-side stack on parallel Y lanes. At default zoom (~50px/in)
@@ -118,6 +123,76 @@ function computeLeaderLanes(
     });
   }
   return result;
+}
+
+/**
+ * Stereo channel role assigned to each cable for rendering purposes.
+ * 'stereo' marks a true TRS↔TRS cable carrying L+R on one conductor
+ * pair; 'L' / 'R' mark each leg of a Y-split off a stereo TRS port.
+ */
+type CableChannel = 'stereo' | 'L' | 'R';
+
+function computeCableChannels(
+  connections: readonly Connection[],
+  portIndex: Map<string, Map<string, ResolvedPort>>,
+): Map<string, CableChannel> {
+  const out = new Map<string, CableChannel>();
+  // Cables that touch a stereo TRS port but couldn't be tagged by an
+  // explicit L/R role on the OTHER end. Keyed by `${placedId}:${portId}`
+  // of the stereo end → list of connection ids in declaration order.
+  // Sorted + assigned L/R after the first pass.
+  const pendingByStereoPort = new Map<string, string[]>();
+
+  const portFor = (
+    nodeKind: 'pedal' | 'external',
+    nodeId: string,
+    portId: string | null,
+  ): Port | null => {
+    if (nodeKind !== 'pedal' || !portId) return null;
+    return portIndex.get(nodeId)?.get(portId)?.port ?? null;
+  };
+
+  for (const c of connections) {
+    const fromPort = portFor(c.fromNodeKind, c.fromNodeId, c.fromPortId);
+    const toPort = portFor(c.toNodeKind, c.toNodeId, c.toPortId);
+    const fromStereo = fromPort?.signalType === 'stereo';
+    const toStereo = toPort?.signalType === 'stereo';
+    if (fromStereo && toStereo) {
+      out.set(c.id, 'stereo');
+      continue;
+    }
+    if (!fromStereo && !toStereo) continue;
+    // Exactly one end is stereo — figure out which channel this leg
+    // carries. Prefer an explicit L/R role on the other end; fall back
+    // to deferred per-port indexing.
+    const otherPort = fromStereo ? toPort : fromPort;
+    if (otherPort) {
+      if (otherPort.role === 'input_r' || otherPort.role === 'output_r') {
+        out.set(c.id, 'R');
+        continue;
+      }
+      if (otherPort.role === 'input_l' || otherPort.role === 'output_l') {
+        out.set(c.id, 'L');
+        continue;
+      }
+    }
+    const stereoKey = fromStereo
+      ? `${c.fromNodeId}:${c.fromPortId}`
+      : `${c.toNodeId}:${c.toPortId}`;
+    const arr = pendingByStereoPort.get(stereoKey) ?? [];
+    arr.push(c.id);
+    pendingByStereoPort.set(stereoKey, arr);
+  }
+
+  for (const ids of pendingByStereoPort.values()) {
+    // Stable order by connection id so the L/R assignment doesn't
+    // shuffle as unrelated cables are added/removed elsewhere.
+    ids.sort();
+    ids.forEach((id, idx) => {
+      out.set(id, idx === 0 ? 'L' : 'R');
+    });
+  }
+  return out;
 }
 
 /**
@@ -462,6 +537,17 @@ export function ChainOverlay({
     portIndex,
     pedalsById,
   );
+  // Assign each cable a stereo channel role. Drives the cable color:
+  //   'stereo' → render as parallel L+R strands (true TRS↔TRS cable)
+  //   'L' / 'R' → single strand in that channel's color (Y-split leg
+  //               from a stereo TRS port to a mono TS)
+  //   null     → not a stereo cable; use the normal signal color
+  // For Y-splits we prefer an explicit input_l/output_l/_r role on the
+  // mono end when present; otherwise we sort the cables on the stereo
+  // TRS port by id and assign the first one L, the second R. That
+  // works for the common case where the user wires two generic mono
+  // inputs and never tagged them L/R.
+  const cableChannel = computeCableChannels(orderedConnections, portIndex);
   const claimedY: number[] = [];
   const claimedX: number[] = [];
   const routedCables = orderedConnections
@@ -495,21 +581,16 @@ export function ChainOverlay({
         : colorForSignal(to.signalType ?? 'instrument');
       const isExternal =
         c.fromNodeKind === 'external' || c.toNodeKind === 'external';
-      // Parallel strands only when BOTH ends are stereo — i.e. a true
-      // TRS→TRS single cable carrying L+R. A TRS port split into two
-      // mono TS connections (Y-cable / insert split) is two separate
-      // single-conductor cables and should render normally.
-      const fromIsStereo = from.port?.signalType === 'stereo';
-      const toIsStereo = to.port?.signalType === 'stereo';
-      const isStereo = fromIsStereo && toIsStereo;
-      // When one end is a stereo TRS Y-split into a mono TS, the cable
-      // color follows the L/R channel of the mono end (the stereo end
-      // alone doesn't know which channel this leg carries).
+      const channel = cableChannel.get(c.id) ?? null;
+      const isStereo = channel === 'stereo';
+      // Y-split legs (channel = 'L' / 'R') pick up the matching strand
+      // color so two cables off the same TRS port read as left + right
+      // even when both destination ports are generic mono inputs.
       const cableColor =
-        fromIsStereo && !toIsStereo
-          ? toColor
-          : toIsStereo && !fromIsStereo
-            ? fromColor
+        channel === 'R'
+          ? STEREO_STRAND_COLORS[1]
+          : channel === 'L'
+            ? STEREO_STRAND_COLORS[0]
             : fromColor;
       const fromLaneIdx = leaderLanes.get(`${c.id}:from`) ?? 0;
       const toLaneIdx = leaderLanes.get(`${c.id}:to`) ?? 0;
@@ -608,7 +689,7 @@ export function ChainOverlay({
                   },
                 ]
               : [{ path, color: cableColor }];
-            const strandWidth = isStereo ? 1.6 : 2.5;
+            const strandWidth = isStereo ? STEREO_STRAND_WIDTH_PX : 2.5;
             return (
               <g key={c.id}>
                 {strands.map((strand, i) => (
