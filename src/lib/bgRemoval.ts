@@ -1,3 +1,5 @@
+import BgRemovalWorker from './bgRemovalWorker?worker';
+import type { WorkerOutbound } from './bgRemovalWorker';
 import {
   applyColorThreshold,
   dominantColor,
@@ -9,10 +11,10 @@ import {
 /**
  * Background-removal wrapper around `@imgly/background-removal`.
  *
- * The underlying library lazy-loads a ~176MB U²Net model on first use,
- * caches it in IndexedDB, and prefers WebGPU with a WASM fallback. We import
- * it dynamically so the model worker / wasm assets aren't part of the
- * critical bundle.
+ * The library only proxies inference to a worker when device='gpu', and
+ * WebGPU on Android WebView is slower than CPU quint8 (issue #23 traces).
+ * So we wrap our own dedicated worker (`./bgRemovalWorker.ts`) and run the
+ * lib in CPU mode there — keeps the ~14s inference off the main thread.
  *
  * Returns a transparent-background PNG as a Blob. Callers can convert with
  * `URL.createObjectURL` or `blobToDataURL` (below).
@@ -20,7 +22,7 @@ import {
 
 export type BgRemovalPhase =
   | 'preparing-image' // shrinking + decoding the upload
-  | 'loading-library' // dynamic-importing @imgly/background-removal
+  | 'loading-library' // spinning up the worker
   | 'initializing-runtime' // library loaded but ORT/WASM still warming up
   | 'fetching-model' // first-time model download
   | 'processing' // running inference
@@ -39,8 +41,8 @@ export interface RemoveBackgroundOptions {
 
 /**
  * Run background removal on a File or Blob. Resolves to a transparent PNG
- * Blob; rejects if the user cancels via the AbortSignal or if loading the
- * library fails.
+ * Blob; rejects if the user cancels via the AbortSignal or if the worker
+ * fails to load.
  */
 export async function removeBackground(
   source: Blob,
@@ -54,58 +56,58 @@ export async function removeBackground(
 
   onProgress?.({ phase: 'loading-library', fraction: null });
 
-  // Dynamic import — keeps the heavy lib out of the initial bundle.
-  // If we prefetched earlier this resolves instantly; first-time it's the
-  // ~22KB imgly chunk + ~109KB ORT JS.
-  const mod = await import('@imgly/background-removal');
+  const worker = prewarmedWorker ?? new BgRemovalWorker();
+  prewarmedWorker = null;
 
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
+  return new Promise<Blob>((resolve, reject) => {
+    let phase: BgRemovalPhase = 'initializing-runtime';
 
-  // The library doesn't expose a "runtime ready" event — calling
-  // removeBackground triggers ORT WASM instantiation under the hood. This
-  // can take a few seconds with no visible progress; surface that as its
-  // own phase so the user doesn't sit on a stale "Loading…" forever.
-  onProgress?.({ phase: 'initializing-runtime', fraction: null });
+    const settle = (fn: () => void) => {
+      worker.terminate();
+      signal?.removeEventListener('abort', onAbort);
+      fn();
+    };
+    const onAbort = () =>
+      settle(() => reject(new DOMException('Aborted', 'AbortError')));
+    signal?.addEventListener('abort', onAbort);
 
-  let phase: BgRemovalPhase = 'initializing-runtime';
-  const result = await mod.removeBackground(source, {
-    // Per Pixel 8 Pro trace (issue #23): default runs ISNet fp16 ("medium")
-    // synchronously on the main thread, producing a 22s UI freeze. Switching
-    // to the int8-quantized small variant and proxying to a worker is a
-    // single-digit-cost change that addresses both axes.
-    model: 'isnet_quint8',
-    proxyToWorker: true,
-    output: { format: 'image/png', quality: 1 },
-    progress: (key: string, current: number, total: number) => {
-      // Library keys look like `fetch:<filename>` while downloading and
-      // `compute:onnxruntime/...` once inference starts.
-      if (key.startsWith('compute')) {
-        phase = 'processing';
-      } else if (key.startsWith('fetch')) {
-        phase = 'fetching-model';
+    worker.onerror = (e) =>
+      settle(() => reject(new Error(e.message || 'Worker error')));
+    worker.onmessage = (e: MessageEvent<WorkerOutbound>) => {
+      const msg = e.data;
+      if (msg.type === 'progress') {
+        // Library keys look like `fetch:<filename>` while downloading and
+        // `compute:onnxruntime/...` once inference starts.
+        if (msg.key.startsWith('compute')) phase = 'processing';
+        else if (msg.key.startsWith('fetch')) phase = 'fetching-model';
+        const fraction = msg.total > 0 ? msg.current / msg.total : null;
+        onProgress?.({ phase, fraction });
+      } else if (msg.type === 'result') {
+        settle(() => resolve(msg.blob));
+      } else {
+        settle(() => reject(new Error(msg.message)));
       }
-      const fraction = total > 0 ? current / total : null;
-      onProgress?.({ phase, fraction });
-    },
+    };
+
+    onProgress?.({ phase: 'initializing-runtime', fraction: null });
+    worker.postMessage({ source });
   });
-
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-
-  return result;
 }
 
 /**
- * Kick off the bg-removal library load in the background. Safe to call
- * repeatedly — the dynamic-import cache de-dupes. Use this from the wizard's
- * image step so the chunk is ready by the time the user picks a file.
+ * Pre-spawn the bg-removal worker so the chunk + lib import are warm by the
+ * time the user picks a file. Safe to call repeatedly; we only keep one
+ * prewarm worker around and terminate it on the next `removeBackground`
+ * call (which spawns a fresh one).
  */
+let prewarmedWorker: Worker | null = null;
 export function prefetchBgRemoval(): void {
-  // Best-effort; ignore failures so a flaky network doesn't crash the wizard.
-  void import('@imgly/background-removal').catch(() => undefined);
+  if (prewarmedWorker) return;
+  try {
+    prewarmedWorker = new BgRemovalWorker();
+  } catch {
+    // Worker unavailable (e.g. test env) — best-effort, ignore.
+  }
 }
 
 /**
