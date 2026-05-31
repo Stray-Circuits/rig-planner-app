@@ -9,7 +9,7 @@ import { RigThumb } from '../../canvas/RigThumb';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from '../rig/PedalLibrarySheet';
 import { useSignalChainStore } from '../../stores/signalChainStore';
-import { Button, Sheet, SheetItem, TextField } from '../../ui';
+import { Button, Sheet, SheetItem, SpinnerOverlay, TextField } from '../../ui';
 import styles from './RigList.module.css';
 
 const EMPTY_PLACED: never[] = [];
@@ -25,6 +25,7 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
   const loadRigs = useRigsStore((s) => s.loadRigs);
   const pedals = usePedalsStore((s) => s.pedals);
   const pedalsStatus = usePedalsStore((s) => s.status);
+  const pedalImagesReady = usePedalsStore((s) => s.imagesReady);
   const loadPedals = usePedalsStore((s) => s.loadPedals);
   const seedSamples = usePedalsStore((s) => s.seedSamples);
   const loadPlacedForRig = usePlacedPedalsStore((s) => s.loadForRig);
@@ -111,7 +112,11 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
       </header>
       <main className={styles.body}>
         <h1 className={styles.title}>Your Rigs</h1>
-        {status === 'loading' && <p className={styles.empty}>Loading rigs…</p>}
+        {status === 'loading' ||
+        pedalsStatus === 'loading' ||
+        !pedalImagesReady ? (
+          <SpinnerOverlay label="Loading your rigs…" />
+        ) : null}
         {status === 'ready' && (
           <ul className={styles.grid}>
             {rigs.map((rig) => (

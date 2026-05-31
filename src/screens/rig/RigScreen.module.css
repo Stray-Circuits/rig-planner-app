@@ -3,6 +3,7 @@
   flex-direction: column;
   height: 100dvh;
   background: var(--bg);
+  position: relative;
 }
 
 .notice {

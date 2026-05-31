@@ -30,7 +30,7 @@ import { usePedalsStore } from '../../stores/pedalsStore';
 import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
 import { useRigsStore } from '../../stores/rigsStore';
 import { useSignalChainStore } from '../../stores/signalChainStore';
-import { Sheet, SheetItem } from '../../ui';
+import { Sheet, SheetItem, SpinnerOverlay } from '../../ui';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from './PedalLibrarySheet';
 import { PortPickerSheet, type ArmedSource } from './PortPickerSheet';
@@ -64,6 +64,7 @@ interface RigScreenProps {
 export function RigScreen({ rig, onBack }: RigScreenProps) {
   const pedals = usePedalsStore((s) => s.pedals);
   const pedalsStatus = usePedalsStore((s) => s.status);
+  const pedalImagesReady = usePedalsStore((s) => s.imagesReady);
   const loadPedals = usePedalsStore((s) => s.loadPedals);
   const seedSamples = usePedalsStore((s) => s.seedSamples);
 
@@ -487,6 +488,8 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     closeActions();
   };
 
+  const showLoadingOverlay = pedalsStatus === 'loading' || !pedalImagesReady;
+
   return (
     <div className={styles.screen}>
       {notice ? (
@@ -494,6 +497,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           {notice}
         </div>
       ) : null}
+      {showLoadingOverlay ? <SpinnerOverlay label="Loading pedals…" /> : null}
       <CanvasArea
         rig={rig}
         placed={placed}
