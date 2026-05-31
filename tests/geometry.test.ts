@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   centeredOnRig,
   clampToBoard,
+  KEEP_OUT_AUDIO_INCHES,
+  KEEP_OUT_MIDI_INCHES,
+  KEEP_OUT_POWER_INCHES,
   keepOutRect,
   overlappingPlacedIds,
   placedFootprint,
@@ -85,12 +88,12 @@ describe('geometry', () => {
       rotation: 0,
     };
     // The fixture has only top jacks → only the top side should be
-    // padded by KEEP_OUT_INCHES (0.625).
+    // padded by KEEP_OUT_AUDIO_INCHES (0.625").
     expect(keepOutRect(placed, pedal)).toEqual({
       xIn: 4,
-      yIn: 4 - 0.625,
+      yIn: 4 - KEEP_OUT_AUDIO_INCHES,
       widthIn: 3,
-      depthIn: 5 + 0.625,
+      depthIn: 5 + KEEP_OUT_AUDIO_INCHES,
     });
     // Rotated 90°: the logical "top" becomes visual "right", so the right
     // side is padded and the footprint flips to 5×3.
@@ -98,9 +101,75 @@ describe('geometry', () => {
     expect(r90).toEqual({
       xIn: 4,
       yIn: 4,
-      widthIn: 5 + 0.625,
+      widthIn: 5 + KEEP_OUT_AUDIO_INCHES,
       depthIn: 3,
     });
+  });
+
+  it('keepOutRect sizes each side by the longest jack barrel present', () => {
+    const placed: PlacedPedal = {
+      id: 'pl',
+      rigId: 'r',
+      pedalId: 'p',
+      xIn: 0,
+      yIn: 0,
+      rotation: 0,
+    };
+    // Power-only side gets the shortest pad (12mm); MIDI-only side gets
+    // the middle pad (15mm); audio-only side gets the longest (15.88mm).
+    // When audio + MIDI share a side, the audio pad wins — they don't sum.
+    const mixed: Pedal = {
+      ...pedal,
+      jackSides: {
+        top: true, // audio
+        bottom: false,
+        left: false,
+        right: false,
+        midi_top: true, // also MIDI on top → audio dominates
+        midi_bottom: true, // MIDI only
+        midi_left: false,
+        midi_right: false,
+      },
+      powerSide: 'left',
+    };
+    const r = keepOutRect(placed, mixed);
+    expect(r.yIn).toBe(-KEEP_OUT_AUDIO_INCHES);
+    expect(r.depthIn).toBeCloseTo(
+      5 + KEEP_OUT_AUDIO_INCHES + KEEP_OUT_MIDI_INCHES,
+      6,
+    );
+    expect(r.xIn).toBeCloseTo(-KEEP_OUT_POWER_INCHES, 6);
+    expect(r.widthIn).toBeCloseTo(3 + KEEP_OUT_POWER_INCHES, 6);
+  });
+
+  it('keepOutRect respects the powerSide alone', () => {
+    const placed: PlacedPedal = {
+      id: 'pl',
+      rigId: 'r',
+      pedalId: 'p',
+      xIn: 0,
+      yIn: 0,
+      rotation: 0,
+    };
+    const powerOnly: Pedal = {
+      ...pedal,
+      jackSides: {
+        top: false,
+        bottom: false,
+        left: false,
+        right: false,
+        midi_top: false,
+        midi_bottom: false,
+        midi_left: false,
+        midi_right: false,
+      },
+      powerSide: 'right',
+    };
+    const r = keepOutRect(placed, powerOnly);
+    expect(r.yIn).toBe(0);
+    expect(r.depthIn).toBe(5);
+    expect(r.xIn).toBe(0);
+    expect(r.widthIn).toBeCloseTo(3 + KEEP_OUT_POWER_INCHES, 6);
   });
 
   it('rectsOverlap detects strict AABB overlap', () => {

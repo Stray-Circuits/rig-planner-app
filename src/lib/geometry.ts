@@ -31,19 +31,25 @@ export function clampToBoard(
 
 /**
  * "Keep-out" rect for a placed pedal — the footprint extended outward on
- * each side that has at least one jack (audio or MIDI) so cables and
- * jack barrels have room to live. Used to render translucent shadow
- * strips around pedals and to flag overlap.
+ * each side that has at least one jack (audio, MIDI, or power) so cable
+ * barrels have room to live. Used to render translucent shadow strips
+ * around pedals and to flag overlap.
  *
  * Returned in board (inch) coordinates. May extend off the board; callers
  * should clip to rig bounds when rendering.
  *
- * 0.625" matches the body of a standard 1/4" jack plug — the room a
- * cable barrel actually needs before it bends. Bigger values (e.g. the
- * old 1.0") were too pessimistic and produced overlap warnings on tight
- * but real-world layouts.
+ * Per-jack barrel lengths come from real-world plug bodies:
+ *   - Audio: 15.88mm (~0.625"), the body of a standard 1/4" jack plug.
+ *   - MIDI:  15mm    (~0.5906"), a typical 5-pin DIN / TRS-MIDI barrel.
+ *   - Power: 12mm    (~0.4724"), a standard center-negative 2.1mm barrel.
+ *
+ * When multiple jack types share a side, the side is padded by the
+ * largest of the present types (they don't sum — only the longest plug
+ * dictates how much room cables actually need).
  */
-export const KEEP_OUT_INCHES = 0.625;
+export const KEEP_OUT_AUDIO_INCHES = 0.625; // ~15.88 mm
+export const KEEP_OUT_MIDI_INCHES = 15 / 25.4;
+export const KEEP_OUT_POWER_INCHES = 12 / 25.4;
 
 export function keepOutRect(
   placed: PlacedPedal,
@@ -51,25 +57,32 @@ export function keepOutRect(
 ): { xIn: number; yIn: number; widthIn: number; depthIn: number } {
   const { widthIn, depthIn } = placedFootprint(pedal, placed.rotation);
   // Translate each logical jack-bearing side to its visual side after
-  // rotation, then accumulate which visual sides should be padded.
-  const visualSides = new Set<Side>();
-  const j = pedal.jackSides;
-  const addIf = (cond: boolean, logical: Side) => {
-    if (cond) visualSides.add(rotatedSide(logical, placed.rotation));
+  // rotation, then take the largest required pad per visual side.
+  const padBySide: Record<Side, number> = {
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
   };
-  addIf(j.top || j.midi_top, 'top');
-  addIf(j.bottom || j.midi_bottom, 'bottom');
-  addIf(j.left || j.midi_left, 'left');
-  addIf(j.right || j.midi_right, 'right');
-  const padTop = visualSides.has('top') ? KEEP_OUT_INCHES : 0;
-  const padBot = visualSides.has('bottom') ? KEEP_OUT_INCHES : 0;
-  const padLeft = visualSides.has('left') ? KEEP_OUT_INCHES : 0;
-  const padRight = visualSides.has('right') ? KEEP_OUT_INCHES : 0;
+  const bump = (logical: Side, value: number) => {
+    const v = rotatedSide(logical, placed.rotation);
+    if (value > padBySide[v]) padBySide[v] = value;
+  };
+  const j = pedal.jackSides;
+  if (j.top) bump('top', KEEP_OUT_AUDIO_INCHES);
+  if (j.bottom) bump('bottom', KEEP_OUT_AUDIO_INCHES);
+  if (j.left) bump('left', KEEP_OUT_AUDIO_INCHES);
+  if (j.right) bump('right', KEEP_OUT_AUDIO_INCHES);
+  if (j.midi_top) bump('top', KEEP_OUT_MIDI_INCHES);
+  if (j.midi_bottom) bump('bottom', KEEP_OUT_MIDI_INCHES);
+  if (j.midi_left) bump('left', KEEP_OUT_MIDI_INCHES);
+  if (j.midi_right) bump('right', KEEP_OUT_MIDI_INCHES);
+  if (pedal.powerSide) bump(pedal.powerSide, KEEP_OUT_POWER_INCHES);
   return {
-    xIn: placed.xIn - padLeft,
-    yIn: placed.yIn - padTop,
-    widthIn: widthIn + padLeft + padRight,
-    depthIn: depthIn + padTop + padBot,
+    xIn: placed.xIn - padBySide.left,
+    yIn: placed.yIn - padBySide.top,
+    widthIn: widthIn + padBySide.left + padBySide.right,
+    depthIn: depthIn + padBySide.top + padBySide.bottom,
   };
 }
 
