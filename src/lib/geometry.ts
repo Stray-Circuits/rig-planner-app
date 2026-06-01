@@ -413,11 +413,10 @@ export function routeCableWithLeader(
   obstacles: readonly ObstacleRect[] = [],
   options: RouteOptions = {},
   leaderIn = 0.4,
-  // Reduced from 0.3 → 0.15: with dense boards (issue #41), the wider
-  // inflation closes narrow gaps between pedals that the router could
-  // otherwise thread through. 0.15" is ~7.5px at default zoom, still
-  // larger than the 2.5px cable stroke + a comfortable visual margin.
-  obstacleMarginIn = 0.15,
+  // 0.3" gives cables real breathing room around each pedal AND
+  // leaves margin for ChainOverlay's render-time lane fan-out to
+  // shift cables perpendicular without crashing into a neighbour.
+  obstacleMarginIn = 0.3,
 ): { xIn: number; yIn: number }[] {
   const dFrom = sideOutwardUnit(from.side);
   const dTo = sideOutwardUnit(to.side);

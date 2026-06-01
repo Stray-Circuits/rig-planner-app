@@ -361,14 +361,105 @@ interface SegRef {
   axisValue: number; // y for horizontal, x for vertical
 }
 
-function applyLaneRenderOffsets(cables: RoutedCable[]): void {
-  // Collect all eligible inner segments (skipping leaders).
+/**
+ * Largest absolute perpendicular shift the fan-out is allowed to
+ * apply to a single segment when an obstacle is nearby. Picked to be
+ * smaller than the router's `obstacleMarginIn` (0.3") so even a
+ * shift clamped to this magnitude can't push a cable through a
+ * pedal that the router was hugging.
+ */
+const LANE_RENDER_SHIFT_MAX_NEAR_OBSTACLE_IN = 0.05;
+
+function segmentHitsObstacle(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  obstacles: readonly ObstacleRect[],
+): boolean {
+  const eps = 0.05;
+  const minX = Math.min(ax, bx);
+  const maxX = Math.max(ax, bx);
+  const minY = Math.min(ay, by);
+  const maxY = Math.max(ay, by);
+  for (const r of obstacles) {
+    if (
+      maxX > r.xIn + eps &&
+      minX < r.xIn + r.widthIn - eps &&
+      maxY > r.yIn + eps &&
+      minY < r.yIn + r.depthIn - eps
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Largest |shift| in [0, requested] that keeps the post-shift segment
+ * clear of every obstacle. Bisect-searches the safe range so we still
+ * get *some* visual separation when a full shift would push the cable
+ * into a pedal. Returns 0 if even a tiny shift is unsafe (which
+ * shouldn't happen — the unshifted segment was clean before this ran).
+ */
+function safeShiftForSegment(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  requestedShift: number,
+  axis: 'x' | 'y',
+  obstacles: readonly ObstacleRect[],
+): number {
+  if (requestedShift === 0) return 0;
+  const tryShift = (s: number): boolean => {
+    const dxOff = axis === 'x' ? s : 0;
+    const dyOff = axis === 'y' ? s : 0;
+    return !segmentHitsObstacle(
+      ax + dxOff,
+      ay + dyOff,
+      bx + dxOff,
+      by + dyOff,
+      obstacles,
+    );
+  };
+  if (tryShift(requestedShift)) return requestedShift;
+  // Bisect down toward zero to find the largest safe magnitude.
+  let lo = 0;
+  let hi = requestedShift;
+  for (let i = 0; i < 6; i++) {
+    const mid = (lo + hi) / 2;
+    if (tryShift(mid)) lo = mid;
+    else hi = mid;
+  }
+  // Don't return a tiny shift that won't visibly separate but might
+  // still graze; if it's smaller than the "near obstacle" cap return 0.
+  if (Math.abs(lo) < 0.02) return 0;
+  return (
+    Math.sign(requestedShift) *
+    Math.min(Math.abs(lo), LANE_RENDER_SHIFT_MAX_NEAR_OBSTACLE_IN)
+  );
+}
+
+function applyLaneRenderOffsets(
+  cables: RoutedCable[],
+  obstacles: readonly ObstacleRect[],
+): void {
+  // Collect all eligible inner segments. Skip not just the leader
+  // segments (path[0]→path[1] and path[n-2]→path[n-1]) but also the
+  // segments TOUCHING the leader-tip vertices (path[1]→path[2] and
+  // path[n-3]→path[n-2]). Shifting a leader-adjacent segment moves
+  // the leader-tip with it, which tilts the leader off-axis and can
+  // drag it through the pedal it's supposed to plug into. Leader
+  // length staggering (`computeLeaderLanes`) already keeps cables
+  // exiting the same pedal-side on different lanes, so giving up
+  // fan-out for those segments costs little.
   const hSegs: SegRef[] = [];
   const vSegs: SegRef[] = [];
   for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
     const path = cables[cableIdx]!.path;
-    if (path.length < 4) continue; // need at least port + leader endpoints
-    for (let i = 1; i < path.length - 2; i++) {
+    if (path.length < 6) continue; // need >= 2 non-leader-adjacent verts
+    for (let i = 2; i < path.length - 3; i++) {
       const a = path[i]!;
       const b = path[i + 1]!;
       const dx = Math.abs(b.xIn - a.xIn);
@@ -448,27 +539,52 @@ function applyLaneRenderOffsets(cables: RoutedCable[]): void {
   };
   processGroup(hSegs, segShiftY);
   processGroup(vSegs, segShiftX);
-  // Apply shifts to path points. Shift BOTH endpoints of each affected
-  // segment so the segment itself moves; the connecting (perpendicular)
-  // segments stretch slightly to follow, which is fine.
+  // Apply shifts to path points, BUT clamp each shift to the largest
+  // magnitude that keeps the post-shift segment clear of pedals.
+  // Without this, dense lane groups (several cables stacked on one
+  // y-axis or x-axis) get spread by up to 0.5"+, which used to push
+  // cables straight through neighbouring pedals — the actual bug
+  // behind the "cables on top of pedals" reports in #41.
   for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
     const path = cables[cableIdx]!.path;
-    for (let i = 1; i < path.length - 2; i++) {
-      const shiftY = segShiftY.get(`${cableIdx}:${i}`);
-      if (shiftY !== undefined) {
-        path[i] = { xIn: path[i]!.xIn, yIn: path[i]!.yIn + shiftY };
-        path[i + 1] = {
-          xIn: path[i + 1]!.xIn,
-          yIn: path[i + 1]!.yIn + shiftY,
-        };
+    // Mirror the collection loop's bounds — only segments collected
+    // above are eligible to shift.
+    for (let i = 2; i < path.length - 3; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const requestedY = segShiftY.get(`${cableIdx}:${i}`);
+      if (requestedY !== undefined && requestedY !== 0) {
+        const safe = safeShiftForSegment(
+          a.xIn,
+          a.yIn,
+          b.xIn,
+          b.yIn,
+          requestedY,
+          'y',
+          obstacles,
+        );
+        if (safe !== 0) {
+          path[i] = { xIn: a.xIn, yIn: a.yIn + safe };
+          path[i + 1] = { xIn: b.xIn, yIn: b.yIn + safe };
+        }
       }
-      const shiftX = segShiftX.get(`${cableIdx}:${i}`);
-      if (shiftX !== undefined) {
-        path[i] = { xIn: path[i]!.xIn + shiftX, yIn: path[i]!.yIn };
-        path[i + 1] = {
-          xIn: path[i + 1]!.xIn + shiftX,
-          yIn: path[i + 1]!.yIn,
-        };
+      const requestedX = segShiftX.get(`${cableIdx}:${i}`);
+      if (requestedX !== undefined && requestedX !== 0) {
+        const a2 = path[i]!;
+        const b2 = path[i + 1]!;
+        const safe = safeShiftForSegment(
+          a2.xIn,
+          a2.yIn,
+          b2.xIn,
+          b2.yIn,
+          requestedX,
+          'x',
+          obstacles,
+        );
+        if (safe !== 0) {
+          path[i] = { xIn: a2.xIn + safe, yIn: a2.yIn };
+          path[i + 1] = { xIn: b2.xIn + safe, yIn: b2.yIn };
+        }
       }
     }
   }
@@ -705,7 +821,7 @@ export function ChainOverlay({
   // distinct lines instead of looking like one stacked stroke. Pure
   // visual offset — leaves the underlying path geometry intact for the
   // claimed-lane and routing logic above.
-  applyLaneRenderOffsets(routedCables);
+  applyLaneRenderOffsets(routedCables, allObstacles);
 
   return (
     <>
