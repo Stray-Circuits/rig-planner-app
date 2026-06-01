@@ -361,15 +361,6 @@ interface SegRef {
   axisValue: number; // y for horizontal, x for vertical
 }
 
-/**
- * Largest absolute perpendicular shift the fan-out is allowed to
- * apply to a single segment when an obstacle is nearby. Picked to be
- * smaller than the router's `obstacleMarginIn` (0.3") so even a
- * shift clamped to this magnitude can't push a cable through a
- * pedal that the router was hugging.
- */
-const LANE_RENDER_SHIFT_MAX_NEAR_OBSTACLE_IN = 0.05;
-
 function segmentHitsObstacle(
   ax: number,
   ay: number,
@@ -424,42 +415,43 @@ function safeShiftForSegment(
     );
   };
   if (tryShift(requestedShift)) return requestedShift;
-  // Bisect down toward zero to find the largest safe magnitude.
+  // Bisect (magnitude only) down toward zero to find the largest
+  // safe |shift|. Bisecting on signed values is fine too but using
+  // |mag| with a separate sign keeps the loop arithmetic obviously
+  // monotonic.
   let lo = 0;
-  let hi = requestedShift;
-  for (let i = 0; i < 6; i++) {
+  let hi = Math.abs(requestedShift);
+  const sign = Math.sign(requestedShift);
+  for (let i = 0; i < 8; i++) {
     const mid = (lo + hi) / 2;
-    if (tryShift(mid)) lo = mid;
+    if (tryShift(sign * mid)) lo = mid;
     else hi = mid;
   }
-  // Don't return a tiny shift that won't visibly separate but might
-  // still graze; if it's smaller than the "near obstacle" cap return 0.
-  if (Math.abs(lo) < 0.02) return 0;
-  return (
-    Math.sign(requestedShift) *
-    Math.min(Math.abs(lo), LANE_RENDER_SHIFT_MAX_NEAR_OBSTACLE_IN)
-  );
+  // Tiny safe shifts (< 0.02") don't visibly separate cables;
+  // returning 0 keeps the path identical to its unshifted form.
+  if (lo < 0.02) return 0;
+  return sign * lo;
 }
 
 function applyLaneRenderOffsets(
   cables: RoutedCable[],
   obstacles: readonly ObstacleRect[],
 ): void {
-  // Collect all eligible inner segments. Skip not just the leader
-  // segments (path[0]→path[1] and path[n-2]→path[n-1]) but also the
-  // segments TOUCHING the leader-tip vertices (path[1]→path[2] and
-  // path[n-3]→path[n-2]). Shifting a leader-adjacent segment moves
-  // the leader-tip with it, which tilts the leader off-axis and can
-  // drag it through the pedal it's supposed to plug into. Leader
-  // length staggering (`computeLeaderLanes`) already keeps cables
-  // exiting the same pedal-side on different lanes, so giving up
-  // fan-out for those segments costs little.
+  // Collect all eligible inner segments (everything except the
+  // leader segments path[0]→path[1] and path[n-2]→path[n-1]).
+  // Segments touching the leader-tip vertices ARE eligible — the
+  // safe-shift bisect below clamps any shift that would move the
+  // leader-tip into its owning pedal (since that pedal is in the
+  // obstacle list, the post-shift segment hits it and the bisect
+  // backs off). This matters because cables exiting the same
+  // pedal-side often share a lane right after the leader, and
+  // without fan-out there they visually stack as one fat line.
   const hSegs: SegRef[] = [];
   const vSegs: SegRef[] = [];
   for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
     const path = cables[cableIdx]!.path;
-    if (path.length < 6) continue; // need >= 2 non-leader-adjacent verts
-    for (let i = 2; i < path.length - 3; i++) {
+    if (path.length < 4) continue; // need at least port + leader endpoints
+    for (let i = 1; i < path.length - 2; i++) {
       const a = path[i]!;
       const b = path[i + 1]!;
       const dx = Math.abs(b.xIn - a.xIn);
@@ -547,9 +539,7 @@ function applyLaneRenderOffsets(
   // behind the "cables on top of pedals" reports in #41.
   for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
     const path = cables[cableIdx]!.path;
-    // Mirror the collection loop's bounds — only segments collected
-    // above are eligible to shift.
-    for (let i = 2; i < path.length - 3; i++) {
+    for (let i = 1; i < path.length - 2; i++) {
       const a = path[i]!;
       const b = path[i + 1]!;
       const requestedY = segShiftY.get(`${cableIdx}:${i}`);

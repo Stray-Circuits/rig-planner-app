@@ -555,14 +555,17 @@ function pathLength(path: readonly { xIn: number; yIn: number }[]): number {
 }
 
 /**
- * Score = Manhattan length + off-board penalty + small turn penalty.
+ * Score = Manhattan length + off-board penalty + small turn penalty
+ * + bounded lane-reuse penalty.
  *
- * Lane reuse used to be penalised here too, but per #41 the
- * requirement is "cables must not overlap pedals; they CAN overlap
- * cables of other colors." Penalising lane reuse pushed later cables
- * into long detours just to avoid crossing earlier ones, which
- * matters less than picking a short clean path. The render-time fan
- * out in ChainOverlay still nudges visually-stacked cables apart.
+ * Lane reuse penalty: each long segment contributes at most
+ * LANE_PENALTY (when sitting exactly on another cable's lane), with
+ * smooth linear falloff out to LANE_TOL. Critically the penalty per
+ * segment is the MAX over claimed lanes within tolerance, not the
+ * sum — so a path crossing N claimed lanes is no more expensive than
+ * crossing one. That keeps the bias toward picking a fresh lane when
+ * one is available without ballooning the score in dense lane groups
+ * (which used to force absurd board-wrap detours).
  *
  * Off-board penalty is large enough that the router prefers a
  * longer on-board route to a short off-board one. The chip strip
@@ -581,11 +584,38 @@ function pathScore(
   let score = pathLength(path);
   const boardW = options.boardWidthIn;
   const boardD = options.boardDepthIn;
+  const claimedY = options.claimedY ?? [];
+  const claimedX = options.claimedX ?? [];
   const OFF_BOARD_PENALTY = 25.0;
   const TURN_PENALTY = 0.3;
+  const LANE_TOL = 0.3;
+  const LANE_PENALTY = 2.5;
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i]!;
     const b = path[i + 1]!;
+    const dx = Math.abs(b.xIn - a.xIn);
+    const dy = Math.abs(b.yIn - a.yIn);
+    if (dy < 0.001 && dx > 0.5) {
+      let worst = 0;
+      for (const y of claimedY) {
+        const d = Math.abs(a.yIn - y);
+        if (d < LANE_TOL) {
+          const p = LANE_PENALTY * (1 - d / LANE_TOL);
+          if (p > worst) worst = p;
+        }
+      }
+      score += worst;
+    } else if (dx < 0.001 && dy > 0.5) {
+      let worst = 0;
+      for (const x of claimedX) {
+        const d = Math.abs(a.xIn - x);
+        if (d < LANE_TOL) {
+          const p = LANE_PENALTY * (1 - d / LANE_TOL);
+          if (p > worst) worst = p;
+        }
+      }
+      score += worst;
+    }
     if (boardW !== undefined && boardD !== undefined) {
       for (const pt of [a, b]) {
         const overshoot =
@@ -1097,12 +1127,13 @@ function routeAStar(
   const bannedIntoEnd = toOutDir;
 
   const TURN_PENALTY = 0.5;
-  // Match `pathScore` — cross-color cable overlap is fine per #41,
-  // and the off-board penalty is strong enough that A* will detour
-  // around obstacles rather than fly above the board to bypass them.
   const OFF_BOARD_PENALTY = 25.0;
+  const LANE_TOL = 0.3;
+  const LANE_PENALTY = 2.5;
   const boardW = options.boardWidthIn;
   const boardD = options.boardDepthIn;
+  const claimedY = options.claimedY ?? [];
+  const claimedX = options.claimedX ?? [];
 
   const nodeIdx = (xi: number, yi: number): number => xi * ny + yi;
   const stateIdx = (xi: number, yi: number, dir: number): number =>
@@ -1194,6 +1225,34 @@ function routeAStar(
       if (segLen < 1e-6) continue; // duplicate node from dedup edge case
       let edge = segLen;
       if (dir !== 4 && dir !== nd) edge += TURN_PENALTY;
+      // Lane-reuse penalty (bounded MAX, not sum) — matches the
+      // pathScore formula so 3-seg/5-seg/A* are scored on the same
+      // basis. Only long moves count as "lane" segments; short hops
+      // through the grid don't claim a lane on their own.
+      if (segLen > 0.5) {
+        let worst = 0;
+        if (delta[1] !== 0) {
+          // Vertical-axis move — segment lives at xs[xi].
+          const x = xs[xi]!;
+          for (const cx of claimedX) {
+            const d = Math.abs(x - cx);
+            if (d < LANE_TOL) {
+              const p = LANE_PENALTY * (1 - d / LANE_TOL);
+              if (p > worst) worst = p;
+            }
+          }
+        } else {
+          const y = ys[yi]!;
+          for (const cy of claimedY) {
+            const d = Math.abs(y - cy);
+            if (d < LANE_TOL) {
+              const p = LANE_PENALTY * (1 - d / LANE_TOL);
+              if (p > worst) worst = p;
+            }
+          }
+        }
+        edge += worst;
+      }
       if (boardW !== undefined && boardD !== undefined) {
         const px = xs[nxi]!;
         const py = ys[nyi]!;
