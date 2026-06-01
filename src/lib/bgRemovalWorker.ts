@@ -31,6 +31,15 @@ export interface WorkerInbound {
 
 declare const self: DedicatedWorkerGlobalScope;
 
+// Bundled imgly assets live under `/imgly/` (see scripts/fetch-imgly-assets.mjs
+// + public/imgly/). Serving them same-origin is required because we set
+// Cross-Origin-Embedder-Policy: require-corp — the staticimgly.com CDN
+// doesn't send CORP, so cross-origin fetches would be blocked under COEP.
+// Resolving against self.location.href produces an absolute URL that works
+// in dev (http://localhost:1420/), tauri dev (http://192.168.x.x:1420/),
+// and prod (http://tauri.localhost/) without per-environment branching.
+const publicPath = new URL('/imgly/', self.location.href).toString();
+
 self.addEventListener('message', (event: MessageEvent<WorkerInbound>) => {
   void (async () => {
     const { source } = event.data;
@@ -38,6 +47,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerInbound>) => {
       const config: Config = {
         model: 'isnet_quint8',
         device: 'cpu',
+        publicPath,
         output: { format: 'image/png', quality: 1 },
         progress: (key, current, total) => {
           const message: ProgressMessage = {

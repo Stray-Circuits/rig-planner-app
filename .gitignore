@@ -28,6 +28,9 @@ src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/
 public/models/
 .cache/
 
+# @imgly/background-removal assets fetched by scripts/fetch-imgly-assets.mjs
+public/imgly/
+
 # OS
 .DS_Store
 Thumbs.db
