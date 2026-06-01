@@ -214,14 +214,21 @@ function leaderHitDistance(
  * itself. `clearance` is the gap left between the leader-tip and the
  * blocking obstacle's raw edge — the router then has at least this
  * much room to start its inner path without immediately hitting the
- * obstacle's inflated rect.
+ * obstacle's INFLATED rect.
+ *
+ * Default 0.4" matches `routeCableWithLeader`'s `obstacleMarginIn`
+ * (0.3") plus a tiny epsilon, so a clamped leader-tip lands *outside*
+ * the inflated obstacle, not just outside the raw pedal art. Without
+ * this margin the leader-tip can land in the inflation band and the
+ * router then can't escape cleanly — it picks a path that crosses the
+ * neighbour because every starting move is already "inside" it.
  */
 export function maxSafeLeaderLength(
   port: { xIn: number; yIn: number; side: Side },
   sourcePedalRect: ObstacleRect | null,
   obstacles: readonly ObstacleRect[],
   requested: number,
-  clearance = 0.1,
+  clearance = 0.4,
   minLen = 0.15,
 ): number {
   let allowed = requested;

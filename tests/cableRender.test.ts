@@ -47,13 +47,14 @@ describe('maxSafeLeaderLength', () => {
     };
     const safe = maxSafeLeaderLength(port, tabby, [tabby, tortie], 0.8);
     // Tortie bottom y = 5.38. Leader extends to y = port.y - safe =
-    // 6.15 - safe. For leader-tip to clear Tortie, safe < 6.15 - 5.38
-    // = 0.77. With the default 0.1" clearance, safe ≤ 0.67.
-    expect(safe).toBeLessThanOrEqual(0.77);
-    expect(safe).toBeLessThanOrEqual(0.67 + 1e-9);
-    // And the leader must not actually enter Tortie's rect.
+    // 6.15 - safe. For leader-tip to clear Tortie's INFLATED rect
+    // (router inflates by 0.3" margin), safe must leave > 0.4" gap to
+    // Tortie's raw edge → safe ≤ 6.15 - 5.38 - 0.4 = 0.37.
+    expect(safe).toBeLessThanOrEqual(0.37 + 1e-9);
+    // And the leader-tip lands clear of Tortie's inflated rect
+    // (raw bottom + obstacle margin = 5.38 + 0.3 = 5.68).
     const leaderTipY = 6.15 - safe;
-    expect(leaderTipY).toBeGreaterThanOrEqual(5.38);
+    expect(leaderTipY).toBeGreaterThanOrEqual(5.68);
   });
 
   it('ignores obstacles that are NOT on the leader path (different x)', () => {
@@ -121,8 +122,9 @@ describe('maxSafeLeaderLength', () => {
     for (const { port, block } of cases) {
       const safe = maxSafeLeaderLength(port, null, [block], 1.5);
       // Obstacle starts 1" from the port along the outward axis,
-      // minus the 0.1" clearance the function reserves.
-      expect(safe).toBeCloseTo(0.9, 5);
+      // minus the default 0.4" clearance the function reserves so the
+      // leader-tip lands outside the router's inflated obstacle band.
+      expect(safe).toBeCloseTo(0.6, 5);
     }
   });
 });

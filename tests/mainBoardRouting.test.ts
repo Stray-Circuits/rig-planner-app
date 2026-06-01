@@ -159,16 +159,23 @@ describe('Main board fixture — full-pipeline routing', () => {
 
     const failures: string[] = [];
     for (const cable of cables) {
-      // Check the FULL path, including the leader segments
-      // (path[0]→path[1] and path[n-2]→path[n-1]). Earlier tests
-      // only walked inner segments, missing the case where a
-      // leader-tip shift pushed the leader segment itself into
-      // another pedal — which is the #41 follow-up bug.
+      // Walk every segment of the path. For each segment, check
+      // against EVERY pedal rect.
+      //
+      // The own-pedal-of-this-cable rects (source / destination) are
+      // *only* excluded for the LEADER segments — path[0]→path[1] and
+      // path[n-2]→path[n-1] — which by construction sit on those
+      // pedals' edges. Inner segments must NOT touch their own
+      // source/dest pedal's interior either (the original test had
+      // this excluded across all segments, hiding the case where the
+      // router's inner path looped back through its own source
+      // pedal).
       for (let i = 0; i < cable.path.length - 1; i++) {
         const a = cable.path[i]!;
         const b = cable.path[i + 1]!;
+        const isLeaderSeg = i === 0 || i === cable.path.length - 2;
         for (const [pid, r] of obstacleByPlaced) {
-          if (cable.ownIds.has(pid)) continue;
+          if (isLeaderSeg && cable.ownIds.has(pid)) continue;
           if (segmentHitsRect(a.xIn, a.yIn, b.xIn, b.yIn, r)) {
             const def = pedalsById.get(placedById.get(pid)?.pedalId ?? '');
             failures.push(
