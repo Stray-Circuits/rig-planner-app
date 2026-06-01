@@ -413,7 +413,11 @@ export function routeCableWithLeader(
   obstacles: readonly ObstacleRect[] = [],
   options: RouteOptions = {},
   leaderIn = 0.4,
-  obstacleMarginIn = 0.3,
+  // Reduced from 0.3 → 0.15: with dense boards (issue #41), the wider
+  // inflation closes narrow gaps between pedals that the router could
+  // otherwise thread through. 0.15" is ~7.5px at default zoom, still
+  // larger than the 2.5px cable stroke + a comfortable visual margin.
+  obstacleMarginIn = 0.15,
 ): { xIn: number; yIn: number }[] {
   const dFrom = sideOutwardUnit(from.side);
   const dTo = sideOutwardUnit(to.side);
@@ -470,10 +474,20 @@ export function pathLanes(path: readonly { xIn: number; yIn: number }[]): {
 }
 
 /**
- * Orthogonal cable path between two points. Tries 3-segment Manhattan
- * candidates first (varying the elbow position); if every 3-segment path
- * crosses an obstacle, falls back to 5-segment "go around" detours that
- * bend twice more to wrap one pedal.
+ * Orthogonal cable path between two points. Enumerates candidates
+ * from THREE generators in parallel and picks the lowest-scoring
+ * clean path:
+ *   1. 3-segment Manhattan elbows
+ *   2. 5-segment "go around" wraps
+ *   3. visibility-grid A* (handles narrow gaps and multi-detour cases
+ *      the discrete generators can't express)
+ *
+ * Picking the global best matters because 3-seg and 5-seg often
+ * return *some* clean path that wraps the long way around the board
+ * when a more direct route through a narrow gap exists. Only A*'s
+ * obstacle-edge grid sees those gaps, so without comparing all three
+ * the router would happily pick the ugly wrap and exit early (the
+ * actual bug behind #41).
  *
  * `obstacles` MAY include the pedals owning the from/to ports — the
  * caller of `routeCableWithLeader` will arrange that the leader endpoints
@@ -498,28 +512,18 @@ export function routeCablePath(
   }
 
   const cand3 = generateRouteCandidates(from, to, obstacles);
-  const best3 = shortestClean(cand3, obstacles, options, from.side, to.side);
-  if (best3) return dedupeColinear(best3);
-
   const cand5 = generate5SegCandidates(from, to, obstacles);
-  const best5 = shortestClean(cand5, obstacles, options, from.side, to.side);
-  if (best5) return dedupeColinear(best5);
-
-  // Discrete candidates exhausted. Run an A* on the visibility grid
-  // formed by obstacle edges so the router can still find a clean path
-  // around multiple pedals (any number of detour bends). This recovers
-  // the cases where 3-seg and 5-seg both crash into a third pedal —
-  // the original failure mode of #41.
   const aStar = routeAStar(from, to, obstacles, options);
-  if (aStar) return dedupeColinear(aStar);
+  const allCands: { xIn: number; yIn: number }[][] = [...cand3, ...cand5];
+  if (aStar) allCands.push(aStar);
 
-  // No candidate avoids obstacles. Still prefer a U-turn-free topology
-  // over a clean-looking U-turn — a cable that crosses a pedal edge
-  // reads as a routing problem, but a cable that doubles back on its own
-  // leader reads as broken. Among candidates with no endpoint U-turn,
-  // pick the shortest; only if every candidate U-turns do we fall back
-  // to the first 3-seg candidate.
-  const allCands = [...cand3, ...cand5];
+  const best = shortestClean(allCands, obstacles, options, from.side, to.side);
+  if (best) return dedupeColinear(best);
+
+  // No clean candidate survived. Prefer a U-turn-free dirty path over
+  // a U-turning one — a cable that crosses a pedal edge reads as a
+  // routing problem, but a cable that doubles back on its own leader
+  // reads as broken.
   let bestFallback: { xIn: number; yIn: number }[] | null = null;
   let bestFallbackLen = Infinity;
   for (const path of allCands) {
@@ -552,52 +556,37 @@ function pathLength(path: readonly { xIn: number; yIn: number }[]): number {
 }
 
 /**
- * Score = Manhattan length + lane-reuse penalty + off-board penalty.
+ * Score = Manhattan length + off-board penalty + small turn penalty.
  *
- * Lane penalty: smooth linear falloff — close to a claimed lane = heavy
- * penalty, equal-or-past LANE_TOL = none. Encourages cables to spread
- * onto parallel lanes when there's room, while still picking the best
- * shared lane when no alternative exists.
+ * Lane reuse used to be penalised here too, but per #41 the
+ * requirement is "cables must not overlap pedals; they CAN overlap
+ * cables of other colors." Penalising lane reuse pushed later cables
+ * into long detours just to avoid crossing earlier ones, which
+ * matters less than picking a short clean path. The render-time fan
+ * out in ChainOverlay still nudges visually-stacked cables apart.
  *
- * Off-board penalty: discourages elbow positions outside the board
- * footprint. The chip strip sits ~0.5" above the board (negative y), so
- * a small leniency is allowed; further out gets quadratic penalty so
- * the router prefers a longer in-bound path to a short out-of-bounds
- * one.
+ * Off-board penalty is large enough that the router prefers a
+ * longer on-board route to a short off-board one. The chip strip
+ * sits ~0.5" above the board, so cables terminating at chips will
+ * naturally touch negative y; only INNER corners off-board pay the
+ * penalty.
+ *
+ * Turn penalty: small per-corner cost so a path with the same length
+ * but fewer bends scores better. Addresses the issue's "unnecessary
+ * squiggles" criterion.
  */
 function pathScore(
   path: readonly { xIn: number; yIn: number }[],
   options: RouteOptions,
 ): number {
   let score = pathLength(path);
-  const claimedY = options.claimedY ?? [];
-  const claimedX = options.claimedX ?? [];
-  const LANE_TOL = 0.3;
-  const LANE_PENALTY = 3.0;
   const boardW = options.boardWidthIn;
   const boardD = options.boardDepthIn;
-  const OFF_BOARD_PENALTY = 10.0;
+  const OFF_BOARD_PENALTY = 25.0;
+  const TURN_PENALTY = 0.3;
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i]!;
     const b = path[i + 1]!;
-    const dx = Math.abs(b.xIn - a.xIn);
-    const dy = Math.abs(b.yIn - a.yIn);
-    if (dy < 0.001 && dx > 0.5) {
-      for (const y of claimedY) {
-        const d = Math.abs(a.yIn - y);
-        if (d < LANE_TOL) score += LANE_PENALTY * (1 - d / LANE_TOL);
-      }
-    } else if (dx < 0.001 && dy > 0.5) {
-      for (const x of claimedX) {
-        const d = Math.abs(a.xIn - x);
-        if (d < LANE_TOL) score += LANE_PENALTY * (1 - d / LANE_TOL);
-      }
-    }
-    // Off-board penalty applies to every inner corner. Linear in the
-    // distance off-board so even a 0.2" overshoot costs more than a
-    // moderate lane reuse. Inner paths terminate at leader endpoints
-    // (always on-board), so endpoint-bound cables don't get penalized
-    // for the port itself living above the board.
     if (boardW !== undefined && boardD !== undefined) {
       for (const pt of [a, b]) {
         const overshoot =
@@ -609,6 +598,8 @@ function pathScore(
       }
     }
   }
+  // Count interior corners — every vertex except the two endpoints.
+  if (path.length > 2) score += TURN_PENALTY * (path.length - 2);
   return score;
 }
 
@@ -1107,11 +1098,10 @@ function routeAStar(
   const bannedIntoEnd = toOutDir;
 
   const TURN_PENALTY = 0.5;
-  const LANE_TOL = 0.3;
-  const LANE_PENALTY = 1.5;
-  const OFF_BOARD_PENALTY = 5.0;
-  const claimedY = options.claimedY ?? [];
-  const claimedX = options.claimedX ?? [];
+  // Match `pathScore` — cross-color cable overlap is fine per #41,
+  // and the off-board penalty is strong enough that A* will detour
+  // around obstacles rather than fly above the board to bypass them.
+  const OFF_BOARD_PENALTY = 25.0;
   const boardW = options.boardWidthIn;
   const boardD = options.boardDepthIn;
 
@@ -1205,22 +1195,6 @@ function routeAStar(
       if (segLen < 1e-6) continue; // duplicate node from dedup edge case
       let edge = segLen;
       if (dir !== 4 && dir !== nd) edge += TURN_PENALTY;
-      // Lane penalty — match `pathScore`'s biasing so A* spreads onto
-      // unclaimed lanes when multiple equal-length paths exist.
-      if (delta[1] !== 0) {
-        // Vertical move — segment lives at xs[xi].
-        const x = xs[xi]!;
-        for (const cx of claimedX) {
-          const d = Math.abs(x - cx);
-          if (d < LANE_TOL) edge += LANE_PENALTY * (1 - d / LANE_TOL);
-        }
-      } else {
-        const y = ys[yi]!;
-        for (const cy of claimedY) {
-          const d = Math.abs(y - cy);
-          if (d < LANE_TOL) edge += LANE_PENALTY * (1 - d / LANE_TOL);
-        }
-      }
       if (boardW !== undefined && boardD !== undefined) {
         const px = xs[nxi]!;
         const py = ys[nyi]!;

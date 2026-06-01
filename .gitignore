@@ -60,3 +60,6 @@ coverage/
 rig-planner-memory-db.json
 debug-rig-planner-memory-db.json
 other_todos.txt
+
+# Local rig exports brought in for manual testing
+*.rig.json

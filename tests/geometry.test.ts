@@ -282,10 +282,21 @@ describe('geometry', () => {
     // shifted to one side has room to detour around it.
     const obstacle = { xIn: 9, yIn: 4, widthIn: 2, depthIn: 2 };
 
-    // Without obstacles the default elbow is at midX=10 → cable would
-    // bisect the obstacle.
+    // Without obstacles any clean orthogonal path works. The router
+    // picks the lowest-cost one (Manhattan length + turn penalty), so
+    // an L-shape (one corner) wins over a Z (two corners) at equal
+    // length. Just assert the path starts and ends at the right
+    // points and stays orthogonal.
     const noObstacles = routeCablePath(from, to);
-    expect(noObstacles[1]).toEqual({ xIn: 10, yIn: 5 });
+    expect(noObstacles[0]).toEqual({ xIn: 0, yIn: 5 });
+    expect(noObstacles[noObstacles.length - 1]).toEqual({ xIn: 20, yIn: 3 });
+    for (let i = 0; i < noObstacles.length - 1; i++) {
+      const a = noObstacles[i]!;
+      const b = noObstacles[i + 1]!;
+      const dx = Math.abs(b.xIn - a.xIn);
+      const dy = Math.abs(b.yIn - a.yIn);
+      expect(dx < 0.001 || dy < 0.001).toBe(true);
+    }
 
     // With the obstacle declared, no segment of the chosen path should
     // cross the obstacle's interior.
