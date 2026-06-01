@@ -12,8 +12,6 @@ import type {
 import {
   pathLanes,
   placedRect,
-  portPositionOnBoard,
-  rotatedSide,
   routeCableWithLeader,
   type ObstacleRect,
 } from '../lib/geometry';
@@ -23,6 +21,13 @@ import {
   STEREO_STRAND_COLORS,
 } from '../lib/signalColors';
 import { sortConnectionsForRender } from '../lib/signalChainWarnings';
+import {
+  applyLaneRenderOffsets,
+  buildPortIndex,
+  computeLeaderLengths,
+  LEADER_BASE_IN,
+  type ResolvedPort,
+} from './cableRender';
 import styles from './ChainOverlay.module.css';
 
 interface ChainOverlayProps {
@@ -40,8 +45,6 @@ interface ChainOverlayProps {
   onEndpointTap?: (endpointId: string) => void;
 }
 
-/** Base perpendicular leader length (inches) before any lane offset. */
-const LEADER_BASE_IN = 0.4;
 /**
  * Stereo cables render as two parallel strands offset perpendicular to
  * the routed path. Half-gap between strand centerlines, in inches.
@@ -54,79 +57,6 @@ const STEREO_STRAND_OFFSET_IN = 0.045;
 /** Stroke width per stereo strand. Tighter than the mono 2.5px but
  *  the pair together carries more visual weight. */
 const STEREO_STRAND_WIDTH_PX = 2.2;
-/**
- * Per-lane increment added to the leader length so cables touching the
- * same pedal-side stack on parallel Y lanes. At default zoom (~50px/in)
- * each lane is ~10px apart — visibly distinct from the 2.5px cable
- * stroke with comfortable separation even at moderate zoom-out.
- * Was 0.12" → 0.20" per #41 feedback: with 2-3 cables on the same
- * pedal side, the prior 0.12" step put them only ~6px apart, which
- * read as "stacked" once you zoomed out from default.
- */
-const LEADER_LANE_STEP_IN = 0.2;
-
-/**
- * Assign a lane index to each cable end relative to the other cable
- * ends touching the same (placedId, visual side). Lanes are ordered by
- * the port's physical position along the side (left-to-right or
- * top-to-bottom); cables sharing the same port get sequential lanes via
- * stable cable-id tiebreak so their final 90° turn into the shared
- * destination happens at different Y values.
- *
- * Returns a map keyed by `${connectionId}:${end}` (end is 'from'|'to').
- */
-function computeLeaderLanes(
-  connections: readonly Connection[],
-  portIndex: Map<string, Map<string, ResolvedPort>>,
-  pedalsById: Map<string, Pedal>,
-): Map<string, number> {
-  const result = new Map<string, number>();
-  interface SideMember {
-    connectionId: string;
-    end: 'from' | 'to';
-    portAxisCoord: number; // x for top/bottom, y for left/right
-  }
-  const groups = new Map<string, SideMember[]>();
-  const collect = (
-    connectionId: string,
-    end: 'from' | 'to',
-    nodeKind: 'pedal' | 'external',
-    nodeId: string,
-    portId: string | null,
-  ) => {
-    if (nodeKind !== 'pedal' || !portId) return;
-    const resolved = portIndex.get(nodeId)?.get(portId);
-    if (!resolved) return;
-    // Don't bother looking up the pedal twice — we already have the
-    // resolved port + its visual side.
-    const def = pedalsById.get(resolved.placed.pedalId);
-    if (!def) return;
-    const side = resolved.visualSide;
-    const key = `${nodeId}:${side}`;
-    const axisCoord =
-      side === 'top' || side === 'bottom' ? resolved.xIn : resolved.yIn;
-    const list = groups.get(key) ?? [];
-    list.push({ connectionId, end, portAxisCoord: axisCoord });
-    groups.set(key, list);
-  };
-  for (const c of connections) {
-    collect(c.id, 'from', c.fromNodeKind, c.fromNodeId, c.fromPortId);
-    collect(c.id, 'to', c.toNodeKind, c.toNodeId, c.toPortId);
-  }
-  for (const members of groups.values()) {
-    members.sort((a, b) => {
-      if (a.portAxisCoord !== b.portAxisCoord) {
-        return a.portAxisCoord - b.portAxisCoord;
-      }
-      // Same port → tiebreak by connection id for a stable order.
-      return a.connectionId.localeCompare(b.connectionId);
-    });
-    members.forEach((m, idx) => {
-      result.set(`${m.connectionId}:${m.end}`, idx);
-    });
-  }
-  return result;
-}
 
 /**
  * Stereo channel role assigned to each cable for rendering purposes.
@@ -272,26 +202,6 @@ function computeCableChannels(
 }
 
 /**
- * Two segments count as living in the same lane when their axis values
- * are within this many inches AND their perpendicular-range overlaps.
- * Picked so cables that visually crowd each other (within ~4x cable
- * stroke width at default zoom) get pulled apart. Wider than the
- * route-time LANE_TOL so render-time offset catches what the router
- * couldn't separate.
- */
-const LANE_RENDER_TOL_IN = 0.35;
-/**
- * Perpendicular nudge per cable slot. With a 2-cable group, this is the
- * full gap between the two cables (~10px at default zoom 50 px/in,
- * ~4x cable stroke width — comfortably distinct).
- */
-const LANE_RENDER_SHIFT_IN = 0.2;
-
-interface RoutedCable {
-  path: { xIn: number; yIn: number }[];
-}
-
-/**
  * Miter-offset a polyline perpendicular to its direction of travel.
  * Used to draw stereo cables as two parallel strands. Offsets each
  * vertex along its bisector with the standard miter formula so 90°
@@ -346,269 +256,6 @@ function offsetPolyline(
   return result;
 }
 
-/**
- * Post-processing pass: when two cables end up on near-identical
- * Y-lanes (horizontal segments) or X-lanes (vertical segments) with
- * overlapping ranges, nudge each one perpendicular by a small amount
- * so they render as visually distinct lines instead of stacking.
- *
- * Mutates the path arrays. Skips the leader segments (path[0]->path[1]
- * and path[N-2]->path[N-1]) so the cable still terminates exactly at
- * the port endpoints — only the inner crossbar shifts.
- */
-interface SegRef {
-  cableIdx: number;
-  segIdx: number;
-  lo: number; // start of segment along the lane axis
-  hi: number;
-  axisValue: number; // y for horizontal, x for vertical
-}
-
-function segmentHitsObstacle(
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-  obstacles: readonly ObstacleRect[],
-): boolean {
-  const eps = 0.05;
-  const minX = Math.min(ax, bx);
-  const maxX = Math.max(ax, bx);
-  const minY = Math.min(ay, by);
-  const maxY = Math.max(ay, by);
-  for (const r of obstacles) {
-    if (
-      maxX > r.xIn + eps &&
-      minX < r.xIn + r.widthIn - eps &&
-      maxY > r.yIn + eps &&
-      minY < r.yIn + r.depthIn - eps
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Largest |shift| in [0, requested] that keeps the post-shift segment
- * clear of every obstacle. Bisect-searches the safe range so we still
- * get *some* visual separation when a full shift would push the cable
- * into a pedal. Returns 0 if even a tiny shift is unsafe (which
- * shouldn't happen — the unshifted segment was clean before this ran).
- */
-function safeShiftForSegment(
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-  requestedShift: number,
-  axis: 'x' | 'y',
-  obstacles: readonly ObstacleRect[],
-): number {
-  if (requestedShift === 0) return 0;
-  const tryShift = (s: number): boolean => {
-    const dxOff = axis === 'x' ? s : 0;
-    const dyOff = axis === 'y' ? s : 0;
-    return !segmentHitsObstacle(
-      ax + dxOff,
-      ay + dyOff,
-      bx + dxOff,
-      by + dyOff,
-      obstacles,
-    );
-  };
-  if (tryShift(requestedShift)) return requestedShift;
-  // Bisect (magnitude only) down toward zero to find the largest
-  // safe |shift|. Bisecting on signed values is fine too but using
-  // |mag| with a separate sign keeps the loop arithmetic obviously
-  // monotonic.
-  let lo = 0;
-  let hi = Math.abs(requestedShift);
-  const sign = Math.sign(requestedShift);
-  for (let i = 0; i < 8; i++) {
-    const mid = (lo + hi) / 2;
-    if (tryShift(sign * mid)) lo = mid;
-    else hi = mid;
-  }
-  // Tiny safe shifts (< 0.02") don't visibly separate cables;
-  // returning 0 keeps the path identical to its unshifted form.
-  if (lo < 0.02) return 0;
-  return sign * lo;
-}
-
-function applyLaneRenderOffsets(
-  cables: RoutedCable[],
-  obstacles: readonly ObstacleRect[],
-): void {
-  // Collect all eligible inner segments (everything except the
-  // leader segments path[0]→path[1] and path[n-2]→path[n-1]).
-  // Segments touching the leader-tip vertices ARE eligible — the
-  // safe-shift bisect below clamps any shift that would move the
-  // leader-tip into its owning pedal (since that pedal is in the
-  // obstacle list, the post-shift segment hits it and the bisect
-  // backs off). This matters because cables exiting the same
-  // pedal-side often share a lane right after the leader, and
-  // without fan-out there they visually stack as one fat line.
-  const hSegs: SegRef[] = [];
-  const vSegs: SegRef[] = [];
-  for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
-    const path = cables[cableIdx]!.path;
-    if (path.length < 4) continue; // need at least port + leader endpoints
-    for (let i = 1; i < path.length - 2; i++) {
-      const a = path[i]!;
-      const b = path[i + 1]!;
-      const dx = Math.abs(b.xIn - a.xIn);
-      const dy = Math.abs(b.yIn - a.yIn);
-      if (dy < 0.001 && dx > 0.3) {
-        hSegs.push({
-          cableIdx,
-          segIdx: i,
-          lo: Math.min(a.xIn, b.xIn),
-          hi: Math.max(a.xIn, b.xIn),
-          axisValue: a.yIn,
-        });
-      } else if (dx < 0.001 && dy > 0.3) {
-        vSegs.push({
-          cableIdx,
-          segIdx: i,
-          lo: Math.min(a.yIn, b.yIn),
-          hi: Math.max(a.yIn, b.yIn),
-          axisValue: a.xIn,
-        });
-      }
-    }
-  }
-  // Union-find grouping: two segments belong to the same lane group iff
-  // their axis values are within LANE_RENDER_TOL_IN AND their lengthwise
-  // ranges overlap. Pair-wise pass — N is small (one segment per cable
-  // per axis at most a few times), so O(N²) is fine.
-  const segShiftY = new Map<string, number>();
-  const segShiftX = new Map<string, number>();
-  const processGroup = (
-    segs: SegRef[],
-    shiftMap: Map<string, number>,
-  ): void => {
-    if (segs.length < 2) return;
-    const parent: number[] = segs.map((_, i) => i);
-    const find = (i: number): number => {
-      while (parent[i] !== i) {
-        parent[i] = parent[parent[i]!]!;
-        i = parent[i]!;
-      }
-      return i;
-    };
-    const union = (a: number, b: number): void => {
-      const ra = find(a);
-      const rb = find(b);
-      if (ra !== rb) parent[ra] = rb;
-    };
-    for (let i = 0; i < segs.length; i++) {
-      for (let j = i + 1; j < segs.length; j++) {
-        const a = segs[i]!;
-        const b = segs[j]!;
-        if (Math.abs(a.axisValue - b.axisValue) >= LANE_RENDER_TOL_IN) continue;
-        if (a.lo >= b.hi - 0.05 || a.hi <= b.lo + 0.05) continue;
-        union(i, j);
-      }
-    }
-    // Bucket members by root.
-    const groups = new Map<number, number[]>();
-    for (let i = 0; i < segs.length; i++) {
-      const root = find(i);
-      const arr = groups.get(root) ?? [];
-      arr.push(i);
-      groups.set(root, arr);
-    }
-    for (const members of groups.values()) {
-      if (members.length < 2) continue;
-      members.sort((a, b) => segs[a]!.axisValue - segs[b]!.axisValue);
-      const center = (members.length - 1) / 2;
-      for (let k = 0; k < members.length; k++) {
-        const seg = segs[members[k]!]!;
-        shiftMap.set(
-          `${seg.cableIdx}:${seg.segIdx}`,
-          (k - center) * LANE_RENDER_SHIFT_IN,
-        );
-      }
-    }
-  };
-  processGroup(hSegs, segShiftY);
-  processGroup(vSegs, segShiftX);
-  // Apply shifts to path points, BUT clamp each shift to the largest
-  // magnitude that keeps the post-shift segment clear of pedals.
-  // Without this, dense lane groups (several cables stacked on one
-  // y-axis or x-axis) get spread by up to 0.5"+, which used to push
-  // cables straight through neighbouring pedals — the actual bug
-  // behind the "cables on top of pedals" reports in #41.
-  for (let cableIdx = 0; cableIdx < cables.length; cableIdx++) {
-    const path = cables[cableIdx]!.path;
-    for (let i = 1; i < path.length - 2; i++) {
-      const a = path[i]!;
-      const b = path[i + 1]!;
-      const requestedY = segShiftY.get(`${cableIdx}:${i}`);
-      if (requestedY !== undefined && requestedY !== 0) {
-        const safe = safeShiftForSegment(
-          a.xIn,
-          a.yIn,
-          b.xIn,
-          b.yIn,
-          requestedY,
-          'y',
-          obstacles,
-        );
-        if (safe !== 0) {
-          path[i] = { xIn: a.xIn, yIn: a.yIn + safe };
-          path[i + 1] = { xIn: b.xIn, yIn: b.yIn + safe };
-        }
-      }
-      const requestedX = segShiftX.get(`${cableIdx}:${i}`);
-      if (requestedX !== undefined && requestedX !== 0) {
-        const a2 = path[i]!;
-        const b2 = path[i + 1]!;
-        const safe = safeShiftForSegment(
-          a2.xIn,
-          a2.yIn,
-          b2.xIn,
-          b2.yIn,
-          requestedX,
-          'x',
-          obstacles,
-        );
-        if (safe !== 0) {
-          path[i] = { xIn: a2.xIn + safe, yIn: a2.yIn };
-          path[i + 1] = { xIn: b2.xIn + safe, yIn: b2.yIn };
-        }
-      }
-    }
-  }
-}
-
-interface ResolvedPort {
-  placed: PlacedPedal;
-  pedal: Pedal;
-  port: Port;
-  xIn: number;
-  yIn: number;
-  visualSide: Side;
-}
-
-/** Look up the visual position + side of a port given its placed pedal. */
-function resolvePort(
-  placed: PlacedPedal,
-  pedal: Pedal,
-  port: Port,
-): ResolvedPort {
-  const pos = portPositionOnBoard(placed, pedal, port);
-  return {
-    placed,
-    pedal,
-    port,
-    xIn: pos.xIn,
-    yIn: pos.yIn,
-    visualSide: rotatedSide(port.side, placed.rotation),
-  };
-}
-
 export function ChainOverlay({
   rig,
   placed,
@@ -631,16 +278,7 @@ export function ChainOverlay({
     Map<string, { x: number; y: number }>
   >(new Map());
   // Build a {placedId -> {portId -> ResolvedPort}} map for fast lookups.
-  const portIndex = new Map<string, Map<string, ResolvedPort>>();
-  for (const p of placed) {
-    const def = pedalsById.get(p.pedalId);
-    if (!def) continue;
-    const inner = new Map<string, ResolvedPort>();
-    for (const port of def.ports) {
-      inner.set(port.id, resolvePort(p, def, port));
-    }
-    portIndex.set(p.id, inner);
-  }
+  const portIndex = buildPortIndex(placed, pedalsById);
   const endpointById = new Map(endpoints.map((e) => [e.id, e]));
 
   const widthPx = rig.widthIn * pxPerInch;
@@ -705,19 +343,13 @@ export function ChainOverlay({
   for (const rect of obstacleByPlaced.values()) {
     allObstacles.push(rect);
   }
-  // Assign each cable-END (from / to) a "leader lane" index relative to
-  // the other cables touching the same (placed pedal, visual side). The
-  // lane index inflates the perpendicular leader length, so cables
-  // exiting/entering the same pedal-side stack on parallel Y lanes
-  // outside the pedal rather than sharing a single lane.
-  //
-  // Cables sharing a destination port get *different* lane indices via
-  // the cable-id tiebreak below, so their final 90° turn into the port
-  // happens at a different Y per cable — only the port itself is shared.
-  const leaderLanes = computeLeaderLanes(
+  // Per-cable-end leader lengths: base + staggered per lane, then
+  // clamped per end so the longer leaders don't extend into a
+  // neighbouring pedal. See `computeLeaderLengths`.
+  const leaderLengths = computeLeaderLengths(
     orderedConnections,
     portIndex,
-    pedalsById,
+    obstacleByPlaced,
   );
   // Assign each cable a stereo channel role. Drives the cable color:
   //   'stereo' → render as parallel L+R strands (true TRS↔TRS cable)
@@ -774,8 +406,8 @@ export function ChainOverlay({
           : channel === 'L'
             ? STEREO_STRAND_COLORS[0]
             : fromColor;
-      const fromLaneIdx = leaderLanes.get(`${c.id}:from`) ?? 0;
-      const toLaneIdx = leaderLanes.get(`${c.id}:to`) ?? 0;
+      const fromLeaderIn = leaderLengths.get(`${c.id}:from`) ?? LEADER_BASE_IN;
+      const toLeaderIn = leaderLengths.get(`${c.id}:to`) ?? LEADER_BASE_IN;
       const path = routeCableWithLeader(
         { xIn: from.xIn, yIn: from.yIn, side: from.side },
         { xIn: to.xIn, yIn: to.yIn, side: to.side },
@@ -783,8 +415,8 @@ export function ChainOverlay({
         {
           claimedY,
           claimedX,
-          fromLeaderIn: LEADER_BASE_IN + fromLaneIdx * LEADER_LANE_STEP_IN,
-          toLeaderIn: LEADER_BASE_IN + toLaneIdx * LEADER_LANE_STEP_IN,
+          fromLeaderIn,
+          toLeaderIn,
           boardWidthIn: rig.widthIn,
           boardDepthIn: rig.depthIn,
         },
