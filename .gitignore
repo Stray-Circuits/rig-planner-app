@@ -63,3 +63,5 @@ other_todos.txt
 
 # Local rig exports brought in for manual testing
 *.rig.json
+# …but the dense-board fixture used in tests IS tracked.
+!tests/fixtures/*.rig.json

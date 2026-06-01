@@ -588,8 +588,13 @@ function pathScore(
   const claimedX = options.claimedX ?? [];
   const OFF_BOARD_PENALTY = 25.0;
   const TURN_PENALTY = 0.3;
-  const LANE_TOL = 0.3;
-  const LANE_PENALTY = 2.5;
+  // Wide tolerance + tall penalty: cables within 0.4" of a claimed
+  // lane get pushed away with up to 5 inches of "virtual" extra
+  // path. Combined with the bounded-MAX accumulation, that strongly
+  // biases toward fresh lanes (no stacking) but still lets the
+  // router share a lane if going further is impractical.
+  const LANE_TOL = 0.4;
+  const LANE_PENALTY = 5.0;
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i]!;
     const b = path[i + 1]!;
@@ -1128,8 +1133,8 @@ function routeAStar(
 
   const TURN_PENALTY = 0.5;
   const OFF_BOARD_PENALTY = 25.0;
-  const LANE_TOL = 0.3;
-  const LANE_PENALTY = 2.5;
+  const LANE_TOL = 0.4;
+  const LANE_PENALTY = 5.0;
   const boardW = options.boardWidthIn;
   const boardD = options.boardDepthIn;
   const claimedY = options.claimedY ?? [];

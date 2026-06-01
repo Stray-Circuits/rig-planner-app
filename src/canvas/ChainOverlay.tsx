@@ -57,10 +57,13 @@ const STEREO_STRAND_WIDTH_PX = 2.2;
 /**
  * Per-lane increment added to the leader length so cables touching the
  * same pedal-side stack on parallel Y lanes. At default zoom (~50px/in)
- * each lane is ~6px apart — visibly distinct from the 2.5px cable
- * stroke while keeping leader extensions modest.
+ * each lane is ~10px apart — visibly distinct from the 2.5px cable
+ * stroke with comfortable separation even at moderate zoom-out.
+ * Was 0.12" → 0.20" per #41 feedback: with 2-3 cables on the same
+ * pedal side, the prior 0.12" step put them only ~6px apart, which
+ * read as "stacked" once you zoomed out from default.
  */
-const LEADER_LANE_STEP_IN = 0.12;
+const LEADER_LANE_STEP_IN = 0.2;
 
 /**
  * Assign a lane index to each cable end relative to the other cable
