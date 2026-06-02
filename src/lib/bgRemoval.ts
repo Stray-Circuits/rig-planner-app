@@ -2,6 +2,7 @@ import BgRemovalWorker from './bgRemovalWorker?worker';
 import type { WorkerOutbound } from './bgRemovalWorker';
 import {
   applyColorThreshold,
+  detectUniformBackground,
   dominantColor,
   findAlphaBBox,
   rgbToHex,
@@ -60,10 +61,47 @@ function disposeWorker(): void {
 }
 
 /**
+ * Fast path: when the input's border pixels are uniform (e.g. a product shot
+ * on a clean background or a photo on a sheet of paper), skip the 14s ISNet
+ * worker and use chroma-key. Resolves to a transparent PNG, or null if the
+ * input doesn't look uniform enough or the canvas pipeline errors.
+ */
+async function tryChromaKeyBypass(source: Blob): Promise<Blob | null> {
+  const bitmap = await createImageBitmap(source);
+  const w = bitmap.width;
+  const h = bitmap.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    bitmap.close?.();
+    return null;
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const detection = detectUniformBackground(imgData.data, w, h);
+  if (!detection) return null;
+
+  const bg = sampleCornerBgColor(imgData.data, w, h);
+  applyColorThreshold(imgData.data, bg, detection.tolerance);
+  ctx.putImageData(imgData, 0, 0);
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((b) => resolve(b), 'image/png');
+  });
+}
+
+/**
  * Run background removal on a File or Blob. Resolves to a transparent PNG
  * Blob; rejects if the user cancels via the AbortSignal or if the worker
  * fails to load. Calls are serialized through the shared worker — overlapping
  * invocations would clobber each other's message handlers.
+ *
+ * Tries a chroma-key fast path first for photos with a uniform background
+ * (product shots, photos on a sheet of paper). Falls through to the ISNet
+ * worker if the heuristic isn't confident.
  */
 export async function removeBackground(
   source: Blob,
@@ -74,6 +112,13 @@ export async function removeBackground(
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
+
+  onProgress?.({ phase: 'preparing-image', fraction: null });
+  const fast = await tryChromaKeyBypass(source).catch(() => null);
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+  if (fast) return fast;
 
   onProgress?.({ phase: 'loading-library', fraction: null });
   const worker = getWorker();

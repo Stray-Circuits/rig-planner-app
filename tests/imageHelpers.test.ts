@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyColorThreshold,
+  detectUniformBackground,
   dominantColor,
   findAlphaBBox,
   rgbToHex,
@@ -150,5 +151,40 @@ describe('dominantColor', () => {
   it('rgbToHex packs floats into a lowercase #rrggbb string', () => {
     expect(rgbToHex({ r: 255, g: 0, b: 128 })).toBe('#ff0080');
     expect(rgbToHex({ r: 200.7, g: 50.3, b: 50 })).toBe('#c93232');
+  });
+});
+
+describe('detectUniformBackground', () => {
+  it('returns a tolerance when border pixels are uniform', () => {
+    const data = buildBuffer(64, 64, () => [240, 240, 240, 255]);
+    const detected = detectUniformBackground(data, 64, 64);
+    expect(detected).not.toBeNull();
+    expect(detected!.tolerance).toBeGreaterThan(0);
+  });
+
+  it('returns null when border pixels vary widely (busy background)', () => {
+    const data = buildBuffer(64, 64, (x, y) => [
+      (x * 17 + y * 31) % 256,
+      (x * 13 + y * 23) % 256,
+      (x * 7 + y * 11) % 256,
+      255,
+    ]);
+    expect(detectUniformBackground(data, 64, 64)).toBeNull();
+  });
+
+  it('still detects uniform borders when the center has high variance (subject in middle)', () => {
+    // White ring with noisy 32×32 center — exactly the product-shot pattern
+    // the fast path is meant to catch.
+    const data = buildBuffer(64, 64, (x, y) => {
+      const inBorder = x < 12 || x >= 52 || y < 12 || y >= 52;
+      if (inBorder) return [250, 250, 250, 255];
+      return [(x * 41) % 256, (y * 23) % 256, ((x + y) * 13) % 256, 255];
+    });
+    expect(detectUniformBackground(data, 64, 64)).not.toBeNull();
+  });
+
+  it('returns null for very small images where the heuristic isn’t reliable', () => {
+    const data = buildBuffer(16, 16, () => [240, 240, 240, 255]);
+    expect(detectUniformBackground(data, 16, 16)).toBeNull();
   });
 });
