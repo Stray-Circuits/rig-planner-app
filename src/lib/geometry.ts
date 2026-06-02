@@ -394,6 +394,14 @@ export interface RouteOptions {
   boardWidthIn?: number;
   /** Board depth (inches) — used to discourage off-board elbows. */
   boardDepthIn?: number;
+  /**
+   * How far obstacles are inflated before routing decides what's
+   * "clear". Should be ≥ the rig's jack-size keep-out distance so
+   * cables route OUTSIDE each pedal's keep-out shadow, not just
+   * outside the raw pedal art. Overrides the default (0.15") which
+   * was sized for small jacks only.
+   */
+  obstacleMarginIn?: number;
 }
 
 /**
@@ -413,18 +421,13 @@ export function routeCableWithLeader(
   obstacles: readonly ObstacleRect[] = [],
   options: RouteOptions = {},
   leaderIn = 0.4,
-  // 0.15" is enough breathing room around each pedal once
-  // ChainOverlay's render-time fan-out is obstacle-aware (it bisects
-  // shifts to keep cables out of pedals). 0.3" was wider but it
-  // shrank the routable corridor between adjacent pedals so badly
-  // that staggered leaders on a pedal-side couldn't all fit — when
-  // multiple cables share a side and the safe band is < (N-1) ×
-  // LEADER_LANE_STEP_IN, they all collapse to the same length and
-  // visually stack. With 0.15" margin a typical pedal-to-pedal gap
-  // of 0.6–0.8" leaves 0.3–0.5" of safe band, enough for 2–3
-  // staggered leaders to actually separate.
+  // Default 0.15" was sized for small jacks only; callers that know
+  // the rig's jack size should override via `options.obstacleMarginIn`
+  // so cables stay outside the keep-out shadow rendered around each
+  // pedal (which is ≥ jackSize wide on jacked sides).
   obstacleMarginIn = 0.15,
 ): { xIn: number; yIn: number }[] {
+  const effectiveMargin = options.obstacleMarginIn ?? obstacleMarginIn;
   const dFrom = sideOutwardUnit(from.side);
   const dTo = sideOutwardUnit(to.side);
   const fromLeaderLen = options.fromLeaderIn ?? leaderIn;
@@ -442,10 +445,10 @@ export function routeCableWithLeader(
   // Inflate obstacles by a margin so cables route AROUND pedals with
   // breathing room rather than skimming the footprint edge.
   const inflated = obstacles.map((r) => ({
-    xIn: r.xIn - obstacleMarginIn,
-    yIn: r.yIn - obstacleMarginIn,
-    widthIn: r.widthIn + 2 * obstacleMarginIn,
-    depthIn: r.depthIn + 2 * obstacleMarginIn,
+    xIn: r.xIn - effectiveMargin,
+    yIn: r.yIn - effectiveMargin,
+    widthIn: r.widthIn + 2 * effectiveMargin,
+    depthIn: r.depthIn + 2 * effectiveMargin,
   }));
   const inner = routeCablePath(fromLeader, toLeader, inflated, options);
   return [

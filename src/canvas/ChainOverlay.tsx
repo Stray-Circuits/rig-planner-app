@@ -10,6 +10,7 @@ import type {
   SignalType,
 } from '../data/schema';
 import {
+  keepOutRect,
   pathLanes,
   placedRect,
   routeCableWithLeader,
@@ -293,13 +294,23 @@ export function ChainOverlay({
     pedalsById,
   );
 
-  // Pre-compute each placed pedal's footprint rect so cable routing can
-  // detour around them. Keyed by placed.id so per-connection obstacle
-  // lists can quickly exclude the source and destination pedals.
-  const obstacleByPlaced = new Map<string, ObstacleRect>();
+  // Two rect maps per placed pedal:
+  //   keepOutByPlaced — the dashed-outline shadow (raw rect plus the
+  //     jack-size keep-out on jacked sides). Used as the routing
+  //     obstacle for FOREIGN pedals so cables don't ride along port
+  //     locations or overlap the keep-out shadow visually.
+  //   rawByPlaced — the raw footprint. Used as the obstacle for the
+  //     cable's OWN source and destination pedals, because the
+  //     cable's leader segment by definition lives inside its own
+  //     keep-out (that's what the keep-out exists for); using keep-
+  //     out for own pedals would stop the leader from exiting.
+  const keepOutByPlaced = new Map<string, ObstacleRect>();
+  const rawByPlaced = new Map<string, ObstacleRect>();
   for (const p of placed) {
     const def = pedalsById.get(p.pedalId);
-    if (def) obstacleByPlaced.set(p.id, placedRect(p, def));
+    if (!def) continue;
+    keepOutByPlaced.set(p.id, keepOutRect(p, def, rig.jackSize));
+    rawByPlaced.set(p.id, placedRect(p, def));
   }
 
   // Read each chip's actual rendered bbox after layout and convert to
@@ -334,22 +345,25 @@ export function ChainOverlay({
     if (changed) setTipCenters(next);
   }, [endpoints, pxPerInch, widthPx, heightPx, tipCenters]);
 
-  // Pre-route every cable in render order so each successive cable can
-  // see which Y/X lanes prior cables took, biasing the router toward
-  // unclaimed lanes (cable-vs-cable visual separation). All pedals are
-  // obstacles; the leader segment provides the only clearance for the
-  // port the cable plugs into.
-  const allObstacles: ObstacleRect[] = [];
-  for (const rect of obstacleByPlaced.values()) {
-    allObstacles.push(rect);
-  }
+  // Render-time fan-out gets the KEEP-OUT rects so its safe-shift
+  // bisect can't nudge a cable into a foreign pedal's keep-out
+  // shadow. (Routing uses per-cable obstacle lists below.)
+  const allKeepOuts: ObstacleRect[] = [...keepOutByPlaced.values()];
+  // Tiny extra margin past keep-out so the cable's visible stroke
+  // (2.5px ≈ 0.05") clears the keep-out shadow edge.
+  const routingMarginIn = 0.05;
   // Per-cable-end leader lengths: base + staggered per lane, then
   // clamped per end so the longer leaders don't extend into a
-  // neighbouring pedal. See `computeLeaderLengths`.
+  // neighbouring pedal's KEEP-OUT (not just the raw rect). The clamp
+  // uses keep-out for non-source pedals and skips the source — its
+  // own keep-out is where the leader is supposed to be.
   const leaderLengths = computeLeaderLengths(
     orderedConnections,
     portIndex,
-    obstacleByPlaced,
+    keepOutByPlaced,
+    undefined,
+    undefined,
+    routingMarginIn,
   );
   // Assign each cable a stereo channel role. Drives the cable color:
   //   'stereo' → render as parallel L+R strands (true TRS↔TRS cable)
@@ -408,10 +422,21 @@ export function ChainOverlay({
             : fromColor;
       const fromLeaderIn = leaderLengths.get(`${c.id}:from`) ?? LEADER_BASE_IN;
       const toLeaderIn = leaderLengths.get(`${c.id}:to`) ?? LEADER_BASE_IN;
+      // Per-cable obstacle list: KEEP-OUT for foreign pedals (so
+      // cables don't ride along their port icons / dashed shadow);
+      // RAW rect for the cable's own source + destination (the
+      // leader by construction sits inside its own keep-out, so
+      // using keep-out there would block exit).
+      const obstaclesForCable: ObstacleRect[] = [];
+      for (const [pid, ko] of keepOutByPlaced) {
+        const isOwn = pid === from.placedId || pid === to.placedId;
+        const raw = rawByPlaced.get(pid);
+        obstaclesForCable.push(isOwn && raw ? raw : ko);
+      }
       const path = routeCableWithLeader(
         { xIn: from.xIn, yIn: from.yIn, side: from.side },
         { xIn: to.xIn, yIn: to.yIn, side: to.side },
-        allObstacles,
+        obstaclesForCable,
         {
           claimedY,
           claimedX,
@@ -419,6 +444,7 @@ export function ChainOverlay({
           toLeaderIn,
           boardWidthIn: rig.widthIn,
           boardDepthIn: rig.depthIn,
+          obstacleMarginIn: routingMarginIn,
         },
       );
       // Claim this cable's primary lanes so later cables route around.
@@ -446,7 +472,7 @@ export function ChainOverlay({
   // distinct lines instead of looking like one stacked stroke. Pure
   // visual offset — leaves the underlying path geometry intact for the
   // claimed-lane and routing logic above.
-  applyLaneRenderOffsets(routedCables, allObstacles);
+  applyLaneRenderOffsets(routedCables, allKeepOuts);
 
   return (
     <>
@@ -757,6 +783,8 @@ interface ConnectionEnd {
   signalType?: SignalType;
   /** Present only when the end is a pedal port (not an external endpoint). */
   port?: Port;
+  /** Placed-pedal id for pedal-port ends; undefined for chips. */
+  placedId?: string;
 }
 
 function lookupConnectionEnd(
@@ -779,6 +807,7 @@ function lookupConnectionEnd(
       side: resolved.visualSide,
       signalType: resolved.port.signalType,
       port: resolved.port,
+      placedId: resolved.placed.id,
     };
   }
   // External endpoint — anchor at the chip's plug-tip dot. The chip

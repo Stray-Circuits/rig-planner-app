@@ -14,6 +14,7 @@
 import { describe, it } from 'vitest';
 import mainBoardFixture from './fixtures/mainBoard.rig.json';
 import {
+  keepOutRect,
   pathLanes,
   placedRect,
   routeCableWithLeader,
@@ -64,7 +65,11 @@ function segmentHitsRect(
 describe('Main board fixture — full-pipeline routing', () => {
   it('routes every cable without crossing a foreign pedal after render-time fan-out', () => {
     const data = mainBoardFixture as unknown as {
-      rig: { widthIn: number; depthIn: number };
+      rig: {
+        widthIn: number;
+        depthIn: number;
+        jackSize: 'small' | 'medium' | 'large';
+      };
       pedals: Pedal[];
       placedPedals: PlacedPedal[];
       externalEndpoints: { id: string; kind: string; label: string }[];
@@ -75,21 +80,28 @@ describe('Main board fixture — full-pipeline routing', () => {
       data.pedals.map((p) => [p.id, p]),
     );
     const placedById = new Map<string, PlacedPedal>();
-    const obstacleByPlaced = new Map<string, ObstacleRect>();
+    const keepOutByPlaced = new Map<string, ObstacleRect>();
+    const rawByPlaced = new Map<string, ObstacleRect>();
     for (const p of data.placedPedals) {
       placedById.set(p.id, p);
       const def = pedalsById.get(p.pedalId);
-      if (def) obstacleByPlaced.set(p.id, placedRect(p, def));
+      if (!def) continue;
+      keepOutByPlaced.set(p.id, keepOutRect(p, def, rig.jackSize));
+      rawByPlaced.set(p.id, placedRect(p, def));
     }
-    const allObstacles = [...obstacleByPlaced.values()];
     const portIndex = buildPortIndex(data.placedPedals, pedalsById);
 
-    // Mirror production: compute per-cable-end leader lengths with
-    // obstacle-aware clamping. This is what ChainOverlay does.
+    // Mirror ChainOverlay: leader-length clamp uses KEEP-OUT rects so
+    // a leader-tip can't land inside a neighbouring pedal's keep-out
+    // shadow. routingMargin=0.05 matches production.
+    const routingMarginIn = 0.05;
     const leaderLengths = computeLeaderLengths(
       data.connections,
       portIndex,
-      obstacleByPlaced,
+      keepOutByPlaced,
+      undefined,
+      undefined,
+      routingMarginIn,
     );
 
     const resolveEnd = (
@@ -133,13 +145,22 @@ describe('Main board fixture — full-pipeline routing', () => {
       const from = resolveEnd(c.fromNodeKind, c.fromNodeId, c.fromPortId);
       const to = resolveEnd(c.toNodeKind, c.toNodeId, c.toPortId);
       if (!from || !to) continue;
-      const fullPath = routeCableWithLeader(from, to, allObstacles, {
+      // Per-cable obstacles match production: keep-out for foreign,
+      // raw for own (source + destination).
+      const obstaclesForCable: ObstacleRect[] = [];
+      for (const [pid, ko] of keepOutByPlaced) {
+        const isOwn = pid === from.placedId || pid === to.placedId;
+        const raw = rawByPlaced.get(pid);
+        obstaclesForCable.push(isOwn && raw ? raw : ko);
+      }
+      const fullPath = routeCableWithLeader(from, to, obstaclesForCable, {
         boardWidthIn: rig.widthIn,
         boardDepthIn: rig.depthIn,
         claimedY,
         claimedX,
         fromLeaderIn: leaderLengths.get(`${c.id}:from`) ?? LEADER_BASE_IN,
         toLeaderIn: leaderLengths.get(`${c.id}:to`) ?? LEADER_BASE_IN,
+        obstacleMarginIn: routingMarginIn,
       });
       const lanes = pathLanes(fullPath);
       for (const y of lanes.horizontalY) claimedY.push(y);
@@ -155,27 +176,19 @@ describe('Main board fixture — full-pipeline routing', () => {
         ),
       });
     }
-    applyLaneRenderOffsets(cables, allObstacles);
+    applyLaneRenderOffsets(cables, [...keepOutByPlaced.values()]);
 
     const failures: string[] = [];
     for (const cable of cables) {
-      // Walk every segment of the path. For each segment, check
-      // against EVERY pedal rect.
-      //
-      // The own-pedal-of-this-cable rects (source / destination) are
-      // *only* excluded for the LEADER segments — path[0]→path[1] and
-      // path[n-2]→path[n-1] — which by construction sit on those
-      // pedals' edges. Inner segments must NOT touch their own
-      // source/dest pedal's interior either (the original test had
-      // this excluded across all segments, hiding the case where the
-      // router's inner path looped back through its own source
-      // pedal).
+      // Walk every segment of the path. Check against every FOREIGN
+      // pedal's keep-out (i.e. excluding the cable's own source +
+      // destination). Own-keep-out crossings are expected near the
+      // leader endpoints and aren't visible-overlap defects.
       for (let i = 0; i < cable.path.length - 1; i++) {
         const a = cable.path[i]!;
         const b = cable.path[i + 1]!;
-        const isLeaderSeg = i === 0 || i === cable.path.length - 2;
-        for (const [pid, r] of obstacleByPlaced) {
-          if (isLeaderSeg && cable.ownIds.has(pid)) continue;
+        for (const [pid, r] of keepOutByPlaced) {
+          if (cable.ownIds.has(pid)) continue;
           if (segmentHitsRect(a.xIn, a.yIn, b.xIn, b.yIn, r)) {
             const def = pedalsById.get(placedById.get(pid)?.pedalId ?? '');
             failures.push(

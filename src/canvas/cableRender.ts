@@ -320,15 +320,18 @@ export function computeLeaderLengths(
   obstacleByPlaced: Map<string, ObstacleRect>,
   baseLength = LEADER_BASE_IN,
   step = LEADER_LANE_STEP_IN,
+  // `routingMargin` is the same value the router uses for
+  // `obstacleMarginIn`. The clamp's clearance and minLen are derived
+  // from it so the clamped leader-tip lands outside the router's
+  // inflated obstacle band — both for the source pedal (so the
+  // router can start cleanly) and for neighbours (so the leader
+  // doesn't pierce a neighbouring pedal's keep-out shadow).
+  routingMargin = 0.15,
 ): Map<string, number> {
   const laneIdx = laneIndicesPerSide(connections, portIndex);
   const allObstacles = [...obstacleByPlaced.values()];
-  // Match `maxSafeLeaderLength` defaults — see the doc there. The
-  // minLen has to be > `routeCableWithLeader`'s obstacleMarginIn so
-  // even the shortest leader-tip lands outside the source pedal's
-  // own inflated rect (otherwise the router can't start cleanly).
-  const clearance = 0.2;
-  const minLen = 0.2;
+  const clearance = routingMargin + 0.05;
+  const minLen = routingMargin + 0.05;
   // Group cable-ends by their (placedId, visualSide) so we can
   // redistribute leader lengths across the whole group when the
   // requested staggered lengths don't all fit under the available
