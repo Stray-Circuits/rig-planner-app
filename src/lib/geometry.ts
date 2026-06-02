@@ -413,10 +413,17 @@ export function routeCableWithLeader(
   obstacles: readonly ObstacleRect[] = [],
   options: RouteOptions = {},
   leaderIn = 0.4,
-  // 0.3" gives cables real breathing room around each pedal AND
-  // leaves margin for ChainOverlay's render-time lane fan-out to
-  // shift cables perpendicular without crashing into a neighbour.
-  obstacleMarginIn = 0.3,
+  // 0.15" is enough breathing room around each pedal once
+  // ChainOverlay's render-time fan-out is obstacle-aware (it bisects
+  // shifts to keep cables out of pedals). 0.3" was wider but it
+  // shrank the routable corridor between adjacent pedals so badly
+  // that staggered leaders on a pedal-side couldn't all fit — when
+  // multiple cables share a side and the safe band is < (N-1) ×
+  // LEADER_LANE_STEP_IN, they all collapse to the same length and
+  // visually stack. With 0.15" margin a typical pedal-to-pedal gap
+  // of 0.6–0.8" leaves 0.3–0.5" of safe band, enough for 2–3
+  // staggered leaders to actually separate.
+  obstacleMarginIn = 0.15,
 ): { xIn: number; yIn: number }[] {
   const dFrom = sideOutwardUnit(from.side);
   const dTo = sideOutwardUnit(to.side);

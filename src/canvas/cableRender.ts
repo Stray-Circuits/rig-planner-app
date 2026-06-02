@@ -209,29 +209,18 @@ function leaderHitDistance(
 }
 
 /**
- * Largest leader length in [minLen, requested] that doesn't push the
- * leader axis through any obstacle other than the source pedal
- * itself. `clearance` is the gap left between the leader-tip and the
- * blocking obstacle's raw edge — the router then has at least this
- * much room to start its inner path without immediately hitting the
- * obstacle's INFLATED rect.
- *
- * Default 0.4" matches `routeCableWithLeader`'s `obstacleMarginIn`
- * (0.3") plus a tiny epsilon, so a clamped leader-tip lands *outside*
- * the inflated obstacle, not just outside the raw pedal art. Without
- * this margin the leader-tip can land in the inflation band and the
- * router then can't escape cleanly — it picks a path that crosses the
- * neighbour because every starting move is already "inside" it.
+ * Largest leader length before the leader axis would enter any
+ * non-source obstacle's strict interior. Returns Infinity if no
+ * obstacle is on the path. Pure look-up; no clamping to a requested
+ * value (use {@link maxSafeLeaderLength} for that).
  */
-export function maxSafeLeaderLength(
+function maxLeaderRoom(
   port: { xIn: number; yIn: number; side: Side },
   sourcePedalRect: ObstacleRect | null,
   obstacles: readonly ObstacleRect[],
-  requested: number,
-  clearance = 0.4,
-  minLen = 0.15,
+  clearance: number,
 ): number {
-  let allowed = requested;
+  let allowed = Infinity;
   for (const r of obstacles) {
     if (sourcePedalRect && r === sourcePedalRect) continue;
     const dist = leaderHitDistance(port, r);
@@ -239,14 +228,87 @@ export function maxSafeLeaderLength(
     const cap = dist - clearance;
     if (cap < allowed) allowed = cap;
   }
+  return allowed;
+}
+
+/**
+ * Largest leader length in [minLen, requested] that doesn't push the
+ * leader axis through any obstacle other than the source pedal
+ * itself. `clearance` is the gap left between the leader-tip and the
+ * blocking obstacle's raw edge — the router then has at least this
+ * much room to start its inner path without immediately hitting the
+ * obstacle's INFLATED rect.
+ *
+ * Default 0.2" matches `routeCableWithLeader`'s `obstacleMarginIn`
+ * (0.15") plus a small epsilon, so a clamped leader-tip lands
+ * *outside* the inflated obstacle, not just outside the raw pedal
+ * art. Without this margin the leader-tip can land in the inflation
+ * band and the router then can't escape cleanly — it picks a path
+ * that crosses the neighbour because every starting move is already
+ * "inside" it.
+ */
+export function maxSafeLeaderLength(
+  port: { xIn: number; yIn: number; side: Side },
+  sourcePedalRect: ObstacleRect | null,
+  obstacles: readonly ObstacleRect[],
+  requested: number,
+  clearance = 0.2,
+  minLen = 0.2,
+): number {
+  const allowed = maxLeaderRoom(port, sourcePedalRect, obstacles, clearance);
   return Math.max(minLen, Math.min(requested, allowed));
+}
+
+/**
+ * Distribute leader lengths across N cables sharing a pedal side so
+ * each cable ends up at a DIFFERENT length (visual lane separation),
+ * subject to a hard upper cap `maxSafe`. Returns an array of length N
+ * indexed by lane index (0 = closest to pedal, N-1 = furthest).
+ *
+ *   - When the natural staggered lengths (base, base+step, …,
+ *     base+(N-1)*step) all fit under `maxSafe`, returns them
+ *     unchanged.
+ *   - Otherwise, anchors the longest lane at `maxSafe` and shifts
+ *     the others down so the inter-lane step is preserved.
+ *   - If even the shortest would be below `minLen`, compresses the
+ *     step so all lengths fit in [minLen, maxSafe].
+ *   - If `maxSafe < minLen` (the corridor is too thin to even reach
+ *     the minimum visible leader), every cable gets `minLen` and
+ *     accepts the visual stack — there's no room to spread.
+ */
+function distributeLeaderLengths(
+  N: number,
+  maxSafe: number,
+  baseLength: number,
+  step: number,
+  minLen: number,
+): number[] {
+  if (N <= 0) return [];
+  if (N === 1) {
+    return [Math.max(minLen, Math.min(baseLength, maxSafe))];
+  }
+  const maxRequested = baseLength + (N - 1) * step;
+  if (maxRequested <= maxSafe) {
+    return Array.from({ length: N }, (_, k) => baseLength + k * step);
+  }
+  if (maxSafe < minLen) {
+    return Array.from({ length: N }, () => minLen);
+  }
+  // Anchor longest at maxSafe, shift down. Reduce step if shifted
+  // shortest would dip below minLen.
+  let bottom = maxSafe - (N - 1) * step;
+  if (bottom < minLen) bottom = minLen;
+  const actualStep = (maxSafe - bottom) / (N - 1);
+  return Array.from({ length: N }, (_, k) => bottom + k * actualStep);
 }
 
 /**
  * For each cable-end on a pedal port, compute the leader length to
  * use. Lane index drives the *requested* length (base + idx * step),
- * but the result is clamped per-end so the leader doesn't extend
- * into a neighbouring pedal.
+ * but the result is clamped per-side so the leader doesn't extend
+ * into a neighbouring pedal AND each cable in a side-group still
+ * gets a unique length (preventing visual stacking when the natural
+ * staggered lengths all collide with the same neighbour).
  *
  * Returned map key: `${cableId}:from` or `${cableId}:to`.
  * Cable-ends on external endpoints don't get an entry; callers
@@ -260,8 +322,26 @@ export function computeLeaderLengths(
   step = LEADER_LANE_STEP_IN,
 ): Map<string, number> {
   const laneIdx = laneIndicesPerSide(connections, portIndex);
-  const result = new Map<string, number>();
   const allObstacles = [...obstacleByPlaced.values()];
+  // Match `maxSafeLeaderLength` defaults — see the doc there. The
+  // minLen has to be > `routeCableWithLeader`'s obstacleMarginIn so
+  // even the shortest leader-tip lands outside the source pedal's
+  // own inflated rect (otherwise the router can't start cleanly).
+  const clearance = 0.2;
+  const minLen = 0.2;
+  // Group cable-ends by their (placedId, visualSide) so we can
+  // redistribute leader lengths across the whole group when the
+  // requested staggered lengths don't all fit under the available
+  // clearance.
+  interface CableEnd {
+    key: string;
+    xIn: number;
+    yIn: number;
+    side: Side;
+    sourcePedalRect: ObstacleRect | null;
+    laneIdx: number;
+  }
+  const groups = new Map<string, CableEnd[]>();
   for (const c of connections) {
     for (const end of ['from', 'to'] as const) {
       const nodeKind = end === 'from' ? c.fromNodeKind : c.toNodeKind;
@@ -271,17 +351,45 @@ export function computeLeaderLengths(
       const resolved = portIndex.get(nodeId)?.get(portId);
       if (!resolved) continue;
       const key = `${c.id}:${end}`;
-      const idx = laneIdx.get(key) ?? 0;
-      const requested = baseLength + idx * step;
-      const sourceRect = obstacleByPlaced.get(nodeId) ?? null;
-      const safe = maxSafeLeaderLength(
-        { xIn: resolved.xIn, yIn: resolved.yIn, side: resolved.visualSide },
-        sourceRect,
-        allObstacles,
-        requested,
-      );
-      result.set(key, safe);
+      const groupKey = `${nodeId}:${resolved.visualSide}`;
+      const arr = groups.get(groupKey) ?? [];
+      arr.push({
+        key,
+        xIn: resolved.xIn,
+        yIn: resolved.yIn,
+        side: resolved.visualSide,
+        sourcePedalRect: obstacleByPlaced.get(nodeId) ?? null,
+        laneIdx: laneIdx.get(key) ?? 0,
+      });
+      groups.set(groupKey, arr);
     }
+  }
+  const result = new Map<string, number>();
+  for (const members of groups.values()) {
+    // Group max-safe = the tightest cap any member faces. Using min
+    // across members keeps all leaders inside every member's safe
+    // range (worst-case clearance, but simple and correct).
+    let groupMax = Infinity;
+    for (const m of members) {
+      const room = maxLeaderRoom(
+        { xIn: m.xIn, yIn: m.yIn, side: m.side },
+        m.sourcePedalRect,
+        allObstacles,
+        clearance,
+      );
+      if (room < groupMax) groupMax = room;
+    }
+    members.sort((a, b) => a.laneIdx - b.laneIdx);
+    const lengths = distributeLeaderLengths(
+      members.length,
+      groupMax,
+      baseLength,
+      step,
+      minLen,
+    );
+    members.forEach((m, i) => {
+      result.set(m.key, lengths[i]!);
+    });
   }
   return result;
 }

@@ -8,9 +8,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyLaneRenderOffsets,
+  buildPortIndex,
+  computeLeaderLengths,
   maxSafeLeaderLength,
 } from '../src/canvas/cableRender';
-import type { ObstacleRect } from '../src/lib/geometry';
+import { placedRect, type ObstacleRect } from '../src/lib/geometry';
+import type { Connection, Pedal, PlacedPedal } from '../src/data/schema';
 
 describe('maxSafeLeaderLength', () => {
   it('returns the requested length when no obstacle is on the leader path', () => {
@@ -48,13 +51,13 @@ describe('maxSafeLeaderLength', () => {
     const safe = maxSafeLeaderLength(port, tabby, [tabby, tortie], 0.8);
     // Tortie bottom y = 5.38. Leader extends to y = port.y - safe =
     // 6.15 - safe. For leader-tip to clear Tortie's INFLATED rect
-    // (router inflates by 0.3" margin), safe must leave > 0.4" gap to
-    // Tortie's raw edge → safe ≤ 6.15 - 5.38 - 0.4 = 0.37.
-    expect(safe).toBeLessThanOrEqual(0.37 + 1e-9);
+    // (router inflates by 0.15" margin), safe must leave > 0.2" gap
+    // to Tortie's raw edge → safe ≤ 6.15 - 5.38 - 0.2 = 0.57.
+    expect(safe).toBeLessThanOrEqual(0.57 + 1e-9);
     // And the leader-tip lands clear of Tortie's inflated rect
-    // (raw bottom + obstacle margin = 5.38 + 0.3 = 5.68).
+    // (raw bottom + obstacle margin = 5.38 + 0.15 = 5.53).
     const leaderTipY = 6.15 - safe;
-    expect(leaderTipY).toBeGreaterThanOrEqual(5.68);
+    expect(leaderTipY).toBeGreaterThanOrEqual(5.53);
   });
 
   it('ignores obstacles that are NOT on the leader path (different x)', () => {
@@ -122,10 +125,143 @@ describe('maxSafeLeaderLength', () => {
     for (const { port, block } of cases) {
       const safe = maxSafeLeaderLength(port, null, [block], 1.5);
       // Obstacle starts 1" from the port along the outward axis,
-      // minus the default 0.4" clearance the function reserves so the
-      // leader-tip lands outside the router's inflated obstacle band.
-      expect(safe).toBeCloseTo(0.6, 5);
+      // minus the default 0.2" clearance the function reserves so the
+      // leader-tip lands outside the router's inflated obstacle band
+      // (router inflates by 0.15").
+      expect(safe).toBeCloseTo(0.8, 5);
     }
+  });
+});
+
+describe('computeLeaderLengths', () => {
+  it('gives cables in the same side group DIFFERENT leader lengths even when both clamp against the same neighbour', () => {
+    // Replicates the Wampler Tumnus + Meris LVX case from #41.
+    // Tumnus top-side ports sit at y=6.22 with Meris LVX directly
+    // above (raw bottom at y=5.43). With margin 0.15", the safe
+    // band is too small to fit two natural staggered leaders
+    // (0.4" + 0.6"), so distribute logic must redistribute the
+    // group across the available range — without it, both cables
+    // clamp to the same max-safe value and visually stack.
+    const tumnusDef: Pedal = {
+      id: 'tumnus',
+      brand: 'Wampler',
+      name: 'Tumnus Deluxe',
+      widthIn: 2.5,
+      depthIn: 4.5,
+      imagePath: null,
+      imageSourceUrl: null,
+      jackSides: {
+        top: true,
+        bottom: false,
+        left: false,
+        right: false,
+        midi_top: false,
+        midi_bottom: false,
+        midi_left: false,
+        midi_right: false,
+      },
+      powerSide: null,
+      ports: [
+        {
+          id: 'tumnus-in',
+          pedalId: 'tumnus',
+          label: 'In',
+          role: 'input',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 0,
+          optional: false,
+        },
+        {
+          id: 'tumnus-out',
+          pedalId: 'tumnus',
+          label: 'Out',
+          role: 'output',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 1,
+          optional: false,
+        },
+      ],
+      createdAt: '',
+      updatedAt: '',
+    };
+    const merisDef: Pedal = {
+      ...tumnusDef,
+      id: 'meris',
+      brand: 'Meris',
+      name: 'LVX',
+      widthIn: 7.25,
+      depthIn: 4.5,
+      ports: [],
+    };
+    const tumnusPlaced: PlacedPedal = {
+      id: 'tumnusP',
+      rigId: 'r',
+      pedalId: 'tumnus',
+      xIn: 3.16,
+      yIn: 6.22,
+      rotation: 0,
+    };
+    const merisPlaced: PlacedPedal = {
+      id: 'merisP',
+      rigId: 'r',
+      pedalId: 'meris',
+      xIn: 3.44,
+      yIn: 0.93,
+      rotation: 0,
+    };
+    const pedalsById = new Map<string, Pedal>([
+      ['tumnus', tumnusDef],
+      ['meris', merisDef],
+    ]);
+    const placed = [tumnusPlaced, merisPlaced];
+    const portIndex = buildPortIndex(placed, pedalsById);
+    const obstacleByPlaced = new Map([
+      ['tumnusP', placedRect(tumnusPlaced, tumnusDef)],
+      ['merisP', placedRect(merisPlaced, merisDef)],
+    ]);
+    // Two cables both leaving Tumnus's top — one from the In port
+    // (a stand-in for an incoming cable that terminates at the
+    // pedal) and one from the Out port.
+    const connections: Connection[] = [
+      {
+        id: 'cable-in',
+        rigId: 'r',
+        fromNodeKind: 'pedal',
+        fromNodeId: 'tumnusP',
+        fromPortId: 'tumnus-in',
+        toNodeKind: 'external',
+        toNodeId: 'somewhere',
+        toPortId: null,
+      },
+      {
+        id: 'cable-out',
+        rigId: 'r',
+        fromNodeKind: 'pedal',
+        fromNodeId: 'tumnusP',
+        fromPortId: 'tumnus-out',
+        toNodeKind: 'external',
+        toNodeId: 'elsewhere',
+        toPortId: null,
+      },
+    ];
+    const lengths = computeLeaderLengths(
+      connections,
+      portIndex,
+      obstacleByPlaced,
+    );
+    const inLen = lengths.get('cable-in:from');
+    const outLen = lengths.get('cable-out:from');
+    expect(inLen).toBeDefined();
+    expect(outLen).toBeDefined();
+    // The whole point: lengths must differ so cables don't stack.
+    expect(inLen).not.toBe(outLen);
+    // And neither can be zero (would be no leader at all).
+    expect(inLen!).toBeGreaterThan(0);
+    expect(outLen!).toBeGreaterThan(0);
   });
 });
 
