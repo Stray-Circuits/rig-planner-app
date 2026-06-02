@@ -523,8 +523,21 @@ export function routeCablePath(
   const allCands: { xIn: number; yIn: number }[][] = [...cand3, ...cand5];
   if (aStar) allCands.push(aStar);
 
-  const best = shortestClean(allCands, obstacles, options, from.side, to.side);
-  if (best) return dedupeColinear(best);
+  // Dedupe each candidate BEFORE the clean/U-turn check. dedupe
+  // collapses colinear back-and-forth waypoints into a single
+  // segment that *looks* straight to the eye — and if the original
+  // candidate went up-then-back-down at the leader, the deduped
+  // polyline appears to U-turn at the leader-tip. Checking the
+  // deduped form catches that case.
+  const dedupedCands = allCands.map((c) => dedupeColinear(c));
+  const best = shortestClean(
+    dedupedCands,
+    obstacles,
+    options,
+    from.side,
+    to.side,
+  );
+  if (best) return best;
 
   // No clean candidate survived. Prefer a U-turn-free dirty path over
   // a U-turning one — a cable that crosses a pedal edge reads as a
@@ -1226,6 +1239,12 @@ function routeAStar(
     for (let nd = 0; nd < 4; nd++) {
       // Block the U-turn moves at start / end.
       if (dir === 4 && nd === bannedFromStart) continue;
+      // Block 180° in-path reversals. dedupeColinear collapses three
+      // colinear vertices into two, hiding the back-and-forth and
+      // turning the visual polyline into what looks like a direct
+      // U-turn at the previous vertex. Forbidding the reversal in
+      // A* itself keeps the rendered cable honest.
+      if (dir !== 4 && nd === reverseDir(dir)) continue;
       const delta = dirDelta[nd]!;
       const nxi = xi + delta[0];
       const nyi = yi + delta[1];
