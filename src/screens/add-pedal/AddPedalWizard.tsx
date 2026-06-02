@@ -15,6 +15,7 @@ import { createPedal, updatePedal } from '../../data/pedalsRepo';
 import { isQuotaExceededError } from '../../data/memoryAdapter';
 import {
   blobToDataURL,
+  createChromaKeySession,
   cropToContent,
   describeImageError,
   hasDownloadedModel,
@@ -22,10 +23,10 @@ import {
   markModelDownloaded,
   prefetchBgRemoval,
   removeBackground,
-  removeColorThreshold,
   sampleDominantImageColor,
   shrinkImage,
   type BgRemovalProgress,
+  type ChromaKeySession,
 } from '../../lib/bgRemoval';
 import { ImageEditor } from './ImageEditor';
 import {
@@ -971,41 +972,54 @@ function ImageStep({
     setError(null);
   };
 
+  // Cached chroma-key context — decode the source ONCE, then each slider
+  // tick reuses the in-memory pixel buffer instead of re-decoding through
+  // createImageBitmap + canvas.toBlob (which was the per-tick bottleneck).
+  const chromaSessionRef = useRef<ChromaKeySession | null>(null);
+
   const enterThreshold = () => {
     if (!draft.photoSource) return;
-    setThreshold({ tolerance: 0.12, previewDataUrl: null, busy: false });
-  };
-
-  // Re-run the chroma-key filter whenever the user nudges the slider. We
-  // cache the shrunk source on draft.photoSource so we don't re-shrink.
-  useEffect(() => {
-    if (!threshold || !draft.photoSource) return;
-    let cancelled = false;
-    setThreshold((t) => (t ? { ...t, busy: true } : null));
+    const source = draft.photoSource;
+    setThreshold({ tolerance: 0.12, previewDataUrl: null, busy: true });
     void (async () => {
       try {
-        const shrunk = await shrinkImage(draft.photoSource!, 1024);
-        const filtered = await removeColorThreshold(
-          shrunk,
-          threshold.tolerance,
-        );
-        const cropped = await cropToContent(filtered);
-        const url = await blobToDataURL(cropped);
-        if (cancelled) return;
-        setThreshold((t) =>
-          t ? { ...t, previewDataUrl: url, busy: false } : null,
-        );
+        chromaSessionRef.current = await createChromaKeySession(source);
+        // Trigger an initial render at the default tolerance.
+        setThreshold((t) => (t ? { ...t } : null));
       } catch (err) {
-        if (cancelled) return;
         setError(describeImageError(err));
         setThreshold(null);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-    // We intentionally re-run on tolerance changes only; draft.photoSource
-    // is stable through the threshold flow.
+  };
+
+  // Re-run chroma-key whenever the slider settles. Debounced because the
+  // slider fires onChange on every pixel of drag — without the delay we'd
+  // queue ~100 re-renders per drag. Generation counter guards against an
+  // older render finishing after a newer one and clobbering the preview.
+  const renderGenRef = useRef(0);
+  useEffect(() => {
+    const session = chromaSessionRef.current;
+    if (!threshold || !session) return;
+    const tolerance = threshold.tolerance;
+    const gen = ++renderGenRef.current;
+    const timeoutId = setTimeout(() => {
+      void (async () => {
+        try {
+          const { dataUrl } = await session.render(tolerance);
+          if (gen !== renderGenRef.current) return;
+          setThreshold((t) =>
+            t ? { ...t, previewDataUrl: dataUrl, busy: false } : null,
+          );
+        } catch (err) {
+          if (gen !== renderGenRef.current) return;
+          setError(describeImageError(err));
+          setThreshold(null);
+        }
+      })();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+    // Re-run on tolerance changes only — session is stable through the flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threshold?.tolerance]);
 
@@ -1013,10 +1027,14 @@ function ImageStep({
     if (!threshold?.previewDataUrl) return;
     const url = threshold.previewDataUrl;
     setDraft((d) => ({ ...d, photoDataUrl: url }));
+    chromaSessionRef.current = null;
     setThreshold(null);
   };
 
-  const cancelThreshold = () => setThreshold(null);
+  const cancelThreshold = () => {
+    chromaSessionRef.current = null;
+    setThreshold(null);
+  };
 
   // ---------- Search sub-mode ----------
   const openSearch = () => {

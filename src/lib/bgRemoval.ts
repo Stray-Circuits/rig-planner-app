@@ -384,6 +384,85 @@ export async function removeColorThreshold(
   });
 }
 
+export interface ChromaKeySession {
+  /** Re-run chroma-key at a new tolerance using the cached source. */
+  render(tolerance: number): Promise<{ blob: Blob; dataUrl: string }>;
+}
+
+/**
+ * Build a reusable chroma-key context around a source image. Decodes the
+ * source ONCE — every subsequent `render(tolerance)` reuses the cached
+ * pixel buffer instead of re-decoding the blob through createImageBitmap +
+ * canvas.toBlob.
+ *
+ * Use this when the user is interactively tuning a threshold slider; the
+ * one-shot `removeColorThreshold` re-decodes on every call, which is fine
+ * for a single invocation but adds up to seconds of latency across a drag.
+ */
+export async function createChromaKeySession(
+  source: Blob,
+): Promise<ChromaKeySession> {
+  const shrunk = await shrinkImage(source, 1024);
+  const bitmap = await createImageBitmap(shrunk);
+  const w = bitmap.width;
+  const h = bitmap.height;
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = w;
+  sourceCanvas.height = h;
+  const sctx = sourceCanvas.getContext('2d');
+  if (!sctx) {
+    bitmap.close?.();
+    throw new Error('Could not create canvas context');
+  }
+  sctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+  const sourceImgData = sctx.getImageData(0, 0, w, h);
+  const bg = sampleCornerBgColor(sourceImgData.data, w, h);
+
+  return {
+    async render(tolerance) {
+      const buf = new Uint8ClampedArray(sourceImgData.data);
+      applyColorThreshold(buf, bg, tolerance);
+
+      const previewCanvas = document.createElement('canvas');
+      previewCanvas.width = w;
+      previewCanvas.height = h;
+      const pctx = previewCanvas.getContext('2d');
+      if (!pctx) throw new Error('Could not create canvas context');
+      pctx.putImageData(new ImageData(buf, w, h), 0, 0);
+
+      let outCanvas = previewCanvas;
+      const bbox = findAlphaBBox(buf, w, h);
+      if (bbox) {
+        const pad = 1;
+        const x0 = Math.max(0, bbox.minX - pad);
+        const y0 = Math.max(0, bbox.minY - pad);
+        const x1 = Math.min(w, bbox.maxX + 1 + pad);
+        const y1 = Math.min(h, bbox.maxY + 1 + pad);
+        const cw = x1 - x0;
+        const ch = y1 - y0;
+        const cropped = document.createElement('canvas');
+        cropped.width = cw;
+        cropped.height = ch;
+        const cctx = cropped.getContext('2d');
+        if (cctx) {
+          cctx.drawImage(previewCanvas, x0, y0, cw, ch, 0, 0, cw, ch);
+          outCanvas = cropped;
+        }
+      }
+
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        outCanvas.toBlob((b) => {
+          if (b) resolve(b);
+          else reject(new Error('toBlob returned null'));
+        }, 'image/png');
+      });
+      const dataUrl = await blobToDataURL(blob);
+      return { blob, dataUrl };
+    },
+  };
+}
+
 /**
  * Resize a Blob image (canvas-based) so its long side is at most maxPx. We
  * pre-shrink uploads before bg removal so the model isn't asked to chew on
