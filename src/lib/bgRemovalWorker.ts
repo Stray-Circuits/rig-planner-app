@@ -38,7 +38,12 @@ declare const self: DedicatedWorkerGlobalScope;
 // quint8 conv ops exceeds parallelism gain on this device. Shadowing
 // `hardwareConcurrency` with an own property is the cleanest knob since
 // the lib doesn't expose numThreads in its config.
-const ORT_THREAD_CAP = 2;
+// Diagnostic value: 1 forces ORT to skip thread-spawn machinery entirely.
+// If a trace at this setting matches the pre-COOP/COEP single-thread
+// baseline (~14.5s), the override mechanism works and multi-thread is the
+// regression. If still ~29s, the override is silently failing and we'll
+// take a different tack.
+const ORT_THREAD_CAP = 1;
 Object.defineProperty(navigator, 'hardwareConcurrency', {
   value: ORT_THREAD_CAP,
   configurable: true,
