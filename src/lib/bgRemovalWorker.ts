@@ -31,28 +31,10 @@ export interface WorkerInbound {
 
 declare const self: DedicatedWorkerGlobalScope;
 
-// Cap ORT WASM thread count. The lib unconditionally sets
-// `ort.env.wasm.numThreads = navigator.hardwareConcurrency` (index.mjs:1017),
-// which is 9 on the Pixel 8 Pro. Empirically (issue #23 trace 5) that's
-// SLOWER than single-threaded — kernel dispatch / atomics overhead on
-// quint8 conv ops exceeds parallelism gain on this device. Shadowing
-// `hardwareConcurrency` with an own property is the cleanest knob since
-// the lib doesn't expose numThreads in its config.
-// Diagnostic value: 1 forces ORT to skip thread-spawn machinery entirely.
-// If a trace at this setting matches the pre-COOP/COEP single-thread
-// baseline (~14.5s), the override mechanism works and multi-thread is the
-// regression. If still ~29s, the override is silently failing and we'll
-// take a different tack.
-const ORT_THREAD_CAP = 1;
-Object.defineProperty(navigator, 'hardwareConcurrency', {
-  value: ORT_THREAD_CAP,
-  configurable: true,
-});
-
 // Bundled imgly assets live under `/imgly/` (see scripts/fetch-imgly-assets.mjs
-// + public/imgly/). Serving them same-origin is required because we set
-// Cross-Origin-Embedder-Policy: credentialless — even with credentialless,
-// same-origin serving means we control all the response headers.
+// + public/imgly/). In APK builds they ship inside the app — no first-run
+// model download. In dev they're served by Vite over the LAN, which is the
+// same network cost as fetching from imgly's CDN.
 // Resolving against self.location.href produces an absolute URL that works
 // in dev (http://localhost:1420/), tauri dev (http://192.168.x.x:1420/),
 // and prod (http://tauri.localhost/) without per-environment branching.
