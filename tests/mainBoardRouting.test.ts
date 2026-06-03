@@ -141,6 +141,9 @@ describe('Main board fixture — full-pipeline routing', () => {
     }[] = [];
     const claimedY: number[] = [];
     const claimedX: number[] = [];
+    const claimedHorizontals: { yIn: number; xMin: number; xMax: number }[] =
+      [];
+    const claimedVerticals: { xIn: number; yMin: number; yMax: number }[] = [];
     for (const c of data.connections) {
       const from = resolveEnd(c.fromNodeKind, c.fromNodeId, c.fromPortId);
       const to = resolveEnd(c.toNodeKind, c.toNodeId, c.toPortId);
@@ -158,6 +161,8 @@ describe('Main board fixture — full-pipeline routing', () => {
         boardDepthIn: rig.depthIn,
         claimedY,
         claimedX,
+        claimedHorizontals,
+        claimedVerticals,
         fromLeaderIn: leaderLengths.get(`${c.id}:from`) ?? LEADER_BASE_IN,
         toLeaderIn: leaderLengths.get(`${c.id}:to`) ?? LEADER_BASE_IN,
         obstacleMarginIn: routingMarginIn,
@@ -165,6 +170,8 @@ describe('Main board fixture — full-pipeline routing', () => {
       const lanes = pathLanes(fullPath);
       for (const y of lanes.horizontalY) claimedY.push(y);
       for (const x of lanes.verticalX) claimedX.push(x);
+      for (const h of lanes.horizontals) claimedHorizontals.push(h);
+      for (const v of lanes.verticals) claimedVerticals.push(v);
       cables.push({
         from,
         to,

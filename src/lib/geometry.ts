@@ -386,6 +386,17 @@ export interface RouteOptions {
   claimedY?: readonly number[];
   /** X-values of vertical segments already taken by other cables. */
   claimedX?: readonly number[];
+  /**
+   * Per-segment claimed lanes with their perpendicular extent.
+   * Used for the cross-penalty so we only penalize a horizontal that
+   * would VISUALLY cross a prior cable's vertical (i.e. the prior
+   * vertical's y range includes the horizontal's y). Without ranges,
+   * the cross-penalty pessimistically fires whenever the X falls
+   * within the horizontal's x span — which over-penalizes incidental
+   * crossings outside the prior cable's visible footprint.
+   */
+  claimedVerticals?: readonly { xIn: number; yMin: number; yMax: number }[];
+  claimedHorizontals?: readonly { yIn: number; xMin: number; xMax: number }[];
   /** Override the perpendicular leader length at the FROM port. */
   fromLeaderIn?: number;
   /** Override the perpendicular leader length at the TO port. */
@@ -468,18 +479,35 @@ export function routeCableWithLeader(
 export function pathLanes(path: readonly { xIn: number; yIn: number }[]): {
   horizontalY: number[];
   verticalX: number[];
+  horizontals: { yIn: number; xMin: number; xMax: number }[];
+  verticals: { xIn: number; yMin: number; yMax: number }[];
 } {
   const horizontalY: number[] = [];
   const verticalX: number[] = [];
+  const horizontals: { yIn: number; xMin: number; xMax: number }[] = [];
+  const verticals: { xIn: number; yMin: number; yMax: number }[] = [];
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i]!;
     const b = path[i + 1]!;
     const dx = Math.abs(b.xIn - a.xIn);
     const dy = Math.abs(b.yIn - a.yIn);
-    if (dy < 0.001 && dx > 0.5) horizontalY.push(a.yIn);
-    else if (dx < 0.001 && dy > 0.5) verticalX.push(a.xIn);
+    if (dy < 0.001 && dx > 0.5) {
+      horizontalY.push(a.yIn);
+      horizontals.push({
+        yIn: a.yIn,
+        xMin: Math.min(a.xIn, b.xIn),
+        xMax: Math.max(a.xIn, b.xIn),
+      });
+    } else if (dx < 0.001 && dy > 0.5) {
+      verticalX.push(a.xIn);
+      verticals.push({
+        xIn: a.xIn,
+        yMin: Math.min(a.yIn, b.yIn),
+        yMax: Math.max(a.yIn, b.yIn),
+      });
+    }
   }
-  return { horizontalY, verticalX };
+  return { horizontalY, verticalX, horizontals, verticals };
 }
 
 /**
@@ -618,6 +646,16 @@ function pathScore(
   // router share a lane if going further is impractical.
   const LANE_TOL = 0.4;
   const LANE_PENALTY = 5.0;
+  // Per-crossing penalty: only applies when a horizontal segment
+  // would VISUALLY intersect a prior cable's vertical (i.e. the
+  // prior cable's y range covers this horizontal's y AND its x
+  // falls within this horizontal's x span). Symmetric for verticals
+  // crossing prior horizontals. Without segment-range awareness the
+  // penalty over-fires on incidental crossings; with it we only
+  // discourage the routes that actually look like cable-on-cable.
+  const CROSS_PENALTY = 6.0;
+  const claimedVerticals = options.claimedVerticals ?? [];
+  const claimedHorizontals = options.claimedHorizontals ?? [];
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i]!;
     const b = path[i + 1]!;
@@ -633,6 +671,21 @@ function pathScore(
         }
       }
       score += worst;
+      // Crossings: only fire when the prior vertical's y range
+      // actually contains THIS horizontal's y (true visual overlap).
+      const minX = Math.min(a.xIn, b.xIn);
+      const maxX = Math.max(a.xIn, b.xIn);
+      const y = a.yIn;
+      for (const v of claimedVerticals) {
+        if (
+          v.xIn > minX + 0.05 &&
+          v.xIn < maxX - 0.05 &&
+          y > v.yMin + 0.05 &&
+          y < v.yMax - 0.05
+        ) {
+          score += CROSS_PENALTY;
+        }
+      }
     } else if (dx < 0.001 && dy > 0.5) {
       let worst = 0;
       for (const x of claimedX) {
@@ -643,6 +696,19 @@ function pathScore(
         }
       }
       score += worst;
+      const minY = Math.min(a.yIn, b.yIn);
+      const maxY = Math.max(a.yIn, b.yIn);
+      const x = a.xIn;
+      for (const h of claimedHorizontals) {
+        if (
+          h.yIn > minY + 0.05 &&
+          h.yIn < maxY - 0.05 &&
+          x > h.xMin + 0.05 &&
+          x < h.xMax - 0.05
+        ) {
+          score += CROSS_PENALTY;
+        }
+      }
     }
     if (boardW !== undefined && boardD !== undefined) {
       for (const pt of [a, b]) {
@@ -990,12 +1056,7 @@ function generate5SegCandidates(
   return cands;
 }
 
-/**
- * Candidate coordinates just outside each obstacle's axis extent.
- * Emits two clearance offsets (0.3" and 0.1") so the 5-seg generator
- * can find narrow corridors where 0.3" clearance on both sides
- * wouldn't fit.
- */
+/** Candidate coordinates just outside each obstacle's axis extent. */
 function obstacleEdgeCandidates(
   obstacles: readonly ObstacleRect[],
   axis: 'x' | 'y',
@@ -1011,10 +1072,8 @@ function obstacleEdgeCandidates(
   for (const r of obstacles) {
     const lo = axis === 'x' ? r.xIn : r.yIn;
     const hi = lo + (axis === 'x' ? r.widthIn : r.depthIn);
-    for (const c of [0.3, 0.1]) {
-      push(lo - c);
-      push(hi + c);
-    }
+    push(lo - 0.3);
+    push(hi + 0.3);
   }
   return out;
 }
@@ -1042,13 +1101,26 @@ function transitCandidates(
     out.push(v);
   };
   push((a + b) / 2);
+  // Corridor midpoints between two obstacles' near edges. Critical
+  // for fitting a transit lane in the gap between a top row pedal's
+  // bottom edge and a middle row pedal's top edge (e.g. between
+  // Meris LVX bottom and OCTA PSI top on the Main board), which the
+  // standard 0.3"-offset edge candidates can't hit when the gap is
+  // narrower than 0.6".
+  for (const r1 of obstacles) {
+    const r1Hi =
+      (axis === 'x' ? r1.xIn : r1.yIn) +
+      (axis === 'x' ? r1.widthIn : r1.depthIn);
+    for (const r2 of obstacles) {
+      const r2Lo = axis === 'x' ? r2.xIn : r2.yIn;
+      if (r2Lo > r1Hi + 0.1) push((r1Hi + r2Lo) / 2);
+    }
+  }
   for (const r of obstacles) {
     const rLo = axis === 'x' ? r.xIn : r.yIn;
     const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
-    for (const c of [0.3, 0.1]) {
-      push(rLo - c);
-      push(rHi + c);
-    }
+    push(rLo - 0.3);
+    push(rHi + 0.3);
   }
   for (const d of [0.4, 0.8, 1.2]) {
     push(lo - d);

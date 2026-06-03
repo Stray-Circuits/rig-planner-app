@@ -378,6 +378,8 @@ export function ChainOverlay({
   const cableChannel = computeCableChannels(orderedConnections, portIndex);
   const claimedY: number[] = [];
   const claimedX: number[] = [];
+  const claimedHorizontals: { yIn: number; xMin: number; xMax: number }[] = [];
+  const claimedVerticals: { xIn: number; yMin: number; yMax: number }[] = [];
   const routedCables = orderedConnections
     .map((c) => {
       const from = lookupConnectionEnd(
@@ -440,6 +442,8 @@ export function ChainOverlay({
         {
           claimedY,
           claimedX,
+          claimedHorizontals,
+          claimedVerticals,
           fromLeaderIn,
           toLeaderIn,
           boardWidthIn: rig.widthIn,
@@ -451,6 +455,8 @@ export function ChainOverlay({
       const lanes = pathLanes(path);
       for (const y of lanes.horizontalY) claimedY.push(y);
       for (const x of lanes.verticalX) claimedX.push(x);
+      for (const h of lanes.horizontals) claimedHorizontals.push(h);
+      for (const v of lanes.verticals) claimedVerticals.push(v);
       return {
         c,
         from,

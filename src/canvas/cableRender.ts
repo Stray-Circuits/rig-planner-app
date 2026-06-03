@@ -284,21 +284,28 @@ function distributeLeaderLengths(
   minLen: number,
 ): number[] {
   if (N <= 0) return [];
+  // Hard cap on leader length even when there's plenty of room — long
+  // leaders read as "needlessly high" cables jutting out of the pedal
+  // for no geometric reason. The cap is generous enough to fit the
+  // natural staggered pattern up to ~5 cables on one side; beyond
+  // that the group still distributes evenly.
+  const HARD_CAP = 0.8;
+  const cap = Math.min(maxSafe, HARD_CAP);
   if (N === 1) {
-    return [Math.max(minLen, Math.min(baseLength, maxSafe))];
+    return [Math.max(minLen, Math.min(baseLength, cap))];
   }
   const maxRequested = baseLength + (N - 1) * step;
-  if (maxRequested <= maxSafe) {
+  if (maxRequested <= cap) {
     return Array.from({ length: N }, (_, k) => baseLength + k * step);
   }
-  if (maxSafe < minLen) {
+  if (cap < minLen) {
     return Array.from({ length: N }, () => minLen);
   }
-  // Anchor longest at maxSafe, shift down. Reduce step if shifted
+  // Anchor longest at cap, shift down. Reduce step if shifted
   // shortest would dip below minLen.
-  let bottom = maxSafe - (N - 1) * step;
+  let bottom = cap - (N - 1) * step;
   if (bottom < minLen) bottom = minLen;
-  const actualStep = (maxSafe - bottom) / (N - 1);
+  const actualStep = (cap - bottom) / (N - 1);
   return Array.from({ length: N }, (_, k) => bottom + k * actualStep);
 }
 
