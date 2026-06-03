@@ -29,6 +29,14 @@ export default defineConfig({
     },
   },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
+  // Our bg-removal worker imports `@imgly/background-removal`, which uses
+  // dynamic imports internally — that means the worker bundle must be
+  // code-splittable, and the default `iife` worker format can't do that.
+  // `es` produces a code-splittable ES module worker; the WebViews we target
+  // (Tauri/WebKit, Android WebView, modern Chromium) all support it.
+  worker: {
+    format: 'es',
+  },
   build: {
     target:
       process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
