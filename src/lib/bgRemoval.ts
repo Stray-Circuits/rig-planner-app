@@ -386,7 +386,7 @@ export async function removeColorThreshold(
 
 export interface ChromaKeySession {
   /** Re-run chroma-key at a new tolerance using the cached source. */
-  render(tolerance: number): Promise<{ blob: Blob; dataUrl: string }>;
+  render(tolerance: number): Promise<{ dataUrl: string }>;
 }
 
 /**
@@ -420,7 +420,7 @@ export async function createChromaKeySession(
   const bg = sampleCornerBgColor(sourceImgData.data, w, h);
 
   return {
-    async render(tolerance) {
+    render(tolerance) {
       const buf = new Uint8ClampedArray(sourceImgData.data);
       applyColorThreshold(buf, bg, tolerance);
 
@@ -451,14 +451,15 @@ export async function createChromaKeySession(
         }
       }
 
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        outCanvas.toBlob((b) => {
-          if (b) resolve(b);
-          else reject(new Error('toBlob returned null'));
-        }, 'image/png');
-      });
-      const dataUrl = await blobToDataURL(blob);
-      return { blob, dataUrl };
+      // Synchronous PNG encoding. Blocks the main thread briefly (~50-150ms
+      // on a ~1024px canvas) but runs start-to-finish in a single task — the
+      // async toBlob + FileReader chain we used before got starved by rapid
+      // slider input events (issue #23 chromakey diagnostic logs), so a
+      // pending render's commit could lag by seconds. Sync encode means
+      // "stop moving" → preview update is bounded by the 50ms debounce plus
+      // the encode time, regardless of how chatty the input is.
+      const dataUrl = outCanvas.toDataURL('image/png');
+      return Promise.resolve({ dataUrl });
     },
   };
 }
