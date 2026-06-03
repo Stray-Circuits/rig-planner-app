@@ -990,20 +990,30 @@ function generate5SegCandidates(
   return cands;
 }
 
-/** Candidate coordinates just outside each obstacle's axis extent. */
+/**
+ * Candidate coordinates just outside each obstacle's axis extent.
+ * Emits two clearance offsets (0.3" and 0.1") so the 5-seg generator
+ * can find narrow corridors where 0.3" clearance on both sides
+ * wouldn't fit.
+ */
 function obstacleEdgeCandidates(
   obstacles: readonly ObstacleRect[],
   axis: 'x' | 'y',
 ): number[] {
-  const clearance = 0.3;
+  const seen = new Set<number>();
   const out: number[] = [];
+  const push = (v: number): void => {
+    const key = Math.round(v * 100);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(v);
+  };
   for (const r of obstacles) {
-    if (axis === 'x') {
-      out.push(r.xIn - clearance);
-      out.push(r.xIn + r.widthIn + clearance);
-    } else {
-      out.push(r.yIn - clearance);
-      out.push(r.yIn + r.depthIn + clearance);
+    const lo = axis === 'x' ? r.xIn : r.yIn;
+    const hi = lo + (axis === 'x' ? r.widthIn : r.depthIn);
+    for (const c of [0.3, 0.1]) {
+      push(lo - c);
+      push(hi + c);
     }
   }
   return out;
@@ -1023,17 +1033,26 @@ function transitCandidates(
 ): number[] {
   const lo = Math.min(a, b);
   const hi = Math.max(a, b);
-  const clearance = 0.3;
-  const out: number[] = [(a + b) / 2];
+  const seen = new Set<number>();
+  const out: number[] = [];
+  const push = (v: number): void => {
+    const key = Math.round(v * 100);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(v);
+  };
+  push((a + b) / 2);
   for (const r of obstacles) {
     const rLo = axis === 'x' ? r.xIn : r.yIn;
     const rHi = rLo + (axis === 'x' ? r.widthIn : r.depthIn);
-    out.push(rLo - clearance);
-    out.push(rHi + clearance);
+    for (const c of [0.3, 0.1]) {
+      push(rLo - c);
+      push(rHi + c);
+    }
   }
   for (const d of [0.4, 0.8, 1.2]) {
-    out.push(lo - d);
-    out.push(hi + d);
+    push(lo - d);
+    push(hi + d);
   }
   return out;
 }
