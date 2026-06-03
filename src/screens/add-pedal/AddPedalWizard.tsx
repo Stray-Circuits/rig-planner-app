@@ -976,16 +976,20 @@ function ImageStep({
   // tick reuses the in-memory pixel buffer instead of re-decoding through
   // createImageBitmap + canvas.toBlob (which was the per-tick bottleneck).
   const chromaSessionRef = useRef<ChromaKeySession | null>(null);
+  // Flips true once the session is ready; included in the render effect's
+  // deps so the initial preview fires the same way as later slider ticks.
+  const [chromaSessionReady, setChromaSessionReady] = useState(false);
 
   const enterThreshold = () => {
     if (!draft.photoSource) return;
     const source = draft.photoSource;
+    chromaSessionRef.current = null;
+    setChromaSessionReady(false);
     setThreshold({ tolerance: 0.12, previewDataUrl: null, busy: true });
     void (async () => {
       try {
         chromaSessionRef.current = await createChromaKeySession(source);
-        // Trigger an initial render at the default tolerance.
-        setThreshold((t) => (t ? { ...t } : null));
+        setChromaSessionReady(true);
       } catch (err) {
         setError(describeImageError(err));
         setThreshold(null);
@@ -993,14 +997,15 @@ function ImageStep({
     })();
   };
 
-  // Re-run chroma-key whenever the slider settles. Debounced because the
-  // slider fires onChange on every pixel of drag — without the delay we'd
-  // queue ~100 re-renders per drag. Generation counter guards against an
-  // older render finishing after a newer one and clobbering the preview.
+  // Re-run chroma-key whenever the slider settles OR the session becomes
+  // ready (initial render). 50ms debounce — short enough that a stop-and-
+  // -hold feels instant, long enough to batch out a drag's rapid onChange.
+  // Generation counter guards against an older render finishing after a
+  // newer one and clobbering the preview.
   const renderGenRef = useRef(0);
   useEffect(() => {
     const session = chromaSessionRef.current;
-    if (!threshold || !session) return;
+    if (!threshold || !session || !chromaSessionReady) return;
     const tolerance = threshold.tolerance;
     const gen = ++renderGenRef.current;
     const timeoutId = setTimeout(() => {
@@ -1017,22 +1022,25 @@ function ImageStep({
           setThreshold(null);
         }
       })();
-    }, 100);
+    }, 50);
     return () => clearTimeout(timeoutId);
-    // Re-run on tolerance changes only — session is stable through the flow.
+    // Re-run on tolerance / readiness changes; session is stable through
+    // the flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threshold?.tolerance]);
+  }, [threshold?.tolerance, chromaSessionReady]);
 
   const applyThreshold = () => {
     if (!threshold?.previewDataUrl) return;
     const url = threshold.previewDataUrl;
     setDraft((d) => ({ ...d, photoDataUrl: url }));
     chromaSessionRef.current = null;
+    setChromaSessionReady(false);
     setThreshold(null);
   };
 
   const cancelThreshold = () => {
     chromaSessionRef.current = null;
+    setChromaSessionReady(false);
     setThreshold(null);
   };
 
