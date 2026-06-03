@@ -1005,25 +1005,49 @@ function ImageStep({
   const renderGenRef = useRef(0);
   useEffect(() => {
     const session = chromaSessionRef.current;
+    console.log(
+      '[chromakey] effect fired',
+      JSON.stringify({
+        tolerance: threshold?.tolerance,
+        hasThreshold: !!threshold,
+        sessionReady: chromaSessionReady,
+        hasSession: !!session,
+      }),
+    );
     if (!threshold || !session || !chromaSessionReady) return;
     const tolerance = threshold.tolerance;
     const gen = ++renderGenRef.current;
+    console.log('[chromakey] scheduling render', { tolerance, gen });
     const timeoutId = setTimeout(() => {
       void (async () => {
+        console.log('[chromakey] render start', { tolerance, gen });
         try {
           const { dataUrl } = await session.render(tolerance);
-          if (gen !== renderGenRef.current) return;
+          const stale = gen !== renderGenRef.current;
+          console.log('[chromakey] render done', {
+            tolerance,
+            gen,
+            currentGen: renderGenRef.current,
+            stale,
+            dataUrlLen: dataUrl.length,
+          });
+          if (stale) return;
           setThreshold((t) =>
             t ? { ...t, previewDataUrl: dataUrl, busy: false } : null,
           );
+          console.log('[chromakey] committed', { tolerance, gen });
         } catch (err) {
+          console.error('[chromakey] render threw', err);
           if (gen !== renderGenRef.current) return;
           setError(describeImageError(err));
           setThreshold(null);
         }
       })();
     }, 50);
-    return () => clearTimeout(timeoutId);
+    return () => {
+      console.log('[chromakey] effect cleanup', { gen });
+      clearTimeout(timeoutId);
+    };
     // Re-run on tolerance / readiness changes; session is stable through
     // the flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
