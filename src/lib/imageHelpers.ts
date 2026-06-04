@@ -46,6 +46,71 @@ export function findAlphaBBox(
  * Sample 4 corner pixels (inset slightly) and average their RGB. This gives
  * a stable background-color estimate for chroma-key style removal.
  */
+/**
+ * Heuristic: sample a ring of pixels just inside the outer border and decide
+ * whether the photo has a uniform background suitable for chroma-key
+ * removal. Returns a recommended tolerance when uniform, null otherwise.
+ *
+ * Uniformity is judged by the max per-channel stddev across sampled border
+ * pixels. Low stddev = consistent edge color = clean background. The
+ * threshold (12 on the 0-255 channel scale) is tuned conservatively —
+ * borderline-uniform photos fall through to ISNet rather than risk a bad
+ * chroma-key result. False negatives (running ISNet when chroma-key would
+ * have worked) cost time; false positives (running chroma-key on a busy
+ * background) cost quality, which is worse.
+ */
+export function detectUniformBackground(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  options: { maxStddev?: number; tolerance?: number } = {},
+): { tolerance: number } | null {
+  if (width < 32 || height < 32) return null;
+  const maxStddev = options.maxStddev ?? 12;
+  const tolerance = options.tolerance ?? 0.12;
+  const inset = Math.max(2, Math.round(Math.min(width, height) * 0.01));
+  const samplesPerEdge = 32;
+  const at = (x: number, y: number): [number, number, number] => {
+    const i = (y * width + x) * 4;
+    return [data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0];
+  };
+  const points: [number, number, number][] = [];
+  for (let k = 0; k < samplesPerEdge; k++) {
+    const t = k / (samplesPerEdge - 1);
+    const x = Math.round(inset + t * (width - 1 - 2 * inset));
+    points.push(at(x, inset));
+    points.push(at(x, height - 1 - inset));
+    const y = Math.round(inset + t * (height - 1 - 2 * inset));
+    points.push(at(inset, y));
+    points.push(at(width - 1 - inset, y));
+  }
+  const n = points.length;
+  let mr = 0;
+  let mg = 0;
+  let mb = 0;
+  for (const [r, g, b] of points) {
+    mr += r;
+    mg += g;
+    mb += b;
+  }
+  mr /= n;
+  mg /= n;
+  mb /= n;
+  let vr = 0;
+  let vg = 0;
+  let vb = 0;
+  for (const [r, g, b] of points) {
+    vr += (r - mr) ** 2;
+    vg += (g - mg) ** 2;
+    vb += (b - mb) ** 2;
+  }
+  const sr = Math.sqrt(vr / n);
+  const sg = Math.sqrt(vg / n);
+  const sb = Math.sqrt(vb / n);
+  if (Math.max(sr, sg, sb) > maxStddev) return null;
+  return { tolerance };
+}
+
 export function sampleCornerBgColor(
   data: Uint8ClampedArray,
   width: number,

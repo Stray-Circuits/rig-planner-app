@@ -1,5 +1,8 @@
+import BgRemovalWorker from './bgRemovalWorker?worker';
+import type { WorkerOutbound } from './bgRemovalWorker';
 import {
   applyColorThreshold,
+  detectUniformBackground,
   dominantColor,
   findAlphaBBox,
   rgbToHex,
@@ -9,10 +12,10 @@ import {
 /**
  * Background-removal wrapper around `@imgly/background-removal`.
  *
- * The underlying library lazy-loads a ~176MB U²Net model on first use,
- * caches it in IndexedDB, and prefers WebGPU with a WASM fallback. We import
- * it dynamically so the model worker / wasm assets aren't part of the
- * critical bundle.
+ * The library only proxies inference to a worker when device='gpu', and
+ * WebGPU on Android WebView is slower than CPU quint8 (issue #23 traces).
+ * So we wrap our own dedicated worker (`./bgRemovalWorker.ts`) and run the
+ * lib in CPU mode there — keeps the ~14s inference off the main thread.
  *
  * Returns a transparent-background PNG as a Blob. Callers can convert with
  * `URL.createObjectURL` or `blobToDataURL` (below).
@@ -20,7 +23,7 @@ import {
 
 export type BgRemovalPhase =
   | 'preparing-image' // shrinking + decoding the upload
-  | 'loading-library' // dynamic-importing @imgly/background-removal
+  | 'loading-library' // spinning up the worker
   | 'initializing-runtime' // library loaded but ORT/WASM still warming up
   | 'fetching-model' // first-time model download
   | 'processing' // running inference
@@ -35,71 +38,190 @@ export interface BgRemovalProgress {
 export interface RemoveBackgroundOptions {
   onProgress?: (p: BgRemovalProgress) => void;
   signal?: AbortSignal;
+  /**
+   * Skip the chroma-key fast path and force ISNet. Useful when a previous
+   * fast-path attempt produced a bad mask (e.g. pedal pixels matched the
+   * background color and got punched out). Defaults to false — most photos
+   * benefit from the bypass.
+   */
+  bypassChromaKey?: boolean;
+}
+
+// One long-lived worker shared across all bg-removal calls. The library's
+// model bytes, parsed ONNX graph, and ORT WASM runtime live in this worker's
+// module-level state. Spawning a fresh worker per call would re-download the
+// model (the lib has no persistent caching of its own — pure `fetch()`).
+let sharedWorker: Worker | null = null;
+function getWorker(): Worker | null {
+  if (sharedWorker) return sharedWorker;
+  try {
+    const w = new BgRemovalWorker();
+    // Attach a default onerror handler immediately so a bundle-load failure
+    // surfaces (and disposes the broken ref) even before any caller wires
+    // its own handler. Callers overwrite this in `removeBackground`.
+    w.onerror = (e) => {
+      console.error('[bgRemoval] worker error before caller wired:', e);
+      if (sharedWorker === w) sharedWorker = null;
+      w.terminate();
+    };
+    sharedWorker = w;
+    return sharedWorker;
+  } catch {
+    // Worker unavailable (e.g. test env).
+    return null;
+  }
+}
+function disposeWorker(): void {
+  sharedWorker?.terminate();
+  sharedWorker = null;
+}
+
+/**
+ * Fast path: when the input's border pixels are uniform (e.g. a product shot
+ * on a clean background or a photo on a sheet of paper), skip the 14s ISNet
+ * worker and use chroma-key. Resolves to a transparent PNG, or null if the
+ * input doesn't look uniform enough or the canvas pipeline errors.
+ *
+ * Checks the AbortSignal at each await point so a mid-pipeline cancel
+ * surfaces promptly instead of running to completion first.
+ */
+async function tryChromaKeyBypass(
+  source: Blob,
+  signal?: AbortSignal,
+): Promise<Blob | null> {
+  const bitmap = await createImageBitmap(source);
+  if (signal?.aborted) {
+    bitmap.close?.();
+    return null;
+  }
+  const w = bitmap.width;
+  const h = bitmap.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    bitmap.close?.();
+    return null;
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const detection = detectUniformBackground(imgData.data, w, h);
+  if (!detection) return null;
+  if (signal?.aborted) return null;
+
+  const bg = sampleCornerBgColor(imgData.data, w, h);
+  applyColorThreshold(imgData.data, bg, detection.tolerance);
+  ctx.putImageData(imgData, 0, 0);
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((b) => {
+      if (b === null) {
+        console.warn(
+          '[bgRemoval] tryChromaKeyBypass: canvas.toBlob returned null; falling through to ISNet',
+        );
+      }
+      resolve(b);
+    }, 'image/png');
+  });
 }
 
 /**
  * Run background removal on a File or Blob. Resolves to a transparent PNG
- * Blob; rejects if the user cancels via the AbortSignal or if loading the
- * library fails.
+ * Blob; rejects if the user cancels via the AbortSignal or if the worker
+ * fails to load.
+ *
+ * Tries a chroma-key fast path first for photos with a uniform background
+ * (product shots, photos on a sheet of paper). Falls through to the ISNet
+ * worker if the heuristic isn't confident. Pass `bypassChromaKey: true`
+ * to force ISNet directly — useful as a recovery path when the fast path
+ * produced a bad mask on a previous attempt.
+ *
+ * **Not safe to call concurrently.** This function uses a shared worker
+ * and overwrites its `onmessage` / `onerror` on each call. The single
+ * current caller serializes via AbortSignal (aborting any prior in-flight
+ * call before starting a new one); a new caller must do the same or
+ * implement an external mutex, otherwise the older call's promise will
+ * hang and the worker's response is delivered to the wrong handler.
  */
 export async function removeBackground(
   source: Blob,
   opts: RemoveBackgroundOptions = {},
 ): Promise<Blob> {
-  const { onProgress, signal } = opts;
+  const { onProgress, signal, bypassChromaKey } = opts;
 
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
+  }
+
+  if (!bypassChromaKey) {
+    onProgress?.({ phase: 'preparing-image', fraction: null });
+    const fast = await tryChromaKeyBypass(source, signal).catch(() => null);
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    if (fast) return fast;
   }
 
   onProgress?.({ phase: 'loading-library', fraction: null });
-
-  // Dynamic import — keeps the heavy lib out of the initial bundle.
-  // If we prefetched earlier this resolves instantly; first-time it's the
-  // ~22KB imgly chunk + ~109KB ORT JS.
-  const mod = await import('@imgly/background-removal');
-
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
+  const worker = getWorker();
+  if (!worker) {
+    throw new Error('Web Worker unavailable in this environment');
   }
 
-  // The library doesn't expose a "runtime ready" event — calling
-  // removeBackground triggers ORT WASM instantiation under the hood. This
-  // can take a few seconds with no visible progress; surface that as its
-  // own phase so the user doesn't sit on a stale "Loading…" forever.
-  onProgress?.({ phase: 'initializing-runtime', fraction: null });
+  return new Promise<Blob>((resolve, reject) => {
+    let phase: BgRemovalPhase = 'initializing-runtime';
 
-  let phase: BgRemovalPhase = 'initializing-runtime';
-  const result = await mod.removeBackground(source, {
-    output: { format: 'image/png', quality: 1 },
-    progress: (key: string, current: number, total: number) => {
-      // Library keys look like `fetch:<filename>` while downloading and
-      // `compute:onnxruntime/...` once inference starts.
-      if (key.startsWith('compute')) {
-        phase = 'processing';
-      } else if (key.startsWith('fetch')) {
-        phase = 'fetching-model';
+    const cleanup = () => {
+      worker.onmessage = null;
+      worker.onerror = null;
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      // Can't surgically cancel an in-flight inference inside the worker;
+      // terminate so a fresh worker spawns next call.
+      disposeWorker();
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort);
+
+    worker.onerror = (e) => {
+      // Worker may be in a broken state; drop the shared ref.
+      disposeWorker();
+      cleanup();
+      reject(new Error(e.message || 'Worker error'));
+    };
+    worker.onmessage = (e: MessageEvent<WorkerOutbound>) => {
+      const msg = e.data;
+      if (msg.type === 'progress') {
+        // Library keys look like `fetch:<filename>` while downloading and
+        // `compute:onnxruntime/...` once inference starts.
+        if (msg.key.startsWith('compute')) phase = 'processing';
+        else if (msg.key.startsWith('fetch')) phase = 'fetching-model';
+        const fraction = msg.total > 0 ? msg.current / msg.total : null;
+        onProgress?.({ phase, fraction });
+      } else if (msg.type === 'result') {
+        cleanup();
+        resolve(msg.blob);
+      } else {
+        cleanup();
+        reject(new Error(msg.message));
       }
-      const fraction = total > 0 ? current / total : null;
-      onProgress?.({ phase, fraction });
-    },
+    };
+
+    onProgress?.({ phase: 'initializing-runtime', fraction: null });
+    worker.postMessage({ source });
   });
-
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-
-  return result;
 }
 
 /**
- * Kick off the bg-removal library load in the background. Safe to call
- * repeatedly — the dynamic-import cache de-dupes. Use this from the wizard's
- * image step so the chunk is ready by the time the user picks a file.
+ * Pre-spawn the shared bg-removal worker so the lib + ORT WASM import is
+ * warm by the time the user picks a file. Idempotent.
  */
 export function prefetchBgRemoval(): void {
-  // Best-effort; ignore failures so a flaky network doesn't crash the wizard.
-  void import('@imgly/background-removal').catch(() => undefined);
+  getWorker();
 }
 
 /**
@@ -304,6 +426,86 @@ export async function removeColorThreshold(
       else reject(new Error('toBlob returned null'));
     }, 'image/png');
   });
+}
+
+export interface ChromaKeySession {
+  /** Re-run chroma-key at a new tolerance using the cached source. */
+  render(tolerance: number): Promise<{ dataUrl: string }>;
+}
+
+/**
+ * Build a reusable chroma-key context around a source image. Decodes the
+ * source ONCE — every subsequent `render(tolerance)` reuses the cached
+ * pixel buffer instead of re-decoding the blob through createImageBitmap +
+ * canvas.toBlob.
+ *
+ * Use this when the user is interactively tuning a threshold slider; the
+ * one-shot `removeColorThreshold` re-decodes on every call, which is fine
+ * for a single invocation but adds up to seconds of latency across a drag.
+ */
+export async function createChromaKeySession(
+  source: Blob,
+): Promise<ChromaKeySession> {
+  const shrunk = await shrinkImage(source, 1024);
+  const bitmap = await createImageBitmap(shrunk);
+  const w = bitmap.width;
+  const h = bitmap.height;
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = w;
+  sourceCanvas.height = h;
+  const sctx = sourceCanvas.getContext('2d');
+  if (!sctx) {
+    bitmap.close?.();
+    throw new Error('Could not create canvas context');
+  }
+  sctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+  const sourceImgData = sctx.getImageData(0, 0, w, h);
+  const bg = sampleCornerBgColor(sourceImgData.data, w, h);
+
+  return {
+    render(tolerance) {
+      const buf = new Uint8ClampedArray(sourceImgData.data);
+      applyColorThreshold(buf, bg, tolerance);
+
+      const previewCanvas = document.createElement('canvas');
+      previewCanvas.width = w;
+      previewCanvas.height = h;
+      const pctx = previewCanvas.getContext('2d');
+      if (!pctx) throw new Error('Could not create canvas context');
+      pctx.putImageData(new ImageData(buf, w, h), 0, 0);
+
+      let outCanvas = previewCanvas;
+      const bbox = findAlphaBBox(buf, w, h);
+      if (bbox) {
+        const pad = 1;
+        const x0 = Math.max(0, bbox.minX - pad);
+        const y0 = Math.max(0, bbox.minY - pad);
+        const x1 = Math.min(w, bbox.maxX + 1 + pad);
+        const y1 = Math.min(h, bbox.maxY + 1 + pad);
+        const cw = x1 - x0;
+        const ch = y1 - y0;
+        const cropped = document.createElement('canvas');
+        cropped.width = cw;
+        cropped.height = ch;
+        const cctx = cropped.getContext('2d');
+        if (cctx) {
+          cctx.drawImage(previewCanvas, x0, y0, cw, ch, 0, 0, cw, ch);
+          outCanvas = cropped;
+        }
+      }
+
+      // Synchronous PNG encoding. Blocks the main thread briefly (~50-150ms
+      // on a ~1024px canvas) but runs start-to-finish in a single task — the
+      // async toBlob + FileReader chain we used before got starved by rapid
+      // slider input events (issue #23 chromakey diagnostic logs), so a
+      // pending render's commit could lag by seconds. Sync encode means
+      // "stop moving" → preview update is bounded by the 50ms debounce plus
+      // the encode time, regardless of how chatty the input is.
+      const dataUrl = outCanvas.toDataURL('image/png');
+      return Promise.resolve({ dataUrl });
+    },
+  };
 }
 
 /**

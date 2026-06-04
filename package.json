@@ -7,6 +7,13 @@
   "author": "Stray Circuits",
   "license": "AGPL-3.0-or-later",
   "scripts": {
+    "imgly:fetch": "node scripts/fetch-imgly-assets.mjs",
+    "predev": "pnpm imgly:fetch",
+    "prebuild": "pnpm imgly:fetch",
+    "pretauri:dev": "pnpm imgly:fetch",
+    "pretauri:build": "pnpm imgly:fetch",
+    "pretauri:android:dev": "pnpm imgly:fetch",
+    "pretauri:ios:dev": "pnpm imgly:fetch",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
