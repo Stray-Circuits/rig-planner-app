@@ -9,13 +9,12 @@ import type {
   Side,
   SignalType,
 } from '../data/schema';
+import { keepOutRect, placedRect, type ObstacleRect } from '../lib/geometry';
 import {
-  keepOutRect,
-  pathLanes,
-  placedRect,
-  routeCableWithLeader,
-  type ObstacleRect,
-} from '../lib/geometry';
+  decomposeBoard,
+  routeAllCables,
+  type RouteRequest,
+} from '../lib/channelRouter';
 import {
   colorForPort,
   colorForSignal,
@@ -347,16 +346,14 @@ export function ChainOverlay({
 
   // Render-time fan-out gets the KEEP-OUT rects so its safe-shift
   // bisect can't nudge a cable into a foreign pedal's keep-out
-  // shadow. (Routing uses per-cable obstacle lists below.)
+  // shadow.
   const allKeepOuts: ObstacleRect[] = [...keepOutByPlaced.values()];
   // Tiny extra margin past keep-out so the cable's visible stroke
   // (2.5px ≈ 0.05") clears the keep-out shadow edge.
   const routingMarginIn = 0.05;
   // Per-cable-end leader lengths: base + staggered per lane, then
   // clamped per end so the longer leaders don't extend into a
-  // neighbouring pedal's KEEP-OUT (not just the raw rect). The clamp
-  // uses keep-out for non-source pedals and skips the source — its
-  // own keep-out is where the leader is supposed to be.
+  // neighbouring pedal's KEEP-OUT.
   const leaderLengths = computeLeaderLengths(
     orderedConnections,
     portIndex,
@@ -365,6 +362,17 @@ export function ChainOverlay({
     undefined,
     routingMarginIn,
   );
+  // Single shared cell grid: every pedal's keep-out is an obstacle,
+  // inflated by the routing margin. The channel router routes every
+  // cable through this one graph with global awareness of cell
+  // occupancy, so we don't need to thread claimed lanes between
+  // per-cable calls.
+  const inflatedObstacles = allKeepOuts.map((r) => ({
+    xIn: r.xIn - routingMarginIn,
+    yIn: r.yIn - routingMarginIn,
+    widthIn: r.widthIn + 2 * routingMarginIn,
+    depthIn: r.depthIn + 2 * routingMarginIn,
+  }));
   // Assign each cable a stereo channel role. Drives the cable color:
   //   'stereo' → render as parallel L+R strands (true TRS↔TRS cable)
   //   'L' / 'R' → single strand in that channel's color (Y-split leg
@@ -376,87 +384,116 @@ export function ChainOverlay({
   // works for the common case where the user wires two generic mono
   // inputs and never tagged them L/R.
   const cableChannel = computeCableChannels(orderedConnections, portIndex);
-  const claimedY: number[] = [];
-  const claimedX: number[] = [];
-  const claimedHorizontals: { yIn: number; xMin: number; xMax: number }[] = [];
-  const claimedVerticals: { xIn: number; yMin: number; yMax: number }[] = [];
-  const routedCables = orderedConnections
-    .map((c) => {
-      const from = lookupConnectionEnd(
-        c.fromNodeKind,
-        c.fromNodeId,
-        c.fromPortId,
-        portIndex,
-        endpointById,
-        tipCenters,
-        rig,
-        pxPerInch,
-      );
-      const to = lookupConnectionEnd(
-        c.toNodeKind,
-        c.toNodeId,
-        c.toPortId,
-        portIndex,
-        endpointById,
-        tipCenters,
-        rig,
-        pxPerInch,
-      );
-      if (!from || !to) return null;
-      const fromColor = from.port
-        ? colorForPort(from.port)
-        : colorForSignal(from.signalType ?? 'instrument');
-      const toColor = to.port
-        ? colorForPort(to.port)
-        : colorForSignal(to.signalType ?? 'instrument');
-      const isExternal =
-        c.fromNodeKind === 'external' || c.toNodeKind === 'external';
-      const channel = cableChannel.get(c.id) ?? null;
-      const isStereo = channel === 'stereo';
-      // Y-split legs (channel = 'L' / 'R') pick up the matching strand
-      // color so two cables off the same TRS port read as left + right
-      // even when both destination ports are generic mono inputs.
-      const cableColor =
-        channel === 'R'
-          ? STEREO_STRAND_COLORS[1]
-          : channel === 'L'
-            ? STEREO_STRAND_COLORS[0]
-            : fromColor;
-      const fromLeaderIn = leaderLengths.get(`${c.id}:from`) ?? LEADER_BASE_IN;
-      const toLeaderIn = leaderLengths.get(`${c.id}:to`) ?? LEADER_BASE_IN;
-      // Per-cable obstacle list: KEEP-OUT for foreign pedals (so
-      // cables don't ride along their port icons / dashed shadow);
-      // RAW rect for the cable's own source + destination (the
-      // leader by construction sits inside its own keep-out, so
-      // using keep-out there would block exit).
-      const obstaclesForCable: ObstacleRect[] = [];
-      for (const [pid, ko] of keepOutByPlaced) {
-        const isOwn = pid === from.placedId || pid === to.placedId;
-        const raw = rawByPlaced.get(pid);
-        obstaclesForCable.push(isOwn && raw ? raw : ko);
-      }
-      const path = routeCableWithLeader(
-        { xIn: from.xIn, yIn: from.yIn, side: from.side },
-        { xIn: to.xIn, yIn: to.yIn, side: to.side },
-        obstaclesForCable,
-        {
-          claimedY,
-          claimedX,
-          claimedHorizontals,
-          claimedVerticals,
-          fromLeaderIn,
-          toLeaderIn,
-          boardWidthIn: rig.widthIn,
-          boardDepthIn: rig.depthIn,
-          obstacleMarginIn: routingMarginIn,
-        },
-      );
-      // Claim this cable's primary lanes so later cables route around.
-      const lanes = pathLanes(path);
-      for (const y of lanes.horizontalY) claimedY.push(y);
-      for (const x of lanes.verticalX) claimedX.push(x);
-      for (const h of lanes.horizontals) claimedHorizontals.push(h);
-      for (const v of lanes.verticals) claimedVerticals.push(v);
+
+  // First pass: resolve every cable's endpoints + metadata. Filter out
+  // cables whose endpoints can't be resolved (rare race during chip
+  // measurement).
+  interface CableMeta {
+    c: (typeof orderedConnections)[number];
+    from: NonNullable<ReturnType<typeof lookupConnectionEnd>>;
+    to: NonNullable<ReturnType<typeof lookupConnectionEnd>>;
+    cableColor: string;
+    fromColor: string;
+    toColor: string;
+    isExternal: boolean;
+    isStereo: boolean;
+    fromLeaderIn: number;
+    toLeaderIn: number;
+  }
+  const cableMetas: CableMeta[] = [];
+  for (const c of orderedConnections) {
+    const from = lookupConnectionEnd(
+      c.fromNodeKind,
+      c.fromNodeId,
+      c.fromPortId,
+      portIndex,
+      endpointById,
+      tipCenters,
+      rig,
+      pxPerInch,
+    );
+    const to = lookupConnectionEnd(
+      c.toNodeKind,
+      c.toNodeId,
+      c.toPortId,
+      portIndex,
+      endpointById,
+      tipCenters,
+      rig,
+      pxPerInch,
+    );
+    if (!from || !to) continue;
+    const fromColor = from.port
+      ? colorForPort(from.port)
+      : colorForSignal(from.signalType ?? 'instrument');
+    const toColor = to.port
+      ? colorForPort(to.port)
+      : colorForSignal(to.signalType ?? 'instrument');
+    const isExternal =
+      c.fromNodeKind === 'external' || c.toNodeKind === 'external';
+    const channel = cableChannel.get(c.id) ?? null;
+    const isStereo = channel === 'stereo';
+    const cableColor =
+      channel === 'R'
+        ? STEREO_STRAND_COLORS[1]
+        : channel === 'L'
+          ? STEREO_STRAND_COLORS[0]
+          : fromColor;
+    cableMetas.push({
+      c,
+      from,
+      to,
+      cableColor,
+      fromColor,
+      toColor,
+      isExternal,
+      isStereo,
+      fromLeaderIn: leaderLengths.get(`${c.id}:from`) ?? LEADER_BASE_IN,
+      toLeaderIn: leaderLengths.get(`${c.id}:to`) ?? LEADER_BASE_IN,
+    });
+  }
+
+  // Second pass: build one cell grid covering every cable's endpoints
+  // and route them all together. The router sees every cable's claim
+  // on each cell, so cables that would otherwise stack on the same
+  // lane spread out automatically and a bounded rip-up pass removes
+  // visual crossings between cable pairs.
+  const extraXs = cableMetas.flatMap((m) => [m.from.xIn, m.to.xIn]);
+  const extraYs = cableMetas.flatMap((m) => [m.from.yIn, m.to.yIn]);
+  const grid = decomposeBoard(
+    rig.widthIn,
+    rig.depthIn,
+    inflatedObstacles,
+    extraXs,
+    extraYs,
+  );
+  const requests: RouteRequest[] = cableMetas.map((m) => ({
+    id: m.c.id,
+    from: { xIn: m.from.xIn, yIn: m.from.yIn, side: m.from.side },
+    to: { xIn: m.to.xIn, yIn: m.to.yIn, side: m.to.side },
+    fromLeaderIn: m.fromLeaderIn,
+    toLeaderIn: m.toLeaderIn,
+  }));
+  const routed = routeAllCables(grid, requests, {
+    boardWidthIn: rig.widthIn,
+    boardDepthIn: rig.depthIn,
+  });
+  const pathById = new Map(routed.map((r) => [r.id, r.polyline]));
+
+  const routedCables = cableMetas
+    .map((m) => {
+      const path = pathById.get(m.c.id);
+      if (!path) return null;
+      const {
+        c,
+        from,
+        to,
+        cableColor,
+        fromColor,
+        toColor,
+        isExternal,
+        isStereo,
+      } = m;
       return {
         c,
         from,
@@ -467,7 +504,7 @@ export function ChainOverlay({
         toColor,
         isExternal,
         isStereo,
-        channel,
+        channel: cableChannel.get(c.id) ?? null,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
