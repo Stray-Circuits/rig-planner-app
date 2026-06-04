@@ -109,8 +109,28 @@ async function main() {
   const resourcesPath = path.join(TARGET_DIR, 'resources.json');
   let resources;
   if (await exists(resourcesPath)) {
-    resources = JSON.parse(await readFile(resourcesPath, 'utf8'));
-  } else {
+    const cached = JSON.parse(await readFile(resourcesPath, 'utf8'));
+    // Validate cached shape — earlier versions of this script stripped
+    // size + mime from the catalog, and the lib needs both at runtime
+    // (Zod throws on the undefined `total` arg passed to progress).
+    // Invalidate and re-fetch if any required field is missing.
+    const cachedOk = NEEDED_RESOURCES.every((key) => {
+      const e = cached?.[key];
+      return (
+        e &&
+        Array.isArray(e.chunks) &&
+        Number.isFinite(e.size) &&
+        e.size > 0 &&
+        typeof e.mime === 'string'
+      );
+    });
+    if (cachedOk) {
+      resources = cached;
+    } else {
+      console.log('imgly: cached resources.json is incomplete, re-fetching');
+    }
+  }
+  if (!resources) {
     console.log('imgly: fetching resources.json catalog');
     const bytes = await fetchBytes(PUBLIC_BASE + 'resources.json');
     const parsed = JSON.parse(new TextDecoder().decode(bytes));
@@ -122,15 +142,29 @@ async function main() {
     // therefore contains no string that wasn't either:
     //   - a constant from our source (the resource key),
     //   - a 64-char hex sha256 (chunk.name, chunk.hash — assertValidChunk),
-    //   - or a Number coerced from `chunk.offsets[i]`.
+    //   - a MIME type matching /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/, or
+    //   - a Number coerced from `chunk.offsets[i]` / `entry.size`.
     // This breaks the taint flow from raw network bytes → writeFile.
+    const MIME_RE = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/;
     const sanitized = {};
     for (const key of NEEDED_RESOURCES) {
       const entry = parsed[key];
       if (!entry || !Array.isArray(entry.chunks)) {
         throw new Error(`resources.json missing or malformed entry for ${key}`);
       }
+      // entry.size + entry.mime are consumed by the lib at runtime (progress
+      // callback's total arg, Blob constructor mime, size assertion). They
+      // were missing from earlier passes of this script and the lib's Zod
+      // arg validator threw on the undefined total — see issue #23 thread.
+      if (!Number.isFinite(entry.size) || entry.size <= 0) {
+        throw new Error(`resources.json entry ${key} missing valid size`);
+      }
+      if (typeof entry.mime !== 'string' || !MIME_RE.test(entry.mime)) {
+        throw new Error(`resources.json entry ${key} missing valid mime`);
+      }
       sanitized[key] = {
+        size: Number(entry.size),
+        mime: entry.mime,
         chunks: entry.chunks.map((c) => {
           assertValidChunk(c);
           const offsets = Array.isArray(c.offsets)
