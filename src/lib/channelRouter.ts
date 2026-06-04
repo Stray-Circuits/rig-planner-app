@@ -135,7 +135,12 @@ const DEFAULT_CONFIG: RouterConfig = {
   // (which dip below or above the board to find empty cells) never
   // win against straight-through-the-corridor routes.
   offBoardCost: 50,
-  ripUpIterations: 2,
+  // 4 iterations gives the rip-up pass room to handle chained
+  // failures — fixing one crossing can introduce a new one
+  // downstream, and 2 passes weren't enough on the Main board
+  // fixture (Tumnus IN+OUT specifically). Each pass is O(N²) cable
+  // pairs but cable counts are tiny (≤ 30 in practice).
+  ripUpIterations: 4,
   defaultLeader: 0.4,
 };
 
@@ -472,22 +477,34 @@ function cellPathToPolyline(
   for (let i = 0; i < cells.length - 1; i++) {
     const cur = cells[i]!;
     const next = cells[i + 1]!;
-    // Find the shared edge midpoint.
+    // Find the shared edge midpoint. If `next` isn't a 4-connected
+    // neighbour of `cur` (shouldn't happen for valid Dijkstra output,
+    // but a defensive guard), bail out with a Manhattan L to the
+    // destination — anything else would emit a diagonal segment.
     let crossX: number;
     let crossY: number;
-    if (next.col === cur.col + 1) {
-      // Moving right — cross the shared vertical edge at xMax = next.xMin.
+    if (next.col === cur.col + 1 && next.row === cur.row) {
       crossX = cur.xMax;
       crossY = prev.yIn;
-    } else if (next.col === cur.col - 1) {
+    } else if (next.col === cur.col - 1 && next.row === cur.row) {
       crossX = cur.xMin;
       crossY = prev.yIn;
-    } else if (next.row === cur.row + 1) {
+    } else if (next.row === cur.row + 1 && next.col === cur.col) {
       crossY = cur.yMax;
       crossX = prev.xIn;
-    } else {
+    } else if (next.row === cur.row - 1 && next.col === cur.col) {
       crossY = cur.yMin;
       crossX = prev.xIn;
+    } else {
+      // Non-adjacent — emit an L from prev to toLeaderTip and stop.
+      if (
+        Math.abs(toLeaderTip.xIn - prev.xIn) > 1e-6 &&
+        Math.abs(toLeaderTip.yIn - prev.yIn) > 1e-6
+      ) {
+        points.push({ xIn: toLeaderTip.xIn, yIn: prev.yIn });
+      }
+      points.push(toLeaderTip);
+      return dedupe(points);
     }
     // Insert a corner if we need to change direction inside this cell.
     if (
@@ -524,14 +541,17 @@ function dedupe(
   points: { xIn: number; yIn: number }[],
 ): { xIn: number; yIn: number }[] {
   if (points.length <= 2) return points;
+  // Generous-ish epsilon so floating-point noise from cell boundary
+  // computation doesn't keep visibly colinear triples around.
+  const EPS = 0.001;
   const out: { xIn: number; yIn: number }[] = [points[0]!];
   for (let i = 1; i < points.length; i++) {
     const last = out[out.length - 1]!;
     const cur = points[i]!;
-    // Drop exact duplicates.
+    // Drop exact duplicates (and near-duplicates within EPS).
     if (
-      Math.abs(cur.xIn - last.xIn) < 1e-6 &&
-      Math.abs(cur.yIn - last.yIn) < 1e-6
+      Math.abs(cur.xIn - last.xIn) < EPS &&
+      Math.abs(cur.yIn - last.yIn) < EPS
     ) {
       continue;
     }
@@ -539,11 +559,11 @@ function dedupe(
     if (out.length >= 2) {
       const prev = out[out.length - 2]!;
       const colinearX =
-        Math.abs(prev.xIn - last.xIn) < 1e-6 &&
-        Math.abs(last.xIn - cur.xIn) < 1e-6;
+        Math.abs(prev.xIn - last.xIn) < EPS &&
+        Math.abs(last.xIn - cur.xIn) < EPS;
       const colinearY =
-        Math.abs(prev.yIn - last.yIn) < 1e-6 &&
-        Math.abs(last.yIn - cur.yIn) < 1e-6;
+        Math.abs(prev.yIn - last.yIn) < EPS &&
+        Math.abs(last.yIn - cur.yIn) < EPS;
       if (colinearX || colinearY) {
         out.pop();
       }
@@ -551,6 +571,101 @@ function dedupe(
     out.push(cur);
   }
   return out;
+}
+
+const Z_COLLAPSE_THRESHOLD = 0.25;
+
+/**
+ * Collapse short Z-patterns in a polyline that don't add real
+ * routing value. A Z window `[A, B, C, D]` where A→B and C→D are
+ * parallel, B→C is the perpendicular "kink" and shorter than
+ * {@link Z_COLLAPSE_THRESHOLD}, gets rewritten as `[A, elbow, D]`
+ * with the elbow chosen to match the A→D rectangle.
+ *
+ * Crucially, the collapse is only accepted if neither of the new
+ * segments (A→elbow, elbow→D) crosses any obstacle — otherwise the
+ * "squiggle" was load-bearing and removing it would push the cable
+ * through a pedal. Caller passes the same inflated obstacle list
+ * the router used for the path.
+ */
+function collapseZSquiggles(
+  points: { xIn: number; yIn: number }[],
+  obstacles: readonly ObstacleRect[],
+): { xIn: number; yIn: number }[] {
+  if (points.length < 4) return points;
+  let work = points;
+  for (let pass = 0; pass < 4; pass++) {
+    const out: { xIn: number; yIn: number }[] = [work[0]!];
+    let i = 1;
+    let collapsed = false;
+    while (i < work.length) {
+      if (i + 2 < work.length) {
+        const a = out[out.length - 1]!;
+        const b = work[i]!;
+        const c = work[i + 1]!;
+        const d = work[i + 2]!;
+        const abH = Math.abs(a.yIn - b.yIn) < 1e-6;
+        const abV = Math.abs(a.xIn - b.xIn) < 1e-6;
+        const bcH = Math.abs(b.yIn - c.yIn) < 1e-6;
+        const bcV = Math.abs(b.xIn - c.xIn) < 1e-6;
+        const cdH = Math.abs(c.yIn - d.yIn) < 1e-6;
+        const cdV = Math.abs(c.xIn - d.xIn) < 1e-6;
+        const bcLen = bcH
+          ? Math.abs(c.xIn - b.xIn)
+          : bcV
+            ? Math.abs(c.yIn - b.yIn)
+            : Infinity;
+        const isZ =
+          ((abH && cdH && bcV) || (abV && cdV && bcH)) &&
+          bcLen < Z_COLLAPSE_THRESHOLD;
+        if (isZ) {
+          const elbow = abH
+            ? { xIn: d.xIn, yIn: a.yIn }
+            : { xIn: a.xIn, yIn: d.yIn };
+          // Only accept the collapse if the new path stays clear of
+          // every obstacle. Otherwise the Z was load-bearing.
+          if (
+            !segmentHitsAny(a, elbow, obstacles) &&
+            !segmentHitsAny(elbow, d, obstacles)
+          ) {
+            out.push(elbow);
+            out.push(d);
+            i += 3;
+            collapsed = true;
+            continue;
+          }
+        }
+      }
+      out.push(work[i]!);
+      i += 1;
+    }
+    if (!collapsed) return out;
+    work = out;
+  }
+  return work;
+}
+
+function segmentHitsAny(
+  a: { xIn: number; yIn: number },
+  b: { xIn: number; yIn: number },
+  obstacles: readonly ObstacleRect[],
+): boolean {
+  const eps = 0.02;
+  const minX = Math.min(a.xIn, b.xIn);
+  const maxX = Math.max(a.xIn, b.xIn);
+  const minY = Math.min(a.yIn, b.yIn);
+  const maxY = Math.max(a.yIn, b.yIn);
+  for (const r of obstacles) {
+    if (
+      maxX > r.xIn + eps &&
+      minX < r.xIn + r.widthIn - eps &&
+      maxY > r.yIn + eps &&
+      minY < r.yIn + r.depthIn - eps
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -568,6 +683,7 @@ export function routeAllCables(
   grid: CellGrid,
   requests: readonly RouteRequest[],
   configOverrides: Partial<RouterConfig> = {},
+  obstacles: readonly ObstacleRect[] = [],
 ): RoutedPath[] {
   const config: RouterConfig = { ...DEFAULT_CONFIG, ...configOverrides };
   const cellUsage = new Int32Array(grid.cells.length);
@@ -584,7 +700,7 @@ export function routeAllCables(
   const ordered = [...requests].sort((a, b) => cableLength(b) - cableLength(a));
 
   for (const req of ordered) {
-    const routed = routeOne(grid, req, cellUsage, config);
+    const routed = routeOne(grid, req, cellUsage, config, obstacles);
     results.set(req.id, routed);
     for (const c of routed.cells) {
       cellUsage[c.row * grid.cols + c.col]! += 1;
@@ -602,17 +718,29 @@ export function routeAllCables(
         const a = results.get(orderedIds[i]!)!;
         const b = results.get(orderedIds[j]!)!;
         if (!polylinesCross(a.polyline, b.polyline)) continue;
-        // Try rerouting b with a's cells boosted.
+        // Try rerouting b with a's cells AND their 1-cell
+        // neighbourhood boosted. The neighbourhood boost pushes the
+        // reroute further from the conflict instead of just
+        // shifting to the adjacent lane, which was the previous
+        // failure mode for tightly-coupled cable pairs.
         const boostedUsage = new Int32Array(cellUsage);
         for (const c of a.cells) {
-          boostedUsage[c.row * grid.cols + c.col]! += config.cellMaxCables * 2;
+          const center = c.row * grid.cols + c.col;
+          boostedUsage[center]! += config.cellMaxCables * 2;
+          if (c.col > 0) boostedUsage[center - 1]! += config.cellMaxCables;
+          if (c.col + 1 < grid.cols)
+            boostedUsage[center + 1]! += config.cellMaxCables;
+          if (c.row > 0)
+            boostedUsage[center - grid.cols]! += config.cellMaxCables;
+          if (c.row + 1 < grid.rows)
+            boostedUsage[center + grid.cols]! += config.cellMaxCables;
         }
         // Subtract b's current usage so it can rejoin its own cells.
         for (const c of b.cells) {
           boostedUsage[c.row * grid.cols + c.col]! -= 1;
         }
         const req = ordered.find((r) => r.id === orderedIds[j]!)!;
-        const candidate = routeOne(grid, req, boostedUsage, config);
+        const candidate = routeOne(grid, req, boostedUsage, config, obstacles);
         // Accept if the candidate no longer crosses a.
         if (!polylinesCross(a.polyline, candidate.polyline)) {
           // Update usage: remove b's old cells, add new.
@@ -645,6 +773,7 @@ function routeOne(
   req: RouteRequest,
   cellUsage: Int32Array,
   config: RouterConfig,
+  obstacles: readonly ObstacleRect[] = [],
 ): { cells: Cell[]; polyline: { xIn: number; yIn: number }[] } {
   const fromLeader = req.fromLeaderIn ?? config.defaultLeader;
   const toLeader = req.toLeaderIn ?? config.defaultLeader;
@@ -668,27 +797,57 @@ function routeOne(
     yIn: toLeaderTip.yIn,
     side: req.to.side,
   });
-  if (!startCell || !endCell) {
-    // Degenerate fallback — straight line.
-    const polyline = [
-      { xIn: req.from.xIn, yIn: req.from.yIn },
-      fromLeaderTip,
-      toLeaderTip,
-      { xIn: req.to.xIn, yIn: req.to.yIn },
-    ];
-    return { cells: [], polyline: dedupe(polyline) };
-  }
-  const cells = dijkstra(grid, startCell, endCell, cellUsage, config) ?? [
-    startCell,
-    endCell,
-  ];
-  const innerPolyline = cellPathToPolyline(cells, fromLeaderTip, toLeaderTip);
+  // Either endpoint failed to find a routing cell, or Dijkstra
+  // couldn't connect them — fall back to a guaranteed-orthogonal
+  // L-shape between the leader-tips. The old fallback handed
+  // non-adjacent cells to cellPathToPolyline, which silently
+  // produced a literal diagonal segment (issue #41 follow-up).
+  const cells =
+    startCell && endCell
+      ? dijkstra(grid, startCell, endCell, cellUsage, config)
+      : null;
+  const innerPolyline =
+    cells !== null
+      ? cellPathToPolyline(cells, fromLeaderTip, toLeaderTip)
+      : manhattanL(fromLeaderTip, toLeaderTip, req.from.side, req.to.side);
   const polyline = [
     { xIn: req.from.xIn, yIn: req.from.yIn },
     ...innerPolyline,
     { xIn: req.to.xIn, yIn: req.to.yIn },
   ];
-  return { cells, polyline: dedupe(polyline) };
+  return {
+    cells: cells ?? [],
+    polyline: collapseZSquiggles(dedupe(polyline), obstacles),
+  };
+}
+
+/**
+ * Two-segment Manhattan path between leader tips. Picks the elbow
+ * (mid-x, from-y) vs (from-x, mid-y) by which one bends in the
+ * outward direction of the from-side — keeps the cable from
+ * U-turning back through the source port.
+ */
+function manhattanL(
+  fromTip: { xIn: number; yIn: number },
+  toTip: { xIn: number; yIn: number },
+  fromSide: Side,
+  _toSide: Side,
+): { xIn: number; yIn: number }[] {
+  if (
+    Math.abs(fromTip.xIn - toTip.xIn) < 1e-6 ||
+    Math.abs(fromTip.yIn - toTip.yIn) < 1e-6
+  ) {
+    return [fromTip, toTip];
+  }
+  // Source-vertical sides (top/bottom) should turn horizontal first;
+  // source-horizontal sides should turn vertical first. That keeps
+  // the elbow on the outward side of the leader so the cable doesn't
+  // immediately reverse.
+  const fromHoriz = fromSide === 'left' || fromSide === 'right';
+  if (fromHoriz) {
+    return [fromTip, { xIn: toTip.xIn, yIn: fromTip.yIn }, toTip];
+  }
+  return [fromTip, { xIn: fromTip.xIn, yIn: toTip.yIn }, toTip];
 }
 
 // ---------------------------------------------------------------------------
@@ -800,11 +959,17 @@ export function routeSingleCable(
       ? { toLeaderIn: options.toLeaderIn }
       : {}),
   };
-  const routed = routeOne(grid, req, cellUsage, {
-    ...DEFAULT_CONFIG,
-    boardWidthIn,
-    boardDepthIn,
-  });
+  const routed = routeOne(
+    grid,
+    req,
+    cellUsage,
+    {
+      ...DEFAULT_CONFIG,
+      boardWidthIn,
+      boardDepthIn,
+    },
+    inflated,
+  );
   return routed.polyline;
 }
 

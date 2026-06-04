@@ -474,10 +474,15 @@ export function ChainOverlay({
     fromLeaderIn: m.fromLeaderIn,
     toLeaderIn: m.toLeaderIn,
   }));
-  const routed = routeAllCables(grid, requests, {
-    boardWidthIn: rig.widthIn,
-    boardDepthIn: rig.depthIn,
-  });
+  const routed = routeAllCables(
+    grid,
+    requests,
+    {
+      boardWidthIn: rig.widthIn,
+      boardDepthIn: rig.depthIn,
+    },
+    inflatedObstacles,
+  );
   const pathById = new Map(routed.map((r) => [r.id, r.polyline]));
 
   const routedCables = cableMetas

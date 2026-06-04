@@ -198,3 +198,108 @@ describe('routeAllCables — crossing avoidance', () => {
     });
   });
 });
+
+describe('routeAllCables — orthogonal guarantee', () => {
+  // Regression for the diagonal-chip-cable bug: when Dijkstra fails
+  // (or returns null) the old fallback handed non-adjacent cells to
+  // cellPathToPolyline, which emitted a literal diagonal between the
+  // leader tips. Even in pathological setups the polyline must stay
+  // orthogonal.
+  it('returns only orthogonal segments even when the start and end land in unreachable areas', () => {
+    // Two obstacles that COMPLETELY enclose the end cell, leaving no
+    // path. Dijkstra will return null; the fallback must produce an
+    // L-shape, not a diagonal.
+    const enclose: ObstacleRect[] = [
+      { xIn: 4, yIn: 0, widthIn: 6, depthIn: 4 },
+      { xIn: 4, yIn: 6, widthIn: 6, depthIn: 6 },
+    ];
+    const grid = decomposeBoard(12, 12, enclose);
+    const requests: RouteRequest[] = [
+      {
+        id: 'c1',
+        from: { xIn: 1, yIn: 1, side: 'right' },
+        to: { xIn: 11, yIn: 11, side: 'left' },
+        fromLeaderIn: 0,
+        toLeaderIn: 0,
+      },
+    ];
+    const routed = routeAllCables(
+      grid,
+      requests,
+      { boardWidthIn: 12, boardDepthIn: 12 },
+      enclose,
+    );
+    const path = routed[0]!.polyline;
+    for (let i = 0; i < path.length - 1; i++) {
+      const dx = Math.abs(path[i + 1]!.xIn - path[i]!.xIn);
+      const dy = Math.abs(path[i + 1]!.yIn - path[i]!.yIn);
+      expect(dx < 1e-6 || dy < 1e-6).toBe(true);
+    }
+  });
+});
+
+describe('collapseZSquiggles via routeAllCables', () => {
+  it('removes a sub-threshold Z-pattern when the new L stays clear', () => {
+    // Build a request whose natural Dijkstra path has a tiny Z because
+    // of how cells slice near a single obstacle. The squiggle collapse
+    // should flatten it.
+    const grid = decomposeBoard(10, 10, []);
+    const requests: RouteRequest[] = [
+      {
+        id: 'c1',
+        from: { xIn: 1, yIn: 5, side: 'right' },
+        to: { xIn: 9, yIn: 5.05, side: 'left' },
+        fromLeaderIn: 0,
+        toLeaderIn: 0,
+      },
+    ];
+    const routed = routeAllCables(grid, requests, {
+      boardWidthIn: 10,
+      boardDepthIn: 10,
+    });
+    const path = routed[0]!.polyline;
+    // Hardly any vertices: start, possibly one elbow, end. Definitely
+    // not the 5+ vertices a cell-by-cell traversal would emit before
+    // collapse.
+    expect(path.length).toBeLessThanOrEqual(4);
+  });
+
+  it('does NOT collapse a Z when the new L would cross an obstacle', () => {
+    // Tiny Z that exists specifically to dodge a wall — collapsing
+    // would route through the wall, so the squiggle stays.
+    const wall: ObstacleRect = {
+      xIn: 5,
+      yIn: 4,
+      widthIn: 0.5,
+      depthIn: 2,
+    };
+    const grid = decomposeBoard(10, 10, [wall]);
+    const requests: RouteRequest[] = [
+      {
+        id: 'c1',
+        from: { xIn: 1, yIn: 5, side: 'right' },
+        to: { xIn: 9, yIn: 5, side: 'left' },
+        fromLeaderIn: 0,
+        toLeaderIn: 0,
+      },
+    ];
+    const routed = routeAllCables(
+      grid,
+      requests,
+      { boardWidthIn: 10, boardDepthIn: 10 },
+      [wall],
+    );
+    const path = routed[0]!.polyline;
+    // The route must still avoid the wall — no segment crosses it.
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const minX = Math.min(a.xIn, b.xIn);
+      const maxX = Math.max(a.xIn, b.xIn);
+      const minY = Math.min(a.yIn, b.yIn);
+      const maxY = Math.max(a.yIn, b.yIn);
+      const crosses = maxX > 5.05 && minX < 5.45 && maxY > 4.05 && minY < 5.95;
+      expect(crosses).toBe(false);
+    }
+  });
+});
