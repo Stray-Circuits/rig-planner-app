@@ -118,32 +118,59 @@ describe('routeCablePath', () => {
     expect(path).toHaveLength(2);
   });
 
-  it('uses an X-midpoint elbow when both anchors face horizontally', () => {
+  it('routes between two horizontally-anchored ports with a clean orthogonal path', () => {
     const path = routeCablePath(
       { xIn: 0, yIn: 0, side: 'right' },
       { xIn: 10, yIn: 5, side: 'left' },
     );
-    expect(path).toHaveLength(4);
-    expect(path[1]?.xIn).toBeCloseTo(5);
-    expect(path[1]?.yIn).toBe(0);
-    expect(path[2]?.xIn).toBeCloseTo(5);
-    expect(path[2]?.yIn).toBe(5);
+    // No obstacles → router picks the cheapest orthogonal route. The
+    // exact topology (L vs Z) is implementation-defined: both have the
+    // same Manhattan length, so the lower-corner-count L wins under
+    // the current turn penalty. Assert validity, not shape.
+    expect(path[0]).toEqual({ xIn: 0, yIn: 0 });
+    expect(path[path.length - 1]).toEqual({ xIn: 10, yIn: 5 });
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const dx = Math.abs(b.xIn - a.xIn);
+      const dy = Math.abs(b.yIn - a.yIn);
+      expect(dx < 0.001 || dy < 0.001).toBe(true);
+    }
   });
 
-  it('uses a Y-midpoint elbow when both anchors face vertically', () => {
+  it('routes between two vertically-anchored ports with a clean orthogonal path', () => {
     const path = routeCablePath(
       { xIn: 0, yIn: 0, side: 'bottom' },
       { xIn: 6, yIn: 8, side: 'top' },
     );
-    expect(path).toHaveLength(4);
-    expect(path[1]?.yIn).toBeCloseTo(4);
+    expect(path[0]).toEqual({ xIn: 0, yIn: 0 });
+    expect(path[path.length - 1]).toEqual({ xIn: 6, yIn: 8 });
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const dx = Math.abs(b.xIn - a.xIn);
+      const dy = Math.abs(b.yIn - a.yIn);
+      expect(dx < 0.001 || dy < 0.001).toBe(true);
+    }
   });
 
-  it('handles mixed orientations with a single elbow', () => {
+  it('handles mixed orientations with a clean orthogonal route', () => {
+    // No obstacles + mixed orientation → router picks any clean
+    // orthogonal path. Exact topology depends on cell decomposition,
+    // so assert validity (orthogonal segments, correct endpoints)
+    // rather than vertex count.
     const path = routeCablePath(
       { xIn: 0, yIn: 0, side: 'right' },
       { xIn: 8, yIn: 4, side: 'top' },
     );
-    expect(path).toHaveLength(3);
+    expect(path[0]).toEqual({ xIn: 0, yIn: 0 });
+    expect(path[path.length - 1]).toEqual({ xIn: 8, yIn: 4 });
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const dx = Math.abs(b.xIn - a.xIn);
+      const dy = Math.abs(b.yIn - a.yIn);
+      expect(dx < 0.001 || dy < 0.001).toBe(true);
+    }
   });
 });

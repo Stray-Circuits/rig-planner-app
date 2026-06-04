@@ -9,3 +9,4 @@ mockups
 *.md
 rig-planner-memory-db.json
 debug-rig-planner-memory-db.json
+tests/fixtures/
