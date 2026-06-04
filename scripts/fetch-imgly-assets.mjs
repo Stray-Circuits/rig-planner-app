@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Fetch the @imgly/background-removal model + ORT WASM into public/imgly/
-// so they ship as same-origin assets. Required for cross-origin isolation
-// (COOP/COEP) — staticimgly.com doesn't send Cross-Origin-Resource-Policy
-// headers, so model fetches would be blocked once we set COEP: require-corp.
+// so they ship inside the APK / desktop bundle. Two real benefits:
+//   - APK users skip the ~9.5s first-run CDN download (issue #23).
+//   - The app works fully offline once installed.
 //
 // Idempotent: skips chunks already on disk whose sha256 matches the
 // resources.json catalog. Run automatically via `predev` / `prebuild`.
@@ -45,7 +45,28 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+// imgly's resources.json names every chunk by its sha256 hex digest (64
+// lowercase hex chars). Validating that BOTH chunk.name and chunk.hash
+// match this pattern before using them anywhere closes a defense-in-depth
+// gap: a compromised resources.json (MITM, CDN takeover) could otherwise
+// inject path-traversal segments like `../../../etc/passwd` that we'd use
+// both as a URL suffix and as a write destination.
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+function assertValidChunk(chunk) {
+  if (typeof chunk?.name !== 'string' || !SHA256_HEX.test(chunk.name)) {
+    throw new Error(
+      `Invalid chunk.name in resources.json (expected sha256 hex): ${chunk?.name}`,
+    );
+  }
+  if (typeof chunk?.hash !== 'string' || !SHA256_HEX.test(chunk.hash)) {
+    throw new Error(
+      `Invalid chunk.hash in resources.json (expected sha256 hex): ${chunk?.hash}`,
+    );
+  }
+}
+
 async function ensureChunk(chunk) {
+  assertValidChunk(chunk);
   const dest = path.join(TARGET_DIR, chunk.name);
   if (await exists(dest)) {
     const bytes = await readFile(dest);
@@ -92,16 +113,28 @@ async function main() {
   } else {
     console.log('imgly: fetching resources.json catalog');
     const bytes = await fetchBytes(PUBLIC_BASE + 'resources.json');
+    // Parse + structurally validate BEFORE writing to disk. If the CDN
+    // returned junk (compromised mirror, HTML error page, partial download)
+    // we want to throw here rather than persist garbage that the rest of
+    // the build will then trip over.
+    const text = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(text);
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('resources.json did not parse to an object');
+    }
     await writeFile(resourcesPath, bytes);
-    resources = JSON.parse(new TextDecoder().decode(bytes));
+    resources = parsed;
   }
 
   let totalBytes = 0;
   const chunks = [];
   for (const key of NEEDED_RESOURCES) {
     const entry = resources[key];
-    if (!entry) throw new Error(`resources.json missing entry for ${key}`);
+    if (!entry || !Array.isArray(entry.chunks)) {
+      throw new Error(`resources.json missing or malformed entry for ${key}`);
+    }
     for (const chunk of entry.chunks) {
+      assertValidChunk(chunk);
       chunks.push(chunk);
       totalBytes += chunk.offsets[1] - chunk.offsets[0];
     }
