@@ -273,8 +273,14 @@ export function ChainOverlay({
   // termination point for that endpoint. Falls back to a per-cluster
   // default on the first render (before the measurement effect fires).
   const tipRefs = useRef<Map<string, HTMLElement>>(new Map());
+  // Chip plug-tip positions in board INCH coordinates (not pixels).
+  // Storing inches makes the routing inputs stable across `pxPerInch`
+  // changes — without it, a window resize would race the router
+  // (rendering once with `oldPixels / newPxPerInch` before the
+  // `useLayoutEffect` re-measures), placing chip endpoints at wildly
+  // wrong inch coords and causing chip cables to plot through pedals.
   const [tipCenters, setTipCenters] = useState<
-    Map<string, { x: number; y: number }>
+    Map<string, { xIn: number; yIn: number }>
   >(new Map());
   // Build a {placedId -> {portId -> ResolvedPort}} map for fast lookups.
   const portIndex = buildPortIndex(placed, pedalsById);
@@ -311,29 +317,34 @@ export function ChainOverlay({
     rawByPlaced.set(p.id, placedRect(p, def));
   }
 
-  // Read each chip's actual rendered bbox after layout and convert to
-  // board-local px coords. Runs when endpoints, scale, or board size
-  // changes; the `changed` check prevents state-update loops.
+  // Measure each chip's plug-tip and store in board INCH coordinates.
+  // Converting at measurement time (using the CURRENT pxPerInch) means
+  // subsequent renders can read `tipCenters` directly without dividing
+  // by a potentially-stale pxPerInch — the chip endpoint stays at the
+  // last known good inch position until this effect re-measures.
   useLayoutEffect(() => {
     const svgRect = svgRef.current?.getBoundingClientRect();
     if (!svgRect) return;
-    const next = new Map<string, { x: number; y: number }>();
+    const next = new Map<string, { xIn: number; yIn: number }>();
     for (const [id, tip] of tipRefs.current) {
       if (!tip.isConnected) continue;
       const r = tip.getBoundingClientRect();
       next.set(id, {
-        x: r.left + r.width / 2 - svgRect.left,
-        y: r.top + r.height / 2 - svgRect.top,
+        xIn: (r.left + r.width / 2 - svgRect.left) / pxPerInch,
+        yIn: (r.top + r.height / 2 - svgRect.top) / pxPerInch,
       });
     }
+    // 0.01" = ~0.5px at default zoom — same noise floor as before,
+    // just expressed in inches.
+    const TOL_IN = 0.01;
     let changed = next.size !== tipCenters.size;
     if (!changed) {
       for (const [id, pos] of next) {
         const prev = tipCenters.get(id);
         if (
           !prev ||
-          Math.abs(prev.x - pos.x) > 0.5 ||
-          Math.abs(prev.y - pos.y) > 0.5
+          Math.abs(prev.xIn - pos.xIn) > TOL_IN ||
+          Math.abs(prev.yIn - pos.yIn) > TOL_IN
         ) {
           changed = true;
           break;
@@ -840,7 +851,7 @@ function lookupConnectionEnd(
   portId: string | null,
   portIndex: Map<string, Map<string, ResolvedPort>>,
   endpointById: Map<string, ExternalEndpoint>,
-  tipCenters: Map<string, { x: number; y: number }>,
+  tipCenters: Map<string, { xIn: number; yIn: number }>,
   rig: Rig,
   pxPerInch: number,
 ): ConnectionEnd | null {
@@ -870,8 +881,8 @@ function lookupConnectionEnd(
   const measured = tipCenters.get(nodeId);
   if (measured) {
     return {
-      xIn: measured.x / pxPerInch,
-      yIn: measured.y / pxPerInch,
+      xIn: measured.xIn,
+      yIn: measured.yIn,
       side: 'bottom',
     };
   }
