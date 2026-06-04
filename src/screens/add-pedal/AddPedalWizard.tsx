@@ -979,6 +979,11 @@ function ImageStep({
   // Flips true once the session is ready; included in the render effect's
   // deps so the initial preview fires the same way as later slider ticks.
   const [chromaSessionReady, setChromaSessionReady] = useState(false);
+  // Generation counter so a slow createChromaKeySession from a previous
+  // entry can't overwrite chromaSessionRef after the user has cancelled
+  // and re-entered with a different source (or flash an error toast on a
+  // flow they already abandoned).
+  const enterGenRef = useRef(0);
 
   const enterThreshold = () => {
     if (!draft.photoSource) return;
@@ -986,11 +991,15 @@ function ImageStep({
     chromaSessionRef.current = null;
     setChromaSessionReady(false);
     setThreshold({ tolerance: 0.12, previewDataUrl: null, busy: true });
+    const gen = ++enterGenRef.current;
     void (async () => {
       try {
-        chromaSessionRef.current = await createChromaKeySession(source);
+        const session = await createChromaKeySession(source);
+        if (gen !== enterGenRef.current) return;
+        chromaSessionRef.current = session;
         setChromaSessionReady(true);
       } catch (err) {
+        if (gen !== enterGenRef.current) return;
         setError(describeImageError(err));
         setThreshold(null);
       }
@@ -1033,12 +1042,14 @@ function ImageStep({
     if (!threshold?.previewDataUrl) return;
     const url = threshold.previewDataUrl;
     setDraft((d) => ({ ...d, photoDataUrl: url }));
+    enterGenRef.current++; // invalidate any pending session
     chromaSessionRef.current = null;
     setChromaSessionReady(false);
     setThreshold(null);
   };
 
   const cancelThreshold = () => {
+    enterGenRef.current++; // invalidate any pending session
     chromaSessionRef.current = null;
     setChromaSessionReady(false);
     setThreshold(null);

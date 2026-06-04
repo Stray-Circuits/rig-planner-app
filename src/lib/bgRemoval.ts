@@ -38,6 +38,13 @@ export interface BgRemovalProgress {
 export interface RemoveBackgroundOptions {
   onProgress?: (p: BgRemovalProgress) => void;
   signal?: AbortSignal;
+  /**
+   * Skip the chroma-key fast path and force ISNet. Useful when a previous
+   * fast-path attempt produced a bad mask (e.g. pedal pixels matched the
+   * background color and got punched out). Defaults to false — most photos
+   * benefit from the bypass.
+   */
+  bypassChromaKey?: boolean;
 }
 
 // One long-lived worker shared across all bg-removal calls. The library's
@@ -48,7 +55,16 @@ let sharedWorker: Worker | null = null;
 function getWorker(): Worker | null {
   if (sharedWorker) return sharedWorker;
   try {
-    sharedWorker = new BgRemovalWorker();
+    const w = new BgRemovalWorker();
+    // Attach a default onerror handler immediately so a bundle-load failure
+    // surfaces (and disposes the broken ref) even before any caller wires
+    // its own handler. Callers overwrite this in `removeBackground`.
+    w.onerror = (e) => {
+      console.error('[bgRemoval] worker error before caller wired:', e);
+      if (sharedWorker === w) sharedWorker = null;
+      w.terminate();
+    };
+    sharedWorker = w;
     return sharedWorker;
   } catch {
     // Worker unavailable (e.g. test env).
@@ -65,9 +81,19 @@ function disposeWorker(): void {
  * on a clean background or a photo on a sheet of paper), skip the 14s ISNet
  * worker and use chroma-key. Resolves to a transparent PNG, or null if the
  * input doesn't look uniform enough or the canvas pipeline errors.
+ *
+ * Checks the AbortSignal at each await point so a mid-pipeline cancel
+ * surfaces promptly instead of running to completion first.
  */
-async function tryChromaKeyBypass(source: Blob): Promise<Blob | null> {
+async function tryChromaKeyBypass(
+  source: Blob,
+  signal?: AbortSignal,
+): Promise<Blob | null> {
   const bitmap = await createImageBitmap(source);
+  if (signal?.aborted) {
+    bitmap.close?.();
+    return null;
+  }
   const w = bitmap.width;
   const h = bitmap.height;
   const canvas = document.createElement('canvas');
@@ -84,41 +110,59 @@ async function tryChromaKeyBypass(source: Blob): Promise<Blob | null> {
   const imgData = ctx.getImageData(0, 0, w, h);
   const detection = detectUniformBackground(imgData.data, w, h);
   if (!detection) return null;
+  if (signal?.aborted) return null;
 
   const bg = sampleCornerBgColor(imgData.data, w, h);
   applyColorThreshold(imgData.data, bg, detection.tolerance);
   ctx.putImageData(imgData, 0, 0);
   return new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((b) => resolve(b), 'image/png');
+    canvas.toBlob((b) => {
+      if (b === null) {
+        console.warn(
+          '[bgRemoval] tryChromaKeyBypass: canvas.toBlob returned null; falling through to ISNet',
+        );
+      }
+      resolve(b);
+    }, 'image/png');
   });
 }
 
 /**
  * Run background removal on a File or Blob. Resolves to a transparent PNG
  * Blob; rejects if the user cancels via the AbortSignal or if the worker
- * fails to load. Calls are serialized through the shared worker — overlapping
- * invocations would clobber each other's message handlers.
+ * fails to load.
  *
  * Tries a chroma-key fast path first for photos with a uniform background
  * (product shots, photos on a sheet of paper). Falls through to the ISNet
- * worker if the heuristic isn't confident.
+ * worker if the heuristic isn't confident. Pass `bypassChromaKey: true`
+ * to force ISNet directly — useful as a recovery path when the fast path
+ * produced a bad mask on a previous attempt.
+ *
+ * **Not safe to call concurrently.** This function uses a shared worker
+ * and overwrites its `onmessage` / `onerror` on each call. The single
+ * current caller serializes via AbortSignal (aborting any prior in-flight
+ * call before starting a new one); a new caller must do the same or
+ * implement an external mutex, otherwise the older call's promise will
+ * hang and the worker's response is delivered to the wrong handler.
  */
 export async function removeBackground(
   source: Blob,
   opts: RemoveBackgroundOptions = {},
 ): Promise<Blob> {
-  const { onProgress, signal } = opts;
+  const { onProgress, signal, bypassChromaKey } = opts;
 
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
 
-  onProgress?.({ phase: 'preparing-image', fraction: null });
-  const fast = await tryChromaKeyBypass(source).catch(() => null);
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
+  if (!bypassChromaKey) {
+    onProgress?.({ phase: 'preparing-image', fraction: null });
+    const fast = await tryChromaKeyBypass(source, signal).catch(() => null);
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    if (fast) return fast;
   }
-  if (fast) return fast;
 
   onProgress?.({ phase: 'loading-library', fraction: null });
   const worker = getWorker();

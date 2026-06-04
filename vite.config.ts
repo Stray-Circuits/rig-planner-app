@@ -38,8 +38,12 @@ export default defineConfig({
     format: 'es',
   },
   build: {
+    // safari15+ for module-worker support (`worker.format: 'es'` above
+    // produces `new Worker(url, { type: 'module' })` — added in Safari 15).
+    // Tauri 2 mobile iOS already requires iOS 15+ in practice, so this
+    // doesn't narrow our deployment window.
     target:
-      process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
+      process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari15',
     minify: process.env.TAURI_ENV_DEBUG ? false : 'esbuild',
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },

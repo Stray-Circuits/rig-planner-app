@@ -7,7 +7,7 @@
 // Idempotent: skips chunks already on disk whose sha256 matches the
 // resources.json catalog. Run automatically via `predev` / `prebuild`.
 
-import { mkdir, writeFile, access, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, access, readFile, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,6 +67,23 @@ async function ensureChunk(chunk) {
 
 async function main() {
   await mkdir(TARGET_DIR, { recursive: true });
+
+  // Version sentinel: clear the cache when VERSION bumps, otherwise the
+  // stale resources.json catalog would point at chunk hashes that the
+  // newly-fetched chunk bytes can't satisfy → "Hash mismatch" loop until
+  // the developer manually deletes the directory.
+  const sentinelPath = path.join(TARGET_DIR, '.version');
+  if (await exists(sentinelPath)) {
+    const cachedVersion = (await readFile(sentinelPath, 'utf8')).trim();
+    if (cachedVersion !== VERSION) {
+      console.log(
+        `imgly: version bump ${cachedVersion} → ${VERSION}, clearing cache`,
+      );
+      await rm(TARGET_DIR, { recursive: true, force: true });
+      await mkdir(TARGET_DIR, { recursive: true });
+    }
+  }
+  await writeFile(sentinelPath, VERSION);
 
   const resourcesPath = path.join(TARGET_DIR, 'resources.json');
   let resources;
