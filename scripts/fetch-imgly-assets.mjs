@@ -113,16 +113,15 @@ async function main() {
   } else {
     console.log('imgly: fetching resources.json catalog');
     const bytes = await fetchBytes(PUBLIC_BASE + 'resources.json');
-    // Parse + structurally validate BEFORE writing to disk. If the CDN
-    // returned junk (compromised mirror, HTML error page, partial download)
-    // we want to throw here rather than persist garbage that the rest of
-    // the build will then trip over.
-    const text = new TextDecoder().decode(bytes);
-    const parsed = JSON.parse(text);
+    // Parse + structurally validate, then write the CANONICAL re-serialization
+    // — not the raw network bytes. This way only data that survived the
+    // typeof / Array.isArray checks below ever hits disk (and CodeQL's
+    // taint tracker stops seeing raw network data flow into writeFile).
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
     if (typeof parsed !== 'object' || parsed === null) {
       throw new Error('resources.json did not parse to an object');
     }
-    await writeFile(resourcesPath, bytes);
+    await writeFile(resourcesPath, JSON.stringify(parsed));
     resources = parsed;
   }
 
