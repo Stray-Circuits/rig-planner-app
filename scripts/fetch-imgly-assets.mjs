@@ -113,16 +113,35 @@ async function main() {
   } else {
     console.log('imgly: fetching resources.json catalog');
     const bytes = await fetchBytes(PUBLIC_BASE + 'resources.json');
-    // Parse + structurally validate, then write the CANONICAL re-serialization
-    // — not the raw network bytes. This way only data that survived the
-    // typeof / Array.isArray checks below ever hits disk (and CodeQL's
-    // taint tracker stops seeing raw network data flow into writeFile).
     const parsed = JSON.parse(new TextDecoder().decode(bytes));
     if (typeof parsed !== 'object' || parsed === null) {
       throw new Error('resources.json did not parse to an object');
     }
-    await writeFile(resourcesPath, JSON.stringify(parsed));
-    resources = parsed;
+    // Build a clean catalog from scratch using ONLY our hardcoded allowlist
+    // of keys and per-field type/regex validation. The on-disk catalog
+    // therefore contains no string that wasn't either:
+    //   - a constant from our source (the resource key),
+    //   - a 64-char hex sha256 (chunk.name, chunk.hash — assertValidChunk),
+    //   - or a Number coerced from `chunk.offsets[i]`.
+    // This breaks the taint flow from raw network bytes → writeFile.
+    const sanitized = {};
+    for (const key of NEEDED_RESOURCES) {
+      const entry = parsed[key];
+      if (!entry || !Array.isArray(entry.chunks)) {
+        throw new Error(`resources.json missing or malformed entry for ${key}`);
+      }
+      sanitized[key] = {
+        chunks: entry.chunks.map((c) => {
+          assertValidChunk(c);
+          const offsets = Array.isArray(c.offsets)
+            ? c.offsets.map((n) => (Number.isFinite(n) ? Number(n) : 0))
+            : [0, 0];
+          return { name: c.name, hash: c.hash, offsets };
+        }),
+      };
+    }
+    await writeFile(resourcesPath, JSON.stringify(sanitized));
+    resources = sanitized;
   }
 
   let totalBytes = 0;
