@@ -22,7 +22,6 @@ import {
 } from '../lib/signalColors';
 import { sortConnectionsForRender } from '../lib/signalChainWarnings';
 import {
-  applyLaneRenderOffsets,
   buildPortIndex,
   computeLeaderLengths,
   LEADER_BASE_IN,
@@ -514,13 +513,13 @@ export function ChainOverlay({
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
-  // Render-time fan-out for cables that share a lane: nudge each one's
-  // horizontal/vertical segment perpendicular by a small amount so two
-  // cables that *had* to route at very close y/x values render as two
-  // distinct lines instead of looking like one stacked stroke. Pure
-  // visual offset — leaves the underlying path geometry intact for the
-  // claimed-lane and routing logic above.
-  applyLaneRenderOffsets(routedCables, allKeepOuts);
+  // (applyLaneRenderOffsets used to run here for the previous
+  // greedy-router pipeline. The channel-graph router handles lane
+  // assignment globally via capacity-aware Dijkstra, so the post-
+  // hoc perpendicular shift is no longer needed — and in fact was
+  // pushing cables INTO pedals when its safe-shift bisect bottomed
+  // out near tight obstacle edges. Removed in #41 follow-up;
+  // `allKeepOuts` likewise no longer needed.)
 
   return (
     <>
