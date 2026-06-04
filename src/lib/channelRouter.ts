@@ -224,16 +224,22 @@ function cellIntersectsAnyObstacle(
   yMax: number,
   obstacles: readonly ObstacleRect[],
 ): boolean {
-  // Cell centre — if the centre lies inside an obstacle, the cell is
-  // blocked. Edge-of-cell touching is allowed.
-  const cx = (xMin + xMax) / 2;
-  const cy = (yMin + yMax) / 2;
+  // Body-overlap (not center-inside). For wide cells — e.g. the
+  // off-board chip-strip area at y∈[-1, 0] — a center-based check
+  // marks cells unblocked even when their body grazes a pedal, and
+  // the polyline through that cell clips the pedal. Body-overlap
+  // blocks the cell whenever its rectangle intersects any
+  // obstacle's interior at all, so the router routes AROUND every
+  // obstacle edge. We allow a tiny boundary-touch tolerance so
+  // cells whose edges merely line up with an obstacle's edge stay
+  // available.
+  const eps = 1e-6;
   for (const r of obstacles) {
     if (
-      cx > r.xIn &&
-      cx < r.xIn + r.widthIn &&
-      cy > r.yIn &&
-      cy < r.yIn + r.depthIn
+      xMax > r.xIn + eps &&
+      xMin < r.xIn + r.widthIn - eps &&
+      yMax > r.yIn + eps &&
+      yMin < r.yIn + r.depthIn - eps
     ) {
       return true;
     }

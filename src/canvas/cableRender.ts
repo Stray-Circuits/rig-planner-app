@@ -284,28 +284,27 @@ function distributeLeaderLengths(
   minLen: number,
 ): number[] {
   if (N <= 0) return [];
-  // Hard cap on leader length even when there's plenty of room — long
-  // leaders read as "needlessly high" cables jutting out of the pedal
-  // for no geometric reason. The cap is generous enough to fit the
-  // natural staggered pattern up to ~5 cables on one side; beyond
-  // that the group still distributes evenly.
-  const HARD_CAP = 0.8;
-  const cap = Math.min(maxSafe, HARD_CAP);
+  // Previously we hard-capped the leader at 0.8" to avoid
+  // "needlessly high" cables. But pedals straddling the board edge
+  // (MOOD MKII) need leaders that clear their full keep-out — the
+  // cap forced the router to wrap around such pedals via a long
+  // squiggle. Trust `maxSafe` instead; it's already clamped to
+  // distance-to-nearest-blocker so we won't extend into anything.
   if (N === 1) {
-    return [Math.max(minLen, Math.min(baseLength, cap))];
+    return [Math.max(minLen, Math.min(baseLength, maxSafe))];
   }
   const maxRequested = baseLength + (N - 1) * step;
-  if (maxRequested <= cap) {
+  if (maxRequested <= maxSafe) {
     return Array.from({ length: N }, (_, k) => baseLength + k * step);
   }
-  if (cap < minLen) {
+  if (maxSafe < minLen) {
     return Array.from({ length: N }, () => minLen);
   }
-  // Anchor longest at cap, shift down. Reduce step if shifted
+  // Anchor longest at maxSafe, shift down. Reduce step if shifted
   // shortest would dip below minLen.
-  let bottom = cap - (N - 1) * step;
+  let bottom = maxSafe - (N - 1) * step;
   if (bottom < minLen) bottom = minLen;
-  const actualStep = (cap - bottom) / (N - 1);
+  const actualStep = (maxSafe - bottom) / (N - 1);
   return Array.from({ length: N }, (_, k) => bottom + k * actualStep);
 }
 

@@ -303,3 +303,55 @@ describe('collapseZSquiggles via routeAllCables', () => {
     }
   });
 });
+
+describe('cellOverlapsAnyObstacle (body, not center)', () => {
+  it('does not clip a pedal that extends into the chip-strip area', () => {
+    // Regression: external-endpoint cables routed through the wide
+    // off-board cells at y∈[-1, 0] used to clip pedals whose
+    // keep-out extended just past y=0 into the cell's body (e.g.
+    // MOOD MKII sitting at x=-0.04). The cell-center check marked
+    // those cells unblocked even though the polyline through them
+    // grazed the pedal.
+    const edgePedal: ObstacleRect = {
+      xIn: -0.04,
+      yIn: 0.06, // top of keep-out, just past the board edge
+      widthIn: 3.32,
+      depthIn: 4.75,
+    };
+    const grid = decomposeBoard(20, 14, [edgePedal]);
+    const requests: RouteRequest[] = [
+      {
+        // Chip at top-left, pedal at bottom-right — cable wants to
+        // traverse the area where edgePedal lives.
+        id: 'chip',
+        from: { xIn: 0.75, yIn: -0.5, side: 'bottom' },
+        to: { xIn: 15, yIn: 10, side: 'top' },
+        fromLeaderIn: 0.4,
+        toLeaderIn: 0.4,
+      },
+    ];
+    const routed = routeAllCables(
+      grid,
+      requests,
+      { boardWidthIn: 20, boardDepthIn: 14 },
+      [edgePedal],
+    );
+    const path = routed[0]!.polyline;
+    // No segment crosses the pedal's body.
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      const minX = Math.min(a.xIn, b.xIn);
+      const maxX = Math.max(a.xIn, b.xIn);
+      const minY = Math.min(a.yIn, b.yIn);
+      const maxY = Math.max(a.yIn, b.yIn);
+      const eps = 0.05;
+      const crosses =
+        maxX > edgePedal.xIn + eps &&
+        minX < edgePedal.xIn + edgePedal.widthIn - eps &&
+        maxY > edgePedal.yIn + eps &&
+        minY < edgePedal.yIn + edgePedal.depthIn - eps;
+      expect(crosses).toBe(false);
+    }
+  });
+});
