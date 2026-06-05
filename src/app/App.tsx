@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { initDb } from '../data/db';
+import { seedDefaultPedals } from '../data/seedPedals';
 import { useBackHandler } from '../lib/useBackHandler';
 import { useRigsStore } from '../stores/rigsStore';
 import { useUiStore } from '../stores/uiStore';
@@ -32,6 +33,13 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     initDb()
+      .then(() =>
+        // Best-effort: don't block boot if seeding fails (e.g. a transient
+        // DB error). Missing seed pedals are recoverable on next launch.
+        seedDefaultPedals().catch((err: unknown) => {
+          console.warn('[boot] seedDefaultPedals failed', err);
+        }),
+      )
       .then(() => loadRigs())
       .then(() => {
         if (!cancelled) setBoot({ status: 'ready' });
