@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
+  MONO_SERIES_ORDER,
   PEDALTRAIN_SERIES_ORDER,
   TEMPLE_AUDIO_SERIES_ORDER,
   findPreset,
+  monoPresetsBySeries,
   pedaltrainPresetsBySeries,
   templeAudioPresetsBySeries,
   type BoardPreset,
@@ -24,17 +26,22 @@ interface BoardPickerProps {
   onCustomStyle: (s: BoardStyle) => void;
 }
 
-type View = 'brand' | 'pedaltrain' | 'temple-audio' | 'custom';
+type View = 'brand' | 'pedaltrain' | 'temple-audio' | 'mono' | 'custom';
 
 /** Pick a representative preset image to put on a brand card. */
 function brandThumbPreset(
-  brand: 'Pedaltrain' | 'Temple Audio',
+  brand: 'Pedaltrain' | 'Temple Audio' | 'Mono',
 ): BoardPreset | undefined {
   // Pedaltrain's Classic Pro is the most-photographed of their lineup;
   // Temple Audio has no images yet so the card will just show the procedural
-  // holes drawer behind whatever board is there.
+  // holes drawer behind whatever board is there. Mono shows the Medium
+  // pedalboard in black — most recognizable silhouette of the line.
   const preferredId =
-    brand === 'Pedaltrain' ? 'pedaltrain-classic-pro' : 'temple-duo-24';
+    brand === 'Pedaltrain'
+      ? 'pedaltrain-classic-pro'
+      : brand === 'Temple Audio'
+        ? 'temple-duo-24'
+        : 'mono-medium-black';
   return findPreset(preferredId);
 }
 
@@ -46,6 +53,7 @@ function brandOfSelection(selection: BoardSelection | null): View {
   if (!preset) return 'brand';
   if (preset.brand === 'Pedaltrain') return 'pedaltrain';
   if (preset.brand === 'Temple Audio') return 'temple-audio';
+  if (preset.brand === 'Mono') return 'mono';
   return 'brand';
 }
 
@@ -79,6 +87,7 @@ export function BoardPicker({
 
   const pedaltrainBySeries = useMemo(() => pedaltrainPresetsBySeries(), []);
   const templeBySeries = useMemo(() => templeAudioPresetsBySeries(), []);
+  const monoBySeries = useMemo(() => monoPresetsBySeries(), []);
 
   const toggleSeries = (s: BoardSeries) => {
     setExpandedSeries((prev) => {
@@ -103,6 +112,12 @@ export function BoardPicker({
           sub="7 boards · Solo, Duo, Trio"
           previewPreset={brandThumbPreset('Temple Audio')}
           onClick={() => setView('temple-audio')}
+        />
+        <BrandCard
+          label="Mono"
+          sub="8 boards · Lite, Pedalboard, Rail"
+          previewPreset={brandThumbPreset('Mono')}
+          onClick={() => setView('mono')}
         />
         <button
           type="button"
@@ -158,6 +173,31 @@ export function BoardPicker({
         <div className={styles.seriesList}>
           {TEMPLE_AUDIO_SERIES_ORDER.map((series) => {
             const presets = templeBySeries.get(series) ?? [];
+            if (presets.length === 0) return null;
+            return (
+              <SeriesSection
+                key={series}
+                series={series}
+                presets={presets}
+                open={expandedSeries.has(series)}
+                onToggle={() => toggleSeries(series)}
+                selection={selection}
+                onSelect={onSelect}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'mono') {
+    return (
+      <div>
+        <BackHeader onBack={() => setView('brand')} label="Mono" />
+        <div className={styles.seriesList}>
+          {MONO_SERIES_ORDER.map((series) => {
+            const presets = monoBySeries.get(series) ?? [];
             if (presets.length === 0) return null;
             return (
               <SeriesSection

@@ -145,11 +145,16 @@ export function SettingsSheet({
   }
 
   const pickerChoice = resolveBoardChoice(pickerState);
+  const pickerPresetId =
+    pickerChoice && pickerChoice.source !== 'custom'
+      ? pickerChoice.source
+      : null;
   const boardChanged =
     pickerChoice !== null &&
     (pickerChoice.widthIn !== rig.widthIn ||
       pickerChoice.depthIn !== rig.depthIn ||
-      pickerChoice.style !== rig.style);
+      pickerChoice.style !== rig.style ||
+      pickerPresetId !== rig.presetId);
 
   // Image src to show in the board-summary thumb. While the picker is
   // open with a pending change, preview the chosen board (preset image
