@@ -18,6 +18,9 @@ import monoLitePlusSilverImg from '../assets/boards/mono-lite-plus-silver.png';
 import monoLiteSilverImg from '../assets/boards/mono-lite-silver.png';
 import monoMediumBlackImg from '../assets/boards/mono-medium-black.png';
 import monoMediumSilverImg from '../assets/boards/mono-medium-silver.png';
+import monoRailLargeImg from '../assets/boards/mono-rail-large.png';
+import monoRailMediumImg from '../assets/boards/mono-rail-medium.png';
+import monoRailSmallImg from '../assets/boards/mono-rail-small.png';
 import monoSmallBlackImg from '../assets/boards/mono-small-black.png';
 import monoSmallSilverImg from '../assets/boards/mono-small-silver.png';
 import nanoImg from '../assets/boards/nano.png';
@@ -43,7 +46,8 @@ export type BoardSeries =
   | 'Trio'
   // Mono
   | 'Lite'
-  | 'Pedalboard';
+  | 'Pedalboard'
+  | 'Rail';
 
 /** Order Pedaltrain series should appear in the picker. */
 export const PEDALTRAIN_SERIES_ORDER: readonly BoardSeries[] = [
@@ -65,6 +69,7 @@ export const TEMPLE_AUDIO_SERIES_ORDER: readonly BoardSeries[] = [
 export const MONO_SERIES_ORDER: readonly BoardSeries[] = [
   'Lite',
   'Pedalboard',
+  'Rail',
 ] as const;
 
 export interface BoardPreset {
@@ -450,6 +455,40 @@ export const BOARD_PRESETS: readonly BoardPreset[] = [
     style: 'plain',
     image: monoLargeSilverImg,
     series: 'Pedalboard',
+  },
+  // Rail — single black colorway. style: 'rail' is semantically
+  // accurate (the renders have transparent gaps between rails) and
+  // findClosestRailPreset stays Pedaltrain-only, so custom-rail rigs
+  // are unaffected.
+  {
+    id: 'mono-rail-small',
+    brand: 'Mono',
+    name: 'Rail Small',
+    widthIn: 18,
+    depthIn: 13.55,
+    style: 'rail',
+    image: monoRailSmallImg,
+    series: 'Rail',
+  },
+  {
+    id: 'mono-rail-medium',
+    brand: 'Mono',
+    name: 'Rail Medium',
+    widthIn: 24,
+    depthIn: 14.65,
+    style: 'rail',
+    image: monoRailMediumImg,
+    series: 'Rail',
+  },
+  {
+    id: 'mono-rail-large',
+    brand: 'Mono',
+    name: 'Rail Large',
+    widthIn: 32,
+    depthIn: 16.95,
+    style: 'rail',
+    image: monoRailLargeImg,
+    series: 'Rail',
   },
 ];
 

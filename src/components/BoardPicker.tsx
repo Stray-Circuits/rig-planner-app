@@ -115,7 +115,7 @@ export function BoardPicker({
         />
         <BrandCard
           label="Mono"
-          sub="5 boards · Lite, Pedalboard"
+          sub="8 boards · Lite, Pedalboard, Rail"
           previewPreset={brandThumbPreset('Mono')}
           onClick={() => setView('mono')}
         />
