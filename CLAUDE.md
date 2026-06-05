@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|
 | Browser dev loop (no Tauri shell) | `pnpm dev` |
 | Tauri desktop dev loop | `pnpm tauri:dev` |
+| Wipe local Tauri app data (fresh-install state) | `pnpm tauri:clean` |
 | Run all gates before commit | `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:run` |
 | Watch tests | `pnpm test` |
 | One test file | `pnpm test:run tests/RigScreen.test.tsx` |
