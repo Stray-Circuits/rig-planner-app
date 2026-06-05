@@ -10,6 +10,16 @@ import metro16Img from '../assets/boards/metro-16.png';
 import metro20Img from '../assets/boards/metro-20.png';
 import metro24Img from '../assets/boards/metro-24.png';
 import metroMaxImg from '../assets/boards/metro-max.png';
+import monoLargeBlackImg from '../assets/boards/mono-large-black.png';
+import monoLargeSilverImg from '../assets/boards/mono-large-silver.png';
+import monoLiteBlackImg from '../assets/boards/mono-lite-black.png';
+import monoLitePlusBlackImg from '../assets/boards/mono-lite-plus-black.png';
+import monoLitePlusSilverImg from '../assets/boards/mono-lite-plus-silver.png';
+import monoLiteSilverImg from '../assets/boards/mono-lite-silver.png';
+import monoMediumBlackImg from '../assets/boards/mono-medium-black.png';
+import monoMediumSilverImg from '../assets/boards/mono-medium-silver.png';
+import monoSmallBlackImg from '../assets/boards/mono-small-black.png';
+import monoSmallSilverImg from '../assets/boards/mono-small-silver.png';
 import nanoImg from '../assets/boards/nano.png';
 import nanoPlusImg from '../assets/boards/nano-plus.png';
 import nanoMaxImg from '../assets/boards/nano-max.png';
@@ -30,7 +40,10 @@ export type BoardSeries =
   // Temple Audio
   | 'Solo'
   | 'Duo'
-  | 'Trio';
+  | 'Trio'
+  // Mono
+  | 'Lite'
+  | 'Pedalboard';
 
 /** Order Pedaltrain series should appear in the picker. */
 export const PEDALTRAIN_SERIES_ORDER: readonly BoardSeries[] = [
@@ -46,6 +59,12 @@ export const TEMPLE_AUDIO_SERIES_ORDER: readonly BoardSeries[] = [
   'Solo',
   'Duo',
   'Trio',
+] as const;
+
+/** Order Mono series should appear in the picker. */
+export const MONO_SERIES_ORDER: readonly BoardSeries[] = [
+  'Lite',
+  'Pedalboard',
 ] as const;
 
 export interface BoardPreset {
@@ -327,6 +346,111 @@ export const BOARD_PRESETS: readonly BoardPreset[] = [
     style: 'holes',
     series: 'Trio',
   },
+  // Mono — dimensions are the full board surface as drawn in the
+  // Affinity source (300 DPI; viewBox pixels ÷ 300 = inches). Two
+  // color variants (Black / Silver) ship as separate presets.
+  // Lite
+  {
+    id: 'mono-lite-black',
+    brand: 'Mono',
+    name: 'Lite (Black)',
+    widthIn: 14,
+    depthIn: 5.58,
+    style: 'plain',
+    image: monoLiteBlackImg,
+    series: 'Lite',
+  },
+  {
+    id: 'mono-lite-silver',
+    brand: 'Mono',
+    name: 'Lite (Silver)',
+    widthIn: 14,
+    depthIn: 5.58,
+    style: 'plain',
+    image: monoLiteSilverImg,
+    series: 'Lite',
+  },
+  {
+    id: 'mono-lite-plus-black',
+    brand: 'Mono',
+    name: 'Lite+ (Black)',
+    widthIn: 18,
+    depthIn: 5.58,
+    style: 'plain',
+    image: monoLitePlusBlackImg,
+    series: 'Lite',
+  },
+  {
+    id: 'mono-lite-plus-silver',
+    brand: 'Mono',
+    name: 'Lite+ (Silver)',
+    widthIn: 18,
+    depthIn: 5.58,
+    style: 'plain',
+    image: monoLitePlusSilverImg,
+    series: 'Lite',
+  },
+  // Pedalboard
+  {
+    id: 'mono-small-black',
+    brand: 'Mono',
+    name: 'Pedalboard Small (Black)',
+    widthIn: 18.25,
+    depthIn: 12.3,
+    style: 'plain',
+    image: monoSmallBlackImg,
+    series: 'Pedalboard',
+  },
+  {
+    id: 'mono-small-silver',
+    brand: 'Mono',
+    name: 'Pedalboard Small (Silver)',
+    widthIn: 18.25,
+    depthIn: 12.3,
+    style: 'plain',
+    image: monoSmallSilverImg,
+    series: 'Pedalboard',
+  },
+  {
+    id: 'mono-medium-black',
+    brand: 'Mono',
+    name: 'Pedalboard Medium (Black)',
+    widthIn: 24,
+    depthIn: 14.25,
+    style: 'plain',
+    image: monoMediumBlackImg,
+    series: 'Pedalboard',
+  },
+  {
+    id: 'mono-medium-silver',
+    brand: 'Mono',
+    name: 'Pedalboard Medium (Silver)',
+    widthIn: 24,
+    depthIn: 14.25,
+    style: 'plain',
+    image: monoMediumSilverImg,
+    series: 'Pedalboard',
+  },
+  {
+    id: 'mono-large-black',
+    brand: 'Mono',
+    name: 'Pedalboard Large (Black)',
+    widthIn: 32.6,
+    depthIn: 15.89,
+    style: 'plain',
+    image: monoLargeBlackImg,
+    series: 'Pedalboard',
+  },
+  {
+    id: 'mono-large-silver',
+    brand: 'Mono',
+    name: 'Pedalboard Large (Silver)',
+    widthIn: 32.6,
+    depthIn: 15.89,
+    style: 'plain',
+    image: monoLargeSilverImg,
+    series: 'Pedalboard',
+  },
 ];
 
 export function findPreset(id: string): BoardPreset | undefined {
@@ -416,6 +540,19 @@ export function templeAudioPresetsBySeries(): Map<BoardSeries, BoardPreset[]> {
   }
   for (const p of BOARD_PRESETS) {
     if (p.brand !== 'Temple Audio' || !p.series) continue;
+    bySeries.get(p.series)?.push(p);
+  }
+  return bySeries;
+}
+
+/** Mono presets grouped by series, in the order defined by MONO_SERIES_ORDER. */
+export function monoPresetsBySeries(): Map<BoardSeries, BoardPreset[]> {
+  const bySeries = new Map<BoardSeries, BoardPreset[]>();
+  for (const series of MONO_SERIES_ORDER) {
+    bySeries.set(series, []);
+  }
+  for (const p of BOARD_PRESETS) {
+    if (p.brand !== 'Mono' || !p.series) continue;
     bySeries.get(p.series)?.push(p);
   }
   return bySeries;
