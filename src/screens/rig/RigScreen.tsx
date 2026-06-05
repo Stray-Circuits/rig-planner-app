@@ -181,10 +181,14 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     setLibraryOpen(false);
   };
 
-  // Reset armed port when leaving chain mode.
-  useEffect(() => {
-    if (!chainMode) setArmedPort(null);
-  }, [chainMode]);
+  // Reset armed port when leaving chain mode. Tracked during render via
+  // the prev-prop pattern so the cleared state is in the same commit as
+  // the chainMode change (no one-frame flash of a stale armed port).
+  const [prevChainMode, setPrevChainMode] = useState(chainMode);
+  if (chainMode !== prevChainMode) {
+    setPrevChainMode(chainMode);
+    if (!chainMode) setArmed(null);
+  }
 
   // Returns a user-facing notice if the port is already at its cable
   // cap, or null if it has room. Per-connector caps live in

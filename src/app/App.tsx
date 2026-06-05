@@ -48,8 +48,8 @@ export function App() {
 
   // Decide the initial route once rigs are ready and no route has been
   // chosen yet. No rigs → wizard; otherwise last-opened (or list).
-  useEffect(() => {
-    if (rigsStatus !== 'ready' || route !== null) return;
+  // Computed during render; once `route` is set the branch is inert.
+  if (rigsStatus === 'ready' && route === null) {
     if (rigs.length === 0) {
       setRoute({ kind: 'new-rig' });
     } else if (lastRigId && rigs.some((r) => r.id === lastRigId)) {
@@ -57,7 +57,7 @@ export function App() {
     } else {
       setRoute({ kind: 'rigs' });
     }
-  }, [rigsStatus, rigs, lastRigId, route]);
+  }
 
   // Hardware back navigates between top-level routes — rig → rigs list,
   // new-rig (when rigs exist) → rigs list. Top-level back at the rigs

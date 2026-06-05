@@ -17,7 +17,9 @@ export function useBackHandler(
   // Keep the latest handler in a ref so the registered callback closes over
   // a stable identity but always calls the freshest props/state.
   const ref = useRef(handler);
-  ref.current = handler;
+  useEffect(() => {
+    ref.current = handler;
+  });
 
   useEffect(() => {
     if (!active) return;
