@@ -331,19 +331,19 @@ function RigCard({ rig, pedalsById, onOpen }: RigCardProps) {
     void loadForRig(rig.id);
   }, [rig.id, loadForRig]);
 
-  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function startHold() {
-    holdTimer = setTimeout(() => {
+    holdTimer.current = setTimeout(() => {
       setActionsOpen(true);
-      holdTimer = null;
+      holdTimer.current = null;
     }, 450);
   }
 
   function clearHold() {
-    if (holdTimer) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
     }
   }
 
