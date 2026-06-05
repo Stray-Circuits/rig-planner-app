@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type {
   BoardStyle,
   ExternalEndpoint,
@@ -117,22 +117,32 @@ export function SettingsSheet({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setView('main');
-    setDeleting(false);
-    setExporting(false);
-    setName(rig.name);
-    setPickerState(
-      initialPickerStateFor({
-        widthIn: rig.widthIn,
-        depthIn: rig.depthIn,
-        style: rig.style,
-        presetId: rig.presetId,
-      }),
-    );
-    setError(null);
-  }, [open, rig.name, rig.widthIn, rig.depthIn, rig.style, rig.presetId]);
+  // Snap local form state back to the rig whenever the sheet opens or the
+  // underlying rig changes while it's open. Computed during render via the
+  // prev-prop pattern so the form reflects the current rig in the same
+  // commit instead of flashing the stale form for one frame.
+  const resetKey = open
+    ? `${rig.name}|${rig.widthIn}|${rig.depthIn}|${rig.style}|${rig.presetId ?? ''}`
+    : null;
+  const [prevResetKey, setPrevResetKey] = useState<string | null>(resetKey);
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey);
+    if (resetKey !== null) {
+      setView('main');
+      setDeleting(false);
+      setExporting(false);
+      setName(rig.name);
+      setPickerState(
+        initialPickerStateFor({
+          widthIn: rig.widthIn,
+          depthIn: rig.depthIn,
+          style: rig.style,
+          presetId: rig.presetId,
+        }),
+      );
+      setError(null);
+    }
+  }
 
   const pickerChoice = resolveBoardChoice(pickerState);
   const boardChanged =

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 /**
  * Subscribe to a CSS media query. Returns true when the query currently
@@ -6,21 +6,26 @@ import { useEffect, useState } from 'react';
  * `serverFallback`).
  */
 export function useMediaQuery(query: string, serverFallback = false): boolean {
-  const [matches, setMatches] = useState<boolean>(() => {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      if (typeof window === 'undefined' || !window.matchMedia) {
+        return () => undefined;
+      }
+      const mql = window.matchMedia(query);
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    },
+    [query],
+  );
+
+  const getSnapshot = useCallback(() => {
     if (typeof window === 'undefined' || !window.matchMedia) {
       return serverFallback;
     }
     return window.matchMedia(query).matches;
-  });
+  }, [query, serverFallback]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mql = window.matchMedia(query);
-    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
-    setMatches(mql.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, [query]);
+  const getServerSnapshot = useCallback(() => serverFallback, [serverFallback]);
 
-  return matches;
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

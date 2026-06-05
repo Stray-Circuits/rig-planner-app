@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Pedal } from '../../data/schema';
 import { pedalImageStyle } from '../../lib/pedalImage';
 import { getLocalStorageUsageFraction } from '../../data/memoryAdapter';
@@ -51,9 +51,13 @@ export function PedalLibrarySheet({
   const [query, setQuery] = useState('');
 
   // Reset the search when the sheet closes so the next open starts fresh.
-  useEffect(() => {
+  // Computed during render via the "track-prev-prop" pattern instead of
+  // useEffect, so we don't flash the stale query for one frame.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (!open) setQuery('');
-  }, [open]);
+  }
 
   const filteredPedals = useMemo(() => {
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -72,12 +76,15 @@ export function PedalLibrarySheet({
 
   // Re-poll the localStorage usage every time the sheet opens or the pedal
   // list changes (which is when usage moves). Browser dev only; Tauri's
-  // SQLite has no comparable limit and this returns 0 there.
+  // SQLite has no comparable limit and this returns 0 there. Computed
+  // during render so the panel never flashes a stale value.
   const [quotaFraction, setQuotaFraction] = useState<number | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    setQuotaFraction(getLocalStorageUsageFraction());
-  }, [open, pedals.length]);
+  const [prevQuotaKey, setPrevQuotaKey] = useState<string | null>(null);
+  const quotaKey = open ? `${pedals.length}` : null;
+  if (quotaKey !== prevQuotaKey) {
+    setPrevQuotaKey(quotaKey);
+    if (quotaKey !== null) setQuotaFraction(getLocalStorageUsageFraction());
+  }
 
   const openActions = (pedal: Pedal) => setActionsFor(pedal);
   const closeActions = () => setActionsFor(null);
