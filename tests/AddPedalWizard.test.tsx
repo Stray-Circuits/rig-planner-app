@@ -181,20 +181,20 @@ describe('AddPedalWizard', () => {
     expect(expr?.side).toBe('top');
   });
 
-  it('Required/Optional chip toggles a port between the two states', async () => {
+  it('Required checkbox in the port editor flips a port to optional', async () => {
     const onCreated = vi.fn();
     render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
     fireEvent.click(screen.getByText('Continue'));
     fillNameSize();
     fireEvent.click(screen.getByText('Continue'));
 
-    // Default In + Out are both required.
-    const requiredChips = screen.getAllByText('Required');
-    expect(requiredChips).toHaveLength(2);
-    // Click the In chip → flips to Optional.
-    fireEvent.click(requiredChips[0]!);
-    expect(screen.getAllByText('Required')).toHaveLength(1);
-    expect(screen.getByText('Optional')).toBeInTheDocument();
+    // Open the In editor and uncheck Required.
+    fireEvent.click(screen.getByLabelText('Edit In'));
+    const requiredCb = screen.getByLabelText('Required');
+    expect(requiredCb).toBeChecked();
+    fireEvent.click(requiredCb);
+    expect(requiredCb).not.toBeChecked();
+    fireEvent.click(screen.getByLabelText('Done editing'));
 
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Add to library'));

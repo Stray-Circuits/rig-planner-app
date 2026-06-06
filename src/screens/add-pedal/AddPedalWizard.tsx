@@ -1992,14 +1992,6 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
       ports: d.ports.filter((_, i) => i !== idx),
     }));
 
-  const togglePortOptional = (idx: number) =>
-    setDraft((d) => ({
-      ...d,
-      ports: d.ports.map((p, i) =>
-        i === idx ? { ...p, optional: !p.optional } : p,
-      ),
-    }));
-
   /**
    * Swap a port with its previous/next same-side sibling. We also swap their
    * `sideOrder` values so the change persists into the rendered jack layout
@@ -2110,7 +2102,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
             return (
               <li
                 key={`${p.role}-${p.label}-${idx}`}
-                className={styles.portRow}
+                className={`${styles.portRow} ${p.optional ? styles.portRowOptional : ''}`}
               >
                 <span
                   className={
@@ -2128,10 +2120,13 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
                   />
                 ) : (
                   <>
-                    <span className={styles.portName}>{p.label}</span>
-                    <span className={styles.portMeta}>
-                      {p.side} · {p.connector.toUpperCase()}
-                    </span>
+                    <div className={styles.portInfo}>
+                      <span className={styles.portName}>{p.label}</span>
+                      <span className={styles.portMeta}>
+                        {p.side} · {p.connector.toUpperCase()}
+                        {p.optional ? ' · optional' : ''}
+                      </span>
+                    </div>
                     <div className={styles.portReorder}>
                       <button
                         type="button"
@@ -2152,18 +2147,6 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
                         <i className="ti ti-chevron-down" aria-hidden />
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      className={
-                        p.optional
-                          ? styles.portOptionalChip
-                          : styles.portRequiredChip
-                      }
-                      aria-label={`${p.label} is ${p.optional ? 'optional' : 'required'}. Toggle.`}
-                      onClick={() => togglePortOptional(idx)}
-                    >
-                      {p.optional ? 'Optional' : 'Required'}
-                    </button>
                     <button
                       type="button"
                       className={styles.portEditBtn}
@@ -2427,6 +2410,14 @@ function PortInlineEditor({ port, onChange, onDone }: PortInlineEditorProps) {
           </option>
         ))}
       </select>
+      <label className={styles.portEditorRequired}>
+        <input
+          type="checkbox"
+          checked={!port.optional}
+          onChange={(e) => onChange({ optional: !e.target.checked })}
+        />
+        <span>Required</span>
+      </label>
       <button
         type="button"
         className={styles.portEditorDone}

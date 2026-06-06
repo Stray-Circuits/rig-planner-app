@@ -569,12 +569,28 @@
   padding: 14px;
   background: var(--surface-alt);
   border-radius: var(--radius-md);
+  border: 1px solid var(--primary-border, rgba(37, 99, 235, 0.3));
+}
+
+.portRowOptional {
+  border-color: var(--border);
+  opacity: 0.7;
+}
+
+.portInfo {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .portName {
-  flex: 1;
   font-size: 15px;
   color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .portMeta {
@@ -616,31 +632,6 @@
 .portReorderBtn i {
   font-size: 18px;
   line-height: 1;
-}
-
-.portRequiredChip,
-.portOptionalChip {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 0.5px solid transparent;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.portRequiredChip {
-  background: var(--primary-faint, rgba(37, 99, 235, 0.12));
-  color: var(--primary-fg, var(--primary));
-  border-color: var(--primary-border, rgba(37, 99, 235, 0.28));
-}
-
-.portOptionalChip {
-  background: transparent;
-  color: var(--muted);
-  border-color: var(--border);
 }
 
 .portEditBtn,
@@ -692,6 +683,26 @@
   font-size: 16px;
   min-height: 48px;
   color: var(--fg);
+  cursor: pointer;
+}
+
+.portEditorRequired {
+  flex: 1 1 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 15px;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.portEditorRequired input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--primary);
   cursor: pointer;
 }
 
@@ -788,12 +799,6 @@
     font-size: 12px;
   }
 
-  .portRequiredChip,
-  .portOptionalChip {
-    font-size: 10px;
-    padding: 3px 8px;
-  }
-
   .portEditBtn,
   .portRemoveBtn {
     width: 24px;
@@ -822,6 +827,18 @@
     min-height: 0;
     padding: 4px 6px;
     font-size: 12px;
+  }
+
+  .portEditorRequired {
+    flex: 0 0 auto;
+    font-size: 12px;
+    padding: 0;
+    gap: 4px;
+  }
+
+  .portEditorRequired input {
+    width: 14px;
+    height: 14px;
   }
 
   .portEditorDone {
