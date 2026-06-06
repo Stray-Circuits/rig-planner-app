@@ -62,6 +62,7 @@ import {
   type ExtractedPedalMetadata,
 } from '../../lib/pedalMetadata';
 import { useBackHandler } from '../../lib/useBackHandler';
+import { portLayoutGroup } from '../../lib/geometry';
 import { Button, TextField, WizardShell } from '../../ui';
 import styles from './AddPedalWizard.module.css';
 
@@ -1610,49 +1611,60 @@ function derivedJackSides(ports: DraftPort[]): JackSides {
   return out;
 }
 
-function JackPreview({
-  jackSides,
-  color,
-}: {
-  jackSides: JackSides;
-  color: string;
-}) {
-  const renderDot = (
-    side: Side,
-    position: 'audio' | 'midi',
-    offset: number,
-  ) => {
-    const className =
-      position === 'audio' ? styles.jackDotAudio : styles.jackDotMidi;
-    const style: Record<string, string> = { position: 'absolute' };
-    // 8px from the relevant edge, offset along the perpendicular axis.
-    if (side === 'top') {
-      style.top = '-4px';
-      style.left = position === 'audio' ? `${30 + offset}%` : `${60 + offset}%`;
-    } else if (side === 'bottom') {
-      style.bottom = '-4px';
-      style.left = position === 'audio' ? `${30 + offset}%` : `${60 + offset}%`;
-    } else if (side === 'left') {
-      style.left = '-4px';
-      style.top = position === 'audio' ? `${30 + offset}%` : `${60 + offset}%`;
-    } else {
-      style.right = '-4px';
-      style.top = position === 'audio' ? `${30 + offset}%` : `${60 + offset}%`;
-    }
-    return <span className={className} style={style} aria-hidden />;
+function JackPreview({ ports, color }: { ports: DraftPort[]; color: string }) {
+  // Group ports by side and sort each group with the same canonical key the
+  // canvas uses (portLayoutGroup → sideOrder) so the preview matches where
+  // each port will actually appear on the pedal once placed.
+  const bySide: Record<Side, DraftPort[]> = {
+    top: [],
+    bottom: [],
+    left: [],
+    right: [],
   };
+  for (const p of ports) bySide[p.side].push(p);
+  for (const side of SIDES_IN_ORDER) {
+    bySide[side.side].sort((a, b) => {
+      const ag = portLayoutGroup(a.role);
+      const bg = portLayoutGroup(b.role);
+      if (ag !== bg) return ag - bg;
+      return a.sideOrder - b.sideOrder;
+    });
+  }
 
   return (
     <div className={styles.jackPreviewWrap}>
       <div className={styles.jackPreviewBox} style={{ background: color }}>
-        {SIDES_IN_ORDER.map(({ side }) => (
-          <span key={side}>
-            {jackSides[AUDIO_SIDE_KEY[side]]
-              ? renderDot(side, 'audio', 0)
-              : null}
-            {jackSides[MIDI_SIDE_KEY[side]] ? renderDot(side, 'midi', 0) : null}
-          </span>
-        ))}
+        {SIDES_IN_ORDER.flatMap(({ side }) => {
+          const siblings = bySide[side];
+          return siblings.map((p, idx) => {
+            const fwd = (idx + 1) / (siblings.length + 1);
+            // Top/bottom: first sibling (inputs) anchors on the right;
+            // left/right: first sibling anchors at the top — matches the
+            // canvas rule in portPositionOnBoard.
+            const along = side === 'top' || side === 'bottom' ? 1 - fwd : fwd;
+            const isMidi = p.signalType === 'midi';
+            const style: React.CSSProperties = { position: 'absolute' };
+            if (side === 'top' || side === 'bottom') {
+              if (side === 'top') style.top = '-4px';
+              else style.bottom = '-4px';
+              style.left = `${along * 100}%`;
+              style.transform = 'translate(-50%, 0)';
+            } else {
+              if (side === 'left') style.left = '-4px';
+              else style.right = '-4px';
+              style.top = `${along * 100}%`;
+              style.transform = 'translate(0, -50%)';
+            }
+            return (
+              <span
+                key={p._draftId}
+                className={isMidi ? styles.jackDotMidi : styles.jackDotAudio}
+                style={style}
+                aria-hidden
+              />
+            );
+          });
+        })}
       </div>
     </div>
   );
@@ -2124,11 +2136,9 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
     setPickedConnector(null);
   };
 
-  const derivedJacks = derivedJackSides(draft.ports);
-
   return (
     <div className={styles.connectionsStep}>
-      <JackPreview jackSides={derivedJacks} color={draft.color} />
+      <JackPreview ports={draft.ports} color={draft.color} />
 
       <label className={styles.field}>
         <span className={styles.label}>Power side</span>
