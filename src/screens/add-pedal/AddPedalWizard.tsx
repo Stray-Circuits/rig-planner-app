@@ -1,8 +1,28 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from 'react';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import type {
   JackSides,
   Pedal,
-  Port,
   Side,
   PortRole,
   SignalType,
@@ -57,7 +77,13 @@ interface AddPedalWizardProps {
   initialPedal?: Pedal;
 }
 
-type DraftPort = Omit<Port, 'id' | 'pedalId'>;
+import {
+  applySameSideMove,
+  newDraftPortId,
+  type DraftPort,
+} from './portReorder';
+
+type DraftPortFields = Omit<DraftPort, '_draftId'>;
 
 interface WizardDraft {
   color: string;
@@ -98,7 +124,7 @@ const EMPTY_JACKS: JackSides = {
 // Out comes first (sideOrder 0) so that on a top-mounted row the order
 // reads Out, In from left to right — matching the right-to-left signal
 // flow convention used everywhere else in the app.
-const DEFAULT_PORTS: DraftPort[] = [
+const DEFAULT_PORTS: DraftPortFields[] = [
   {
     label: 'In',
     role: 'input' satisfies PortRole,
@@ -132,7 +158,7 @@ function initialDraft(): WizardDraft {
     widthIn: '',
     depthIn: '',
     powerSide: 'top',
-    ports: DEFAULT_PORTS.map((p) => ({ ...p })),
+    ports: DEFAULT_PORTS.map((p) => ({ ...p, _draftId: newDraftPortId() })),
   };
 }
 
@@ -159,7 +185,10 @@ function draftFromPedal(pedal: Pedal): WizardDraft {
     widthIn: String(pedal.widthIn),
     depthIn: String(pedal.depthIn),
     powerSide: pedal.powerSide,
-    ports: pedal.ports.map(({ id: _id, pedalId: _pedalId, ...rest }) => rest),
+    ports: pedal.ports.map(({ id: _id, pedalId: _pedalId, ...rest }) => ({
+      ...rest,
+      _draftId: newDraftPortId(),
+    })),
   };
 }
 
@@ -279,7 +308,7 @@ export function AddPedalWizard({
         // the port list. Persist what the ports actually say.
         jackSides: derivedJackSides(draft.ports),
         powerSide: draft.powerSide,
-        ports: draft.ports,
+        ports: draft.ports.map(({ _draftId: _id, ...rest }) => rest),
       };
       let result: Pedal;
       if (initialPedal) {
@@ -1637,8 +1666,8 @@ interface ConnectionPreset {
   build: () => DraftPort[];
 }
 
-function mkPort(spec: DraftPort): DraftPort {
-  return { ...spec };
+function mkPort(spec: DraftPortFields): DraftPort {
+  return { ...spec, _draftId: newDraftPortId() };
 }
 
 const CONNECTION_PRESETS: ConnectionPreset[] = [
@@ -1948,6 +1977,62 @@ function defaultSideForRole(_role: PortRole): Side {
   return 'top';
 }
 
+interface SortablePortRowProps {
+  port: DraftPort;
+  isOptional: boolean;
+  children: ReactNode;
+}
+
+/**
+ * Wraps a port row with dnd-kit's sortable plumbing. The drag handle is
+ * the only element that listens for the drag gesture — the rest of the
+ * row (edit/remove buttons, the inline editor) keeps its normal tap
+ * behavior. We render a sibling visual "card" wrapping the handle plus
+ * children so the border + opacity styling stays on the visible row.
+ */
+function SortablePortRow({ port, isOptional, children }: SortablePortRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: port._draftId });
+  const style: React.CSSProperties = {
+    transform: transform
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      : undefined,
+    transition: transition ?? undefined,
+    zIndex: isDragging ? 1 : 0,
+    opacity: isDragging ? 0.85 : undefined,
+  };
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`${styles.portRow} ${isOptional ? styles.portRowOptional : ''}`}
+      {...attributes}
+    >
+      <button
+        type="button"
+        className={styles.portDragHandle}
+        aria-label={`Reorder ${port.label}`}
+        {...listeners}
+      >
+        <i className="ti ti-grip-vertical" aria-hidden />
+      </button>
+      <span
+        className={
+          port.signalType === 'midi' ? styles.jackDotMidi : styles.jackDotAudio
+        }
+        aria-hidden
+      />
+      {children}
+    </li>
+  );
+}
+
 function ConnectionsStep({ draft, setDraft }: StepProps) {
   const [pickerStep, setPickerStep] = useState<
     'closed' | 'category' | 'role' | 'connector' | 'side'
@@ -1992,32 +2077,26 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
       ports: d.ports.filter((_, i) => i !== idx),
     }));
 
-  /**
-   * Swap a port with its previous/next same-side sibling. We also swap their
-   * `sideOrder` values so the change persists into the rendered jack layout
-   * — the array index alone doesn't control which slot a port lands in.
-   */
-  const movePort = (idx: number, direction: 'up' | 'down') =>
-    setDraft((d) => {
-      const port = d.ports[idx];
-      if (!port) return d;
-      const step = direction === 'up' ? -1 : 1;
-      let neighborIdx = idx + step;
-      while (
-        neighborIdx >= 0 &&
-        neighborIdx < d.ports.length &&
-        d.ports[neighborIdx]?.side !== port.side
-      ) {
-        neighborIdx += step;
-      }
-      if (neighborIdx < 0 || neighborIdx >= d.ports.length) return d;
-      const neighbor = d.ports[neighborIdx];
-      if (!neighbor) return d;
-      const swapped = [...d.ports];
-      swapped[idx] = { ...neighbor, sideOrder: port.sideOrder };
-      swapped[neighborIdx] = { ...port, sideOrder: neighbor.sideOrder };
-      return { ...d, ports: swapped };
-    });
+  // Same-side reorder via drag handle. dnd-kit drives the JSX; sideOrder
+  // is renormalized after each successful move so the canvas slot layout
+  // tracks the new visual order. Cross-side drops are rejected — moving a
+  // port to a different edge is a property change (the inline editor's
+  // side dropdown), not a drag-and-drop gesture.
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setDraft((d) => ({
+      ...d,
+      ports: applySameSideMove(d.ports, String(active.id), String(over.id)),
+    }));
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   const addCustomPort = (
     role: RoleOption,
@@ -2036,6 +2115,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
         side,
         sideOrder: maxOrderOnSide + 1,
         optional: true,
+        _draftId: newDraftPortId(),
       };
       return { ...d, ports: [...d.ports, nextPort] };
     });
@@ -2092,83 +2172,63 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
           No ports yet. Pick a preset above or add one below.
         </p>
       ) : (
-        <ul className={styles.portList}>
-          {draft.ports.map((p, idx) => {
-            const sameSide = draft.ports.filter((q) => q.side === p.side);
-            const positionAmongSide = sameSide.indexOf(p);
-            const canMoveUp = positionAmongSide > 0;
-            const canMoveDown = positionAmongSide < sameSide.length - 1;
-            const isEditing = editingIdx === idx;
-            return (
-              <li
-                key={`${p.role}-${p.label}-${idx}`}
-                className={`${styles.portRow} ${p.optional ? styles.portRowOptional : ''}`}
-              >
-                <span
-                  className={
-                    p.signalType === 'midi'
-                      ? styles.jackDotMidi
-                      : styles.jackDotAudio
-                  }
-                  aria-hidden
-                />
-                {isEditing ? (
-                  <PortInlineEditor
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={draft.ports.map((p) => p._draftId)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className={styles.portList}>
+              {draft.ports.map((p, idx) => {
+                const isEditing = editingIdx === idx;
+                return (
+                  <SortablePortRow
+                    key={p._draftId}
                     port={p}
-                    onChange={(patch) => updatePort(idx, patch)}
-                    onDone={() => setEditingIdx(null)}
-                  />
-                ) : (
-                  <>
-                    <div className={styles.portInfo}>
-                      <span className={styles.portName}>{p.label}</span>
-                      <span className={styles.portMeta}>
-                        {p.side} · {p.connector.toUpperCase()}
-                        {p.optional ? ' · optional' : ''}
-                      </span>
-                    </div>
-                    <div className={styles.portReorder}>
-                      <button
-                        type="button"
-                        className={styles.portReorderBtn}
-                        aria-label={`Move ${p.label} earlier on ${p.side}`}
-                        disabled={!canMoveUp}
-                        onClick={() => movePort(idx, 'up')}
-                      >
-                        <i className="ti ti-chevron-up" aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.portReorderBtn}
-                        aria-label={`Move ${p.label} later on ${p.side}`}
-                        disabled={!canMoveDown}
-                        onClick={() => movePort(idx, 'down')}
-                      >
-                        <i className="ti ti-chevron-down" aria-hidden />
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      className={styles.portEditBtn}
-                      aria-label={`Edit ${p.label}`}
-                      onClick={() => setEditingIdx(idx)}
-                    >
-                      <i className="ti ti-pencil" aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.portRemoveBtn}
-                      aria-label={`Remove ${p.label}`}
-                      onClick={() => removePort(idx)}
-                    >
-                      <i className="ti ti-x" aria-hidden />
-                    </button>
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                    isOptional={p.optional}
+                  >
+                    {isEditing ? (
+                      <PortInlineEditor
+                        port={p}
+                        onChange={(patch) => updatePort(idx, patch)}
+                        onDone={() => setEditingIdx(null)}
+                      />
+                    ) : (
+                      <>
+                        <div className={styles.portInfo}>
+                          <span className={styles.portName}>{p.label}</span>
+                          <span className={styles.portMeta}>
+                            {p.side} · {p.connector.toUpperCase()}
+                            {p.optional ? ' · optional' : ''}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className={styles.portEditBtn}
+                          aria-label={`Edit ${p.label}`}
+                          onClick={() => setEditingIdx(idx)}
+                        >
+                          <i className="ti ti-pencil" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.portRemoveBtn}
+                          aria-label={`Remove ${p.label}`}
+                          onClick={() => removePort(idx)}
+                        >
+                          <i className="ti ti-x" aria-hidden />
+                        </button>
+                      </>
+                    )}
+                  </SortablePortRow>
+                );
+              })}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
 
       {pickerStep === 'closed' ? (

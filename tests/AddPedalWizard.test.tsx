@@ -232,27 +232,10 @@ describe('AddPedalWizard', () => {
     expect(inPort?.connector).toBe('trs');
   });
 
-  it('reorder arrows swap sideOrder among same-side siblings', async () => {
-    const onCreated = vi.fn();
-    render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
-    fireEvent.click(screen.getByText('Continue'));
-    fillNameSize();
-    fireEvent.click(screen.getByText('Continue'));
-
-    // Default ports: In (sideOrder 1) + Out (sideOrder 0), both top.
-    // In is rendered first; "Move In later on top" should bubble it
-    // past Out so In's sideOrder becomes 0 and Out's becomes 1.
-    fireEvent.click(screen.getByLabelText('Move In later on top'));
-
-    fireEvent.click(screen.getByText('Continue'));
-    fireEvent.click(screen.getByText('Add to library'));
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
-    const created = (await listPedals())[0]!;
-    const inPort = created.ports.find((p) => p.role === 'input');
-    const outPort = created.ports.find((p) => p.role === 'output');
-    expect(inPort?.sideOrder).toBe(0);
-    expect(outPort?.sideOrder).toBe(1);
-  });
+  // Reorder is driven by drag-and-drop now; the UI gesture is hard to
+  // simulate cleanly under jsdom, so the same-side reorder semantic lives
+  // in applySameSideMove and is unit-tested in
+  // tests/applySameSideMove.test.ts.
 
   it('removing a port from the list updates the count', () => {
     render(

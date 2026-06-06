@@ -600,38 +600,31 @@
   letter-spacing: 0.04em;
 }
 
-.portReorder {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.portReorderBtn {
+.portDragHandle {
   width: 36px;
-  height: 28px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
   color: var(--muted);
-  cursor: pointer;
-  border-radius: 4px;
+  cursor: grab;
+  border-radius: var(--radius-sm);
+  touch-action: none;
 }
 
-.portReorderBtn:hover:not(:disabled) {
+.portDragHandle:active {
+  cursor: grabbing;
+}
+
+.portDragHandle:hover {
   background: var(--surface);
   color: var(--fg);
 }
 
-.portReorderBtn:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-
-.portReorderBtn i {
-  font-size: 18px;
-  line-height: 1;
+.portDragHandle i {
+  font-size: 20px;
 }
 
 .portEditBtn,
@@ -785,18 +778,13 @@
     font-size: 11px;
   }
 
-  .portReorder {
-    gap: 1px;
+  .portDragHandle {
+    width: 22px;
+    height: 24px;
   }
 
-  .portReorderBtn {
-    width: 18px;
-    height: 14px;
-    border-radius: 3px;
-  }
-
-  .portReorderBtn i {
-    font-size: 12px;
+  .portDragHandle i {
+    font-size: 14px;
   }
 
   .portEditBtn,
