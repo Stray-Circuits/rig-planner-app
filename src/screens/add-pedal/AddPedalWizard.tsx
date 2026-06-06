@@ -1989,6 +1989,16 @@ function defaultSideForRole(_role: PortRole): Side {
   return 'top';
 }
 
+/**
+ * Resolve a dnd-kit identifier back to the human label of the port it
+ * names, for screen-reader announcements. Falls back to the raw id so an
+ * unmapped value still says something instead of crashing.
+ */
+function labelForDraftId(ports: DraftPort[], id: string | number): string {
+  const target = ports.find((p) => p._draftId === String(id));
+  return target?.label ?? String(id);
+}
+
 interface SortablePortRowProps {
   port: DraftPort;
   isOptional: boolean;
@@ -2054,20 +2064,27 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
   const [pickedConnector, setPickedConnector] = useState<Connector | null>(
     null,
   );
-  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  // Track the open editor by _draftId, not array index — applyPreset,
+  // removePort, and drag-reorder all shuffle draft.ports, and an index
+  // would silently retarget the editor onto a different port.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
+  const prevPickerStepRef = useRef(pickerStep);
 
-  // When the picker opens, scroll it into view so the user can see the
-  // choices without having to manually scroll the wizard body.
+  // Scroll the picker into view only on the closed → open transition,
+  // not on every internal category → role → connector step (the picker
+  // is already on screen at that point).
   useEffect(() => {
-    if (pickerStep === 'closed') return;
-    pickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (prevPickerStepRef.current === 'closed' && pickerStep !== 'closed') {
+      pickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+    prevPickerStepRef.current = pickerStep;
   }, [pickerStep]);
 
-  const updatePort = (idx: number, patch: Partial<DraftPort>) =>
+  const updatePortById = (id: string, patch: Partial<DraftPort>) =>
     setDraft((d) => ({
       ...d,
-      ports: d.ports.map((p, i) => (i === idx ? { ...p, ...patch } : p)),
+      ports: d.ports.map((p) => (p._draftId === id ? { ...p, ...patch } : p)),
     }));
 
   const applyPreset = (preset: ConnectionPreset) => {
@@ -2081,12 +2098,14 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
             ...built,
           ],
     }));
+    // Whichever port the editor was open on may have been replaced.
+    setEditingId(null);
   };
 
-  const removePort = (idx: number) =>
+  const removePortById = (id: string) =>
     setDraft((d) => ({
       ...d,
-      ports: d.ports.filter((_, i) => i !== idx),
+      ports: d.ports.filter((p) => p._draftId !== id),
     }));
 
   // Same-side reorder via drag handle. dnd-kit drives the JSX; sideOrder
@@ -2186,14 +2205,30 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
+          accessibility={{
+            announcements: {
+              onDragStart: ({ active }) =>
+                `Picked up port ${labelForDraftId(draft.ports, active.id)}`,
+              onDragOver: ({ active, over }) =>
+                over
+                  ? `${labelForDraftId(draft.ports, active.id)} is over ${labelForDraftId(draft.ports, over.id)}`
+                  : `${labelForDraftId(draft.ports, active.id)} is no longer over a port`,
+              onDragEnd: ({ active, over }) =>
+                over
+                  ? `${labelForDraftId(draft.ports, active.id)} dropped on ${labelForDraftId(draft.ports, over.id)}`
+                  : `${labelForDraftId(draft.ports, active.id)} dropped`,
+              onDragCancel: ({ active }) =>
+                `Reorder of ${labelForDraftId(draft.ports, active.id)} cancelled`,
+            },
+          }}
         >
           <SortableContext
             items={draft.ports.map((p) => p._draftId)}
             strategy={verticalListSortingStrategy}
           >
             <ul className={styles.portList}>
-              {draft.ports.map((p, idx) => {
-                const isEditing = editingIdx === idx;
+              {draft.ports.map((p) => {
+                const isEditing = editingId === p._draftId;
                 return (
                   <SortablePortRow
                     key={p._draftId}
@@ -2203,8 +2238,8 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
                     {isEditing ? (
                       <PortInlineEditor
                         port={p}
-                        onChange={(patch) => updatePort(idx, patch)}
-                        onDone={() => setEditingIdx(null)}
+                        onChange={(patch) => updatePortById(p._draftId, patch)}
+                        onDone={() => setEditingId(null)}
                       />
                     ) : (
                       <>
@@ -2219,7 +2254,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
                           type="button"
                           className={styles.portEditBtn}
                           aria-label={`Edit ${p.label}`}
-                          onClick={() => setEditingIdx(idx)}
+                          onClick={() => setEditingId(p._draftId)}
                         >
                           <i className="ti ti-pencil" aria-hidden />
                         </button>
@@ -2227,7 +2262,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
                           type="button"
                           className={styles.portRemoveBtn}
                           aria-label={`Remove ${p.label}`}
-                          onClick={() => removePort(idx)}
+                          onClick={() => removePortById(p._draftId)}
                         >
                           <i className="ti ti-x" aria-hidden />
                         </button>
