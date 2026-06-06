@@ -505,12 +505,21 @@
 
 .select {
   width: 100%;
-  font-size: 14px;
-  padding: 10px 12px;
+  font-size: 16px;
+  padding: 14px 14px;
+  min-height: 48px;
   border-radius: var(--radius-md);
   border: 1.5px solid var(--border);
   background: var(--surface-alt);
   color: var(--fg);
+}
+
+@media (min-width: 720px) {
+  .select {
+    font-size: 14px;
+    padding: 10px 12px;
+    min-height: 0;
+  }
 }
 
 .select:focus {
@@ -550,94 +559,78 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .portRow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 14px;
   background: var(--surface-alt);
   border-radius: var(--radius-md);
+  border: 1px solid var(--primary-border, rgba(37, 99, 235, 0.3));
+}
+
+.portRowOptional {
+  border-color: var(--border);
+  opacity: 0.7;
+}
+
+.portInfo {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .portName {
-  flex: 1;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .portMeta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted-soft);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.portReorder {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.portReorderBtn {
-  width: 18px;
-  height: 14px;
+.portDragHandle {
+  width: 36px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
   color: var(--muted);
-  cursor: pointer;
-  border-radius: 3px;
+  cursor: grab;
+  border-radius: var(--radius-sm);
+  touch-action: none;
 }
 
-.portReorderBtn:hover:not(:disabled) {
+.portDragHandle:active {
+  cursor: grabbing;
+}
+
+.portDragHandle:hover {
   background: var(--surface);
   color: var(--fg);
 }
 
-.portReorderBtn:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-
-.portReorderBtn i {
-  font-size: 12px;
-  line-height: 1;
-}
-
-.portRequiredChip,
-.portOptionalChip {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 0.5px solid transparent;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.portRequiredChip {
-  background: var(--primary-faint, rgba(37, 99, 235, 0.12));
-  color: var(--primary-fg, var(--primary));
-  border-color: var(--primary-border, rgba(37, 99, 235, 0.28));
-}
-
-.portOptionalChip {
-  background: transparent;
-  color: var(--muted);
-  border-color: var(--border);
+.portDragHandle i {
+  font-size: 20px;
 }
 
 .portEditBtn,
 .portRemoveBtn {
-  width: 24px;
-  height: 24px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -654,42 +647,61 @@
 }
 
 .portEditBtn i {
-  font-size: 14px;
+  font-size: 18px;
 }
 
 .portEditor {
   flex: 1;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
+  gap: 10px;
   min-width: 0;
 }
 
-.portEditorInput {
-  flex: 1 1 100px;
-  min-width: 0;
-  background: var(--surface);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 4px 8px;
-  font-size: 13px;
+.portEditorLabel {
+  flex: 1 1 100%;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--fg);
 }
 
 .portEditorSelect {
+  flex: 1 1 calc(50% - 5px);
+  min-width: 0;
   background: var(--surface);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 4px 6px;
-  font-size: 12px;
+  padding: 12px 12px;
+  font-size: 16px;
+  min-height: 48px;
   color: var(--fg);
   cursor: pointer;
 }
 
+.portEditorRequired {
+  flex: 1 1 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 15px;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.portEditorRequired input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
 .portEditorDone {
-  width: 28px;
-  height: 26px;
+  flex: 1 1 100%;
+  height: 48px;
   border-radius: var(--radius-sm);
   background: var(--primary);
   color: var(--primary-on);
@@ -698,10 +710,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .portEditorDone i {
-  font-size: 14px;
+  font-size: 18px;
+}
+
+.portEditorDoneText {
+  font-size: inherit;
 }
 
 .portRemoveBtn:hover {
@@ -710,22 +729,22 @@
 }
 
 .portRemoveBtn i {
-  font-size: 14px;
+  font-size: 18px;
 }
 
 .addPortBtn {
   width: 100%;
-  padding: 12px;
+  padding: 16px;
   border-radius: var(--radius-md);
   border: 1px dashed var(--border-strong);
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 15px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .addPortBtn:hover {
@@ -735,7 +754,105 @@
 }
 
 .addPortBtn i {
-  font-size: 14px;
+  font-size: 18px;
+}
+
+/* Desktop has cursor precision and tighter line-height expectations — step
+   down from the mobile-first touch sizes above. Mirrors the pattern used
+   for .pedalPhotoPreview earlier in this file. */
+@media (min-width: 720px) {
+  .portList {
+    gap: 6px;
+  }
+
+  .portRow {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .portName {
+    font-size: 13px;
+  }
+
+  .portMeta {
+    font-size: 11px;
+  }
+
+  .portDragHandle {
+    width: 22px;
+    height: 24px;
+  }
+
+  .portDragHandle i {
+    font-size: 14px;
+  }
+
+  .portEditBtn,
+  .portRemoveBtn {
+    width: 24px;
+    height: 24px;
+  }
+
+  .portEditBtn i,
+  .portRemoveBtn i {
+    font-size: 14px;
+  }
+
+  .portEditor {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .portEditorLabel {
+    flex: 0 1 auto;
+    font-size: 13px;
+    font-weight: 400;
+  }
+
+  .portEditorSelect {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 4px 6px;
+    font-size: 12px;
+  }
+
+  .portEditorRequired {
+    flex: 0 0 auto;
+    font-size: 12px;
+    padding: 0;
+    gap: 4px;
+  }
+
+  .portEditorRequired input {
+    width: 14px;
+    height: 14px;
+  }
+
+  .portEditorDone {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 26px;
+    gap: 0;
+  }
+
+  .portEditorDone i {
+    font-size: 14px;
+  }
+
+  .portEditorDoneText {
+    display: none;
+  }
+
+  .addPortBtn {
+    padding: 12px;
+    font-size: 13px;
+    gap: 6px;
+  }
+
+  .addPortBtn i {
+    font-size: 14px;
+  }
 }
 
 .portPicker {
@@ -758,8 +875,8 @@
 .portPickerHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 14px 16px;
   border-bottom: 0.5px solid var(--border);
 }
 
@@ -767,11 +884,14 @@
   background: transparent;
   border: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   cursor: pointer;
+  min-height: 40px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
 }
 
 .portPickerBack:hover {
@@ -779,22 +899,22 @@
 }
 
 .portPickerBack i {
-  font-size: 14px;
+  font-size: 18px;
 }
 
 .portPickerTitle {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--fg);
 }
 
 .portPickerSection {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--muted-soft);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 10px 14px 4px;
+  padding: 12px 16px 6px;
   border-top: 0.5px solid var(--border);
 }
 
@@ -806,12 +926,13 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 16px;
   width: 100%;
   background: transparent;
   border: none;
   cursor: pointer;
   text-align: left;
+  min-height: 56px;
 }
 
 .portPickerOpt:hover {
@@ -819,15 +940,55 @@
 }
 
 .portPickerOptName {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--fg);
   flex: 1;
 }
 
 .portPickerHint {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
   font-weight: 400;
+}
+
+@media (min-width: 720px) {
+  .portPickerHeader {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .portPickerBack {
+    font-size: 12px;
+    gap: 2px;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .portPickerBack i {
+    font-size: 14px;
+  }
+
+  .portPickerTitle {
+    font-size: 12px;
+  }
+
+  .portPickerSection {
+    font-size: 10px;
+    padding: 10px 14px 4px;
+  }
+
+  .portPickerOpt {
+    padding: 10px 14px;
+    min-height: 0;
+  }
+
+  .portPickerOptName {
+    font-size: 13px;
+  }
+
+  .portPickerHint {
+    font-size: 11px;
+  }
 }
 
 .review {

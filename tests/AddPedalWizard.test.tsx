@@ -160,7 +160,7 @@ describe('AddPedalWizard', () => {
     fillNameSize();
     fireEvent.click(screen.getByText('Continue'));
 
-    fireEvent.click(screen.getByText('Add port'));
+    fireEvent.click(screen.getByText('Add Port'));
     // Category picker → Control → Expression In → TRS. Side step is
     // skipped — every freshly-added port defaults to the top edge to
     // match modern top-jack pedals.
@@ -181,20 +181,20 @@ describe('AddPedalWizard', () => {
     expect(expr?.side).toBe('top');
   });
 
-  it('Required/Optional chip toggles a port between the two states', async () => {
+  it('Required checkbox in the port editor flips a port to optional', async () => {
     const onCreated = vi.fn();
     render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
     fireEvent.click(screen.getByText('Continue'));
     fillNameSize();
     fireEvent.click(screen.getByText('Continue'));
 
-    // Default In + Out are both required.
-    const requiredChips = screen.getAllByText('Required');
-    expect(requiredChips).toHaveLength(2);
-    // Click the In chip → flips to Optional.
-    fireEvent.click(requiredChips[0]!);
-    expect(screen.getAllByText('Required')).toHaveLength(1);
-    expect(screen.getByText('Optional')).toBeInTheDocument();
+    // Open the In editor and uncheck Required.
+    fireEvent.click(screen.getByLabelText('Edit In'));
+    const requiredCb = screen.getByLabelText('Required');
+    expect(requiredCb).toBeChecked();
+    fireEvent.click(requiredCb);
+    expect(requiredCb).not.toBeChecked();
+    fireEvent.click(screen.getByLabelText('Done editing'));
 
     fireEvent.click(screen.getByText('Continue'));
     fireEvent.click(screen.getByText('Add to library'));
@@ -206,7 +206,7 @@ describe('AddPedalWizard', () => {
     expect(required).toBeDefined();
   });
 
-  it('Edit on a port row lets the user rename, change side, swap connector', async () => {
+  it('Edit on a port row lets the user change side and swap connector', async () => {
     const onCreated = vi.fn();
     render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
     fireEvent.click(screen.getByText('Continue'));
@@ -214,9 +214,6 @@ describe('AddPedalWizard', () => {
     fireEvent.click(screen.getByText('Continue'));
 
     fireEvent.click(screen.getByLabelText('Edit In'));
-    fireEvent.change(screen.getByLabelText('Port label'), {
-      target: { value: 'Guitar In' },
-    });
     // Default In side is 'top'; change to 'right' to exercise the editor.
     fireEvent.change(screen.getByLabelText('Port side'), {
       target: { value: 'right' },
@@ -231,32 +228,14 @@ describe('AddPedalWizard', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     const created = (await listPedals())[0]!;
     const inPort = created.ports.find((p) => p.role === 'input');
-    expect(inPort?.label).toBe('Guitar In');
     expect(inPort?.side).toBe('right');
     expect(inPort?.connector).toBe('trs');
   });
 
-  it('reorder arrows swap sideOrder among same-side siblings', async () => {
-    const onCreated = vi.fn();
-    render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
-    fireEvent.click(screen.getByText('Continue'));
-    fillNameSize();
-    fireEvent.click(screen.getByText('Continue'));
-
-    // Default ports: In (sideOrder 1) + Out (sideOrder 0), both top.
-    // In is rendered first; "Move In later on top" should bubble it
-    // past Out so In's sideOrder becomes 0 and Out's becomes 1.
-    fireEvent.click(screen.getByLabelText('Move In later on top'));
-
-    fireEvent.click(screen.getByText('Continue'));
-    fireEvent.click(screen.getByText('Add to library'));
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
-    const created = (await listPedals())[0]!;
-    const inPort = created.ports.find((p) => p.role === 'input');
-    const outPort = created.ports.find((p) => p.role === 'output');
-    expect(inPort?.sideOrder).toBe(0);
-    expect(outPort?.sideOrder).toBe(1);
-  });
+  // Reorder is driven by drag-and-drop now; the UI gesture is hard to
+  // simulate cleanly under jsdom, so the same-side reorder semantic lives
+  // in applySameSideMove and is unit-tested in
+  // tests/applySameSideMove.test.ts.
 
   it('removing a port from the list updates the count', () => {
     render(
