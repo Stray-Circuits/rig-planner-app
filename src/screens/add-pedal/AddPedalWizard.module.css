@@ -675,6 +675,13 @@
   min-width: 0;
 }
 
+.portEditorLabel {
+  flex: 1 1 100%;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
 .portEditorSelect {
   flex: 1 1 calc(50% - 5px);
   min-width: 0;
@@ -802,6 +809,12 @@
     flex-wrap: nowrap;
     align-items: center;
     gap: 6px;
+  }
+
+  .portEditorLabel {
+    flex: 0 1 auto;
+    font-size: 13px;
+    font-weight: 400;
   }
 
   .portEditorSelect {

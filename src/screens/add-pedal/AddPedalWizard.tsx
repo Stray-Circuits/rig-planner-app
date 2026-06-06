@@ -2391,6 +2391,7 @@ function PortInlineEditor({ port, onChange, onDone }: PortInlineEditorProps) {
   const connectors = roleOption?.connectors ?? [port.connector];
   return (
     <div className={styles.portEditor}>
+      <span className={styles.portEditorLabel}>{port.label}</span>
       <select
         className={styles.portEditorSelect}
         aria-label="Port side"
