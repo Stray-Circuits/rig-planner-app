@@ -31,6 +31,20 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   };
 }
 
+// jsdom doesn't implement Element.scrollIntoView; production code in the
+// add-pedal wizard calls it to reveal the port picker when it opens. Stub
+// as a no-op so component-level tests don't crash.
+if (
+  typeof Element !== 'undefined' &&
+  typeof Element.prototype.scrollIntoView !== 'function'
+) {
+  Element.prototype.scrollIntoView = function scrollIntoView(
+    _arg?: boolean | ScrollIntoViewOptions,
+  ): void {
+    /* no-op */
+  };
+}
+
 // @imgly/background-removal loads a 176MB ONNX model + WebGPU/WASM runtime;
 // none of that works in jsdom. Replace it with a stub that pretends to do
 // the work and returns the same Blob unchanged. Real exercise of bg removal

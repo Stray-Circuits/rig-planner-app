@@ -160,7 +160,7 @@ describe('AddPedalWizard', () => {
     fillNameSize();
     fireEvent.click(screen.getByText('Continue'));
 
-    fireEvent.click(screen.getByText('Add port'));
+    fireEvent.click(screen.getByText('Add Port'));
     // Category picker → Control → Expression In → TRS. Side step is
     // skipped — every freshly-added port defaults to the top edge to
     // match modern top-jack pedals.

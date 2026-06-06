@@ -397,7 +397,7 @@ function subtitleForStep(step: number): string {
     case 1:
       return 'Tell us what the pedal is and how big it is.';
     case 2:
-      return 'What ports does the pedal expose?';
+      return 'What ports does the pedal have?';
     case 3:
       return 'Looks right? Submit to add it to your library.';
     default:
@@ -1958,6 +1958,14 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
     null,
   );
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+
+  // When the picker opens, scroll it into view so the user can see the
+  // choices without having to manually scroll the wizard body.
+  useEffect(() => {
+    if (pickerStep === 'closed') return;
+    pickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [pickerStep]);
 
   const updatePort = (idx: number, patch: Partial<DraftPort>) =>
     setDraft((d) => ({
@@ -2189,49 +2197,53 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
             setPickerStep('category');
           }}
         >
-          <i className="ti ti-plus" aria-hidden /> Add port
+          <i className="ti ti-plus" aria-hidden /> Add Port
         </button>
       ) : (
-        <PortPicker
-          step={pickerStep}
-          pickedCategory={pickedCategory}
-          pickedRole={pickedRole}
-          pickedConnector={pickedConnector}
-          defaultSide={pickedRole ? defaultSideForRole(pickedRole.role) : 'top'}
-          onPickCategory={(heading) => {
-            setPickedCategory(heading);
-            setPickerStep('role');
-          }}
-          onPickRole={(role) => {
-            setPickedRole(role);
-            setPickerStep('connector');
-          }}
-          onPickConnector={(connector) => {
-            // Skip the side step: derive it from the role using the app's
-            // right-to-left convention (inputs right, outputs left). The
-            // user can still nudge a port to a different side later via
-            // the inline editor.
-            if (pickedRole) {
-              const side = defaultSideForRole(pickedRole.role);
-              addCustomPort(pickedRole, connector, side);
+        <div ref={pickerRef}>
+          <PortPicker
+            step={pickerStep}
+            pickedCategory={pickedCategory}
+            pickedRole={pickedRole}
+            pickedConnector={pickedConnector}
+            defaultSide={
+              pickedRole ? defaultSideForRole(pickedRole.role) : 'top'
             }
-          }}
-          onPickSide={(side) => {
-            if (pickedRole && pickedConnector)
-              addCustomPort(pickedRole, pickedConnector, side);
-          }}
-          onBack={() => {
-            if (pickerStep === 'connector') {
+            onPickCategory={(heading) => {
+              setPickedCategory(heading);
               setPickerStep('role');
-              setPickedRole(null);
-            } else if (pickerStep === 'role') {
-              setPickerStep('category');
-              setPickedCategory(null);
-            } else {
-              setPickerStep('closed');
-            }
-          }}
-        />
+            }}
+            onPickRole={(role) => {
+              setPickedRole(role);
+              setPickerStep('connector');
+            }}
+            onPickConnector={(connector) => {
+              // Skip the side step: derive it from the role using the app's
+              // right-to-left convention (inputs right, outputs left). The
+              // user can still nudge a port to a different side later via
+              // the inline editor.
+              if (pickedRole) {
+                const side = defaultSideForRole(pickedRole.role);
+                addCustomPort(pickedRole, connector, side);
+              }
+            }}
+            onPickSide={(side) => {
+              if (pickedRole && pickedConnector)
+                addCustomPort(pickedRole, pickedConnector, side);
+            }}
+            onBack={() => {
+              if (pickerStep === 'connector') {
+                setPickerStep('role');
+                setPickedRole(null);
+              } else if (pickerStep === 'role') {
+                setPickerStep('category');
+                setPickedCategory(null);
+              } else {
+                setPickerStep('closed');
+              }
+            }}
+          />
+        </div>
       )}
     </div>
   );
