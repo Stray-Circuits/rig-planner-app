@@ -249,23 +249,22 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .searchResultTile {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px;
+  gap: 8px;
+  padding: 10px;
   border-radius: var(--radius-md);
   border: 1.5px solid var(--border-strong);
   background: var(--surface-alt);
   cursor: pointer;
   width: 100%;
-  min-height: 130px;
   align-items: stretch;
 }
 
@@ -280,14 +279,14 @@
 
 .searchResultThumb {
   width: 100%;
-  height: 96px;
+  height: 220px;
   object-fit: contain;
   background: rgba(255, 255, 255, 0.04);
   border-radius: 4px;
 }
 
 .searchResultMeta {
-  font-size: 10px;
+  font-size: 13px;
   color: var(--muted-soft);
   text-align: center;
   overflow: hidden;
