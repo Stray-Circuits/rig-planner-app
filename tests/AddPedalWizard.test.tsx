@@ -206,7 +206,7 @@ describe('AddPedalWizard', () => {
     expect(required).toBeDefined();
   });
 
-  it('Edit on a port row lets the user rename, change side, swap connector', async () => {
+  it('Edit on a port row lets the user change side and swap connector', async () => {
     const onCreated = vi.fn();
     render(<AddPedalWizard onCreated={onCreated} onCancel={() => undefined} />);
     fireEvent.click(screen.getByText('Continue'));
@@ -214,9 +214,6 @@ describe('AddPedalWizard', () => {
     fireEvent.click(screen.getByText('Continue'));
 
     fireEvent.click(screen.getByLabelText('Edit In'));
-    fireEvent.change(screen.getByLabelText('Port label'), {
-      target: { value: 'Guitar In' },
-    });
     // Default In side is 'top'; change to 'right' to exercise the editor.
     fireEvent.change(screen.getByLabelText('Port side'), {
       target: { value: 'right' },
@@ -231,7 +228,6 @@ describe('AddPedalWizard', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     const created = (await listPedals())[0]!;
     const inPort = created.ports.find((p) => p.role === 'input');
-    expect(inPort?.label).toBe('Guitar In');
     expect(inPort?.side).toBe('right');
     expect(inPort?.connector).toBe('trs');
   });

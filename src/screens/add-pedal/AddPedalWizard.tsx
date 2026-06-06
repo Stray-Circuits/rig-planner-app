@@ -2379,10 +2379,10 @@ interface PortInlineEditorProps {
 }
 
 /**
- * Inline edit panel for an existing port: rename label, change side, swap
- * connector. Role/signalType are fixed (changing those is conceptually a
- * remove + re-add). The connector dropdown is constrained to the set
- * declared on the role option so users can't pick a nonsensical pairing.
+ * Inline edit panel for an existing port: change side, swap connector.
+ * Role/signalType are fixed (changing those is conceptually a remove +
+ * re-add). The connector dropdown is constrained to the set declared on
+ * the role option so users can't pick a nonsensical pairing.
  */
 function PortInlineEditor({ port, onChange, onDone }: PortInlineEditorProps) {
   const roleOption = ROLE_GROUPS.flatMap((g) => g.options).find(
@@ -2391,13 +2391,6 @@ function PortInlineEditor({ port, onChange, onDone }: PortInlineEditorProps) {
   const connectors = roleOption?.connectors ?? [port.connector];
   return (
     <div className={styles.portEditor}>
-      <input
-        type="text"
-        className={styles.portEditorInput}
-        value={port.label}
-        aria-label="Port label"
-        onChange={(e) => onChange({ label: e.target.value })}
-      />
       <select
         className={styles.portEditorSelect}
         aria-label="Port side"
@@ -2428,6 +2421,7 @@ function PortInlineEditor({ port, onChange, onDone }: PortInlineEditorProps) {
         onClick={onDone}
       >
         <i className="ti ti-check" aria-hidden />
+        <span className={styles.portEditorDoneText}>Done</span>
       </button>
     </div>
   );
