@@ -41,6 +41,7 @@ import {
   findPedalDimensionsByQuery,
   type ExtractedPedalMetadata,
 } from '../../lib/pedalMetadata';
+import { findPedalInCatalog } from '../../data/pedalCatalog';
 import { useBackHandler } from '../../lib/useBackHandler';
 import { Button, TextField, WizardShell } from '../../ui';
 import styles from './AddPedalWizard.module.css';
@@ -1489,6 +1490,30 @@ function NameSizeStep({ draft, setDraft }: StepProps) {
       const value = e.target.value;
       setDraft((d) => ({ ...d, [key]: value }));
     };
+
+  // Debounced catalog lookup: as the user types brand + name, match
+  // against the built-in catalog and silently fill width/depth if both
+  // dim fields are still empty. Same "fill empty only" guard the
+  // metadata pipeline uses (see applyMetadataInOrder above) so we
+  // never trample anything the user has already typed.
+  const brandTrim = draft.brand.trim();
+  const nameTrim = draft.name.trim();
+  const widthEmpty = draft.widthIn.trim() === '';
+  const depthEmpty = draft.depthIn.trim() === '';
+  useEffect(() => {
+    if (brandTrim.length === 0 || nameTrim.length === 0) return;
+    if (!widthEmpty || !depthEmpty) return;
+    const handle = window.setTimeout(() => {
+      const hit = findPedalInCatalog(brandTrim, nameTrim);
+      if (!hit) return;
+      setDraft((d) => ({
+        ...d,
+        ...(d.widthIn.trim() === '' ? { widthIn: String(hit.widthIn) } : {}),
+        ...(d.depthIn.trim() === '' ? { depthIn: String(hit.depthIn) } : {}),
+      }));
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [brandTrim, nameTrim, widthEmpty, depthEmpty, setDraft]);
 
   return (
     <div className={styles.form}>

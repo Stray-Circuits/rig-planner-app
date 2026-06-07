@@ -316,6 +316,7 @@ describe('extractPedalMetadata — labeled spec scrape', () => {
   it('takes the first occurrence when a label appears multiple times', async () => {
     const html = `<!doctype html><html><body>
       <p>Width: 2.87 in</p>
+      <p>Depth: 5.12 in</p>
       <p>Customer review: "I expected a width of 4 in but it's smaller"</p>
     </body></html>`;
     const outcome = await extractPedalMetadata('https://example.com/x', {
@@ -324,6 +325,101 @@ describe('extractPedalMetadata — labeled spec scrape', () => {
     expect(outcome.kind).toBe('ok');
     if (outcome.kind !== 'ok') throw new Error('expected ok');
     expect(outcome.metadata.widthIn).toBeCloseTo(2.87, 5);
+  });
+
+  it('ignores `width` inside JSON image data like `"width":"854"` (issue #73)', async () => {
+    // Real failure from issue #73: Amazon product pages embed image
+    // metadata as JSON in a <script> tag where dimensions appear as
+    // string-quoted ints. Our text scrape sees these because we include
+    // <script> content for Sweetwater-style embedded JSON. The closing
+    // `"` of the string was being read as the inch glyph.
+    const html = `<!doctype html><html><body>
+      <script>
+        var media = {"images":[
+          {"width":"854","height":"480","url":"x.jpg"},
+          {"width":"1280","height":"720","url":"y.jpg"}
+        ]};
+      </script>
+    </body></html>`;
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('empty');
+  });
+
+  it('rejects `width 16 in stock` / `16 in this list` (issue #73)', async () => {
+    // The naked `in` unit was matching prepositional phrases.
+    const html = `<!doctype html><html><body>
+      <p>Width: 16 in stock right now</p>
+      <p>Width 4 in 1 enclosure</p>
+      <p>Depth 12 in our showroom</p>
+    </body></html>`;
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('empty');
+  });
+
+  it('still accepts `Width 2.87 in` followed by another sentence', async () => {
+    // Sanity check that the tightened `in` lookahead doesn't reject the
+    // valid case where the inch unit ends a clause and another sentence
+    // (capitalized) starts immediately after.
+    const html = `<!doctype html><html><body>
+      <p>Width: 2.87 in Customer reviews follow</p>
+      <p>Depth: 5.12 in Specifications continue here</p>
+    </body></html>`;
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.widthIn).toBeCloseTo(2.87, 5);
+    expect(outcome.metadata.depthIn).toBeCloseTo(5.12, 5);
+  });
+
+  it('drops a solo width when no depth was found on the same page (issue #73 round 2)', async () => {
+    // Real failure mode from issue #73 round 2: bogus widthIn=16/18/20
+    // values were leaking through from pages that had only a width
+    // match (often an unrelated number near the word "width" — an
+    // image asset, a shipping box, a jack-spacing spec). When the
+    // companion depth isn't on the same page, the width is almost
+    // certainly wrong; drop both rather than ship a confident-looking
+    // false positive that mis-scales the canvas.
+    const html = `<!doctype html><html><body>
+      <p>Width: 16 in.</p>
+    </body></html>`;
+    const outcome = await extractPedalMetadata('https://example.com/solo', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('empty');
+  });
+
+  it('drops a solo depth too (symmetry with the solo-width drop)', async () => {
+    const html = `<!doctype html><html><body>
+      <p>Depth: 5.12 in.</p>
+    </body></html>`;
+    const outcome = await extractPedalMetadata('https://example.com/solo', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('empty');
+  });
+
+  it('still flattens `<th>Width</th><td>2.87 in</td><th>Depth</th>` table rows', async () => {
+    // After flattening, the text reads `Width 2.87 in Depth 5.12 in`.
+    // The `in` after each value is followed by whitespace + a capital
+    // letter (the next label), which the tightened lookahead allows.
+    const html = `<!doctype html><html><body>
+      <table><tbody>
+        <tr><th>Width</th><td>2.87 in</td><th>Depth</th><td>5.12 in</td></tr>
+      </tbody></table>
+    </body></html>`;
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.widthIn).toBeCloseTo(2.87, 5);
+    expect(outcome.metadata.depthIn).toBeCloseTo(5.12, 5);
   });
 
   it('JSON-LD dimensions still win over text scrape when both present', async () => {
@@ -350,7 +446,7 @@ describe('extractPedalMetadata — labeled spec scrape', () => {
 });
 
 describe('extractPedalMetadata — OpenGraph fallback', () => {
-  it('reads brand/name from meta tags when JSON-LD is absent', async () => {
+  it('reads brand from product:brand meta and splits og:title around it', async () => {
     const html = wrap(`
       <meta property="og:title" content="MXR Phase 90" />
       <meta property="product:brand" content="MXR" />
@@ -361,14 +457,19 @@ describe('extractPedalMetadata — OpenGraph fallback', () => {
     expect(outcome.kind).toBe('ok');
     if (outcome.kind !== 'ok') throw new Error('expected ok');
     expect(outcome.metadata.brand).toBe('MXR');
-    expect(outcome.metadata.name).toBe('MXR Phase 90');
-    expect(outcome.metadata.widthIn).toBeNull();
-    expect(outcome.metadata.depthIn).toBeNull();
+    // og:title is parsed through the known-brand splitter: brand stays
+    // out of the model name field (issue #73).
+    expect(outcome.metadata.name).toBe('Phase 90');
+    // Brand + name match a catalog row, which fills the dims — meta
+    // tags themselves still don't carry dimensions.
+    expect(outcome.metadata.widthIn).toBe(2.36);
+    expect(outcome.metadata.depthIn).toBe(4.38);
   });
 
   it('does not surface dimensions from meta tags (medium confidence)', async () => {
     const html = wrap(`
-      <meta property="og:title" content="Some Pedal" />
+      <meta property="product:brand" content="Acme" />
+      <meta property="og:title" content="Mystery Stomp" />
       <meta property="product:width" content="73mm" />
     `);
     const outcome = await extractPedalMetadata('https://example.com/p', {
@@ -376,8 +477,59 @@ describe('extractPedalMetadata — OpenGraph fallback', () => {
     });
     expect(outcome.kind).toBe('ok');
     if (outcome.kind !== 'ok') throw new Error('expected ok');
+    // Brand is anchored by product:brand; og:title flows through as the
+    // model name. Dimensions from product:width are deliberately
+    // ignored — those tags carry too much wrong data to trust. Brand
+    // "Acme" isn't in the catalog so no catalog fill either.
+    expect(outcome.metadata.brand).toBe('Acme');
+    expect(outcome.metadata.name).toBe('Mystery Stomp');
     expect(outcome.metadata.widthIn).toBeNull();
     expect(outcome.metadata.depthIn).toBeNull();
+  });
+
+  it('ignores og:site_name as a brand fallback', async () => {
+    // og:site_name routinely carries the WEBSITE name (e.g. "ModularGrid",
+    // "Sweetwater") which is not the pedal brand — issue #73.
+    const html = wrap(`
+      <meta property="og:site_name" content="ModularGrid" />
+      <meta property="og:title" content="JHS Morning Glory" />
+    `);
+    const outcome = await extractPedalMetadata('https://example.com/mg', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.brand).toBe('JHS');
+    expect(outcome.metadata.name).toBe('Morning Glory');
+  });
+
+  it('rejects article-prose og:title even when a known brand appears in it', async () => {
+    // Real failure from issue #73: Strymon's FAQ page has og:title
+    // "What are the TimeLine pedal dimensions? - Strymon" — the brand
+    // is real but the rest is a question, not a model name.
+    const html = wrap(`
+      <meta property="og:title" content="What are the TimeLine pedal dimensions? - Strymon" />
+    `);
+    const outcome = await extractPedalMetadata('https://example.com/faq', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.brand).toBe('Strymon');
+    expect(outcome.metadata.name).toBeNull();
+  });
+
+  it('routes raw og:title "Model – Brand" through the known-brand splitter', async () => {
+    const html = wrap(
+      `<meta property="og:title" content="Slö Multi Texture Reverb - BLEMISHED – Walrus Audio" />`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/slo', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.brand).toBe('Walrus Audio');
+    expect(outcome.metadata.name).toBe('Slö Multi Texture Reverb');
   });
 });
 
@@ -436,6 +588,130 @@ describe('extractPedalMetadata — title heuristic', () => {
   });
 });
 
+describe('extractPedalMetadata — name cleaning', () => {
+  it('strips trademark symbols from extracted names', async () => {
+    const html = wrap(
+      `<meta property="og:title" content="MXR® Phase 90" /><meta property="product:brand" content="MXR" />`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.name).toBe('Phase 90');
+  });
+
+  it('strips redundant brand prefix from the model name', async () => {
+    const html = wrap(
+      `<meta property="og:title" content="Wampler Tumnus Overdrive Pedal" /><meta property="product:brand" content="Wampler" />`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.name).toBe('Tumnus');
+  });
+
+  it('strips trailing "Inc." corporate suffix', async () => {
+    const html = wrap(
+      `<meta property="og:title" content="Empress Effects Inc." /><meta property="product:brand" content="Empress" />`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    // After stripping the brand prefix "Empress" and the trailing
+    // "Effects Inc." → empty → name is null. Brand stays.
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.brand).toBe('Empress');
+    expect(outcome.metadata.name).toBeNull();
+  });
+
+  it('strips redundant trailing "Pedals" when brand also says "Pedals"', async () => {
+    const html = wrap(
+      `<meta property="og:title" content="Morning Glory Pedal" /><meta property="product:brand" content="JHS Pedals" />`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.name).toBe('Morning Glory');
+  });
+
+  it('strips trailing "Multi FX" / descriptor cruft', async () => {
+    const html = wrap(
+      `<meta property="og:title" content="H9 Max Harmonizer® Multi FX" /><meta property="product:brand" content="Eventide" />`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.name).toBe('H9 Max Harmonizer');
+  });
+});
+
+describe('extractPedalMetadata — catalog fallback', () => {
+  it('fills dimensions from the catalog when brand + name are known but dims are empty', async () => {
+    // Page has brand + name via JSON-LD but no dimension data. The
+    // solo-dim drop nukes any partial; the catalog then fills both.
+    const json = {
+      '@type': 'Product',
+      name: 'DS-1',
+      brand: 'Boss',
+    };
+    const html = wrap(
+      `<script type="application/ld+json">${JSON.stringify(json)}</script>`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.brand).toBe('Boss');
+    expect(outcome.metadata.name).toBe('DS-1');
+    expect(outcome.metadata.widthIn).toBe(2.87);
+    expect(outcome.metadata.depthIn).toBe(5.08);
+  });
+
+  it('does NOT override page-extracted dimensions with catalog values', async () => {
+    // Page has its own (artificially weird) dims; catalog must not
+    // touch them.
+    const json = {
+      '@type': 'Product',
+      name: 'DS-1',
+      brand: 'Boss',
+      width: { value: 4, unitCode: 'INH' },
+      depth: { value: 6, unitCode: 'INH' },
+    };
+    const html = wrap(
+      `<script type="application/ld+json">${JSON.stringify(json)}</script>`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.widthIn).toBe(4);
+    expect(outcome.metadata.depthIn).toBe(6);
+  });
+
+  it('does not fall through to the catalog when no brand was found', async () => {
+    // Page has only a name but no brand — catalog needs both, so dims
+    // stay null.
+    const html = wrap(`<meta property="og:title" content="DS-1" />`);
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    if (outcome.kind === 'ok') {
+      expect(outcome.metadata.widthIn).toBeNull();
+      expect(outcome.metadata.depthIn).toBeNull();
+    }
+  });
+});
+
 describe('extractPedalMetadata — failure modes', () => {
   it('returns page_unreachable on fetch failure', async () => {
     const outcome = await extractPedalMetadata('https://example.com/x', {
@@ -478,7 +754,9 @@ describe('extractPedalMetadata — failure modes', () => {
     });
     expect(outcome.kind).toBe('ok');
     if (outcome.kind !== 'ok') throw new Error('expected ok');
-    expect(outcome.metadata.name).toBe('Strymon Timeline');
+    // Brand split out of the title; model name is the remainder.
+    expect(outcome.metadata.brand).toBe('Strymon');
+    expect(outcome.metadata.name).toBe('Timeline');
   });
 });
 
@@ -513,7 +791,7 @@ describe('findPedalDimensionsByQuery', () => {
     );
   });
 
-  it('scrapes top hits and merges, first-source-wins per field', async () => {
+  it('scrapes top hits and merges brand/name first-source-wins; dims taken only from a complete page', async () => {
     const webSearchImpl = vi.fn(() =>
       Promise.resolve(
         webOk(
@@ -534,10 +812,15 @@ describe('findPedalDimensionsByQuery', () => {
     );
     const extractImpl = vi.fn((url: string) => {
       if (url.includes('sweetwater')) {
-        return pageWith({ brand: 'Boss', widthIn: 2.87 });
+        return pageWith({ brand: 'Boss' });
       }
       if (url.includes('thomann')) {
-        return pageWith({ brand: 'WRONG', name: 'DS-1', depthIn: 5.12 });
+        return pageWith({
+          brand: 'WRONG',
+          name: 'DS-1',
+          widthIn: 2.87,
+          depthIn: 5.12,
+        });
       }
       return Promise.resolve({ kind: 'empty' as const });
     });
@@ -546,11 +829,43 @@ describe('findPedalDimensionsByQuery', () => {
       extractImpl: extractImpl as unknown as typeof extractPedalMetadata,
     });
     expect(result).not.toBeNull();
-    // Sweetwater (first) wins for brand + widthIn; Thomann fills name + depthIn.
+    // Brand + name still merge first-source-wins across pages.
     expect(result?.brand).toBe('Boss');
     expect(result?.name).toBe('DS-1');
+    // Dims come wholesale from the complete page — Thomann.
     expect(result?.widthIn).toBe(2.87);
     expect(result?.depthIn).toBe(5.12);
+  });
+
+  it('skips modulargrid.net (Eurorack HP, not pedal inches — issue #73)', async () => {
+    const webSearchImpl = vi.fn(() =>
+      Promise.resolve(
+        webOk(
+          {
+            title: 'ModularGrid',
+            url: 'https://modulargrid.net/p/jhs-morning-glory',
+            description: '',
+            hostname: 'modulargrid.net',
+          },
+          {
+            title: 'Manufacturer',
+            url: 'https://jhspedals.com/morning-glory',
+            description: '',
+            hostname: 'jhspedals.com',
+          },
+        ),
+      ),
+    );
+    const extractImpl = vi.fn(() => pageWith({ widthIn: 2.87 }));
+    await findPedalDimensionsByQuery('JHS Morning Glory', {
+      webSearchImpl,
+      extractImpl: extractImpl as unknown as typeof extractPedalMetadata,
+    });
+    expect(extractImpl).toHaveBeenCalledTimes(1);
+    expect(extractImpl).toHaveBeenCalledWith(
+      'https://jhspedals.com/morning-glory',
+      expect.any(Object),
+    );
   });
 
   it('filters out social/forum hostnames before scraping', async () => {
@@ -633,7 +948,7 @@ describe('findPedalDimensionsByQuery', () => {
     );
     const extractImpl = vi.fn((url: string) =>
       url.includes('sweetwater')
-        ? pageWith({ brand: 'Boss', widthIn: 2.87 })
+        ? pageWith({ brand: 'Boss', widthIn: 2.87, depthIn: 5.12 })
         : pageWith({}),
     );
     const result = await findPedalDimensionsByQuery('Boss DS-1', {
@@ -649,6 +964,7 @@ describe('findPedalDimensionsByQuery', () => {
     );
     expect(result?.brand).toBe('Boss');
     expect(result?.widthIn).toBe(2.87);
+    expect(result?.depthIn).toBe(5.12);
   });
 
   it('respects maxPages cap', async () => {
@@ -762,10 +1078,13 @@ describe('findPedalDimensionsByQuery', () => {
     expect(result?.name).toBe('Mini Ego 76');
   });
 
-  it('falls back to per-field merge when no single result has both dimensions', async () => {
-    // The existing "first-source-wins per field" path still applies when
-    // no result was complete on its own. Split-source merge stays useful
-    // for partially-spec'd retailer / manufacturer pages.
+  it('drops dimensions when no single result carries both width and depth (issue #73 round 2)', async () => {
+    // In practice, split-dim sources are almost always wrong on at
+    // least one side — the dimension regex got something incidental
+    // (an image asset's pixel size, a shipping box, a jack-spacing
+    // measurement, a JSON-LD bare number). Cross-page stitching used
+    // to combine these into a confident-looking but bogus pair. The
+    // "blank > wrong" rule wins: drop dims when no page produced both.
     const webSearchImpl = vi.fn(() =>
       Promise.resolve(
         webOk(
@@ -793,8 +1112,8 @@ describe('findPedalDimensionsByQuery', () => {
       webSearchImpl,
       extractImpl: extractImpl as unknown as typeof extractPedalMetadata,
     });
-    expect(result?.widthIn).toBe(2.87);
-    expect(result?.depthIn).toBe(5.12);
+    // No brand/name/dims surfaced — the whole result collapses to null.
+    expect(result).toBeNull();
   });
 
   it('survives individual extraction failures and uses the rest', async () => {
@@ -818,13 +1137,14 @@ describe('findPedalDimensionsByQuery', () => {
     );
     const extractImpl = vi.fn((url: string) => {
       if (url.includes('bad')) return Promise.reject(new Error('boom'));
-      return pageWith({ widthIn: 2.87 });
+      return pageWith({ widthIn: 2.87, depthIn: 5.12 });
     });
     const result = await findPedalDimensionsByQuery('q', {
       webSearchImpl,
       extractImpl: extractImpl as unknown as typeof extractPedalMetadata,
     });
     expect(result?.widthIn).toBe(2.87);
+    expect(result?.depthIn).toBe(5.12);
   });
 
   it('returns null for empty / whitespace queries without calling the API', async () => {
