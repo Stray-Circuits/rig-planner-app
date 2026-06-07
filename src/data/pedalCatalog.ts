@@ -833,7 +833,7 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   { brand: 'Line 6', name: 'HX Stomp', widthIn: 4.59, depthIn: 6.77 },
   { brand: 'Line 6', name: 'HX Stomp XL', widthIn: 6.77, depthIn: 8.0 },
   { brand: 'Line 6', name: 'HX Effects', widthIn: 4.59, depthIn: 12.01 },
-  { brand: 'Line 6', name: 'HX One', widthIn: 3.5, depthIn: 5.7 },
+  { brand: 'Line 6', name: 'HX One', widthIn: 3.8, depthIn: 4.9 },
   {
     brand: 'Line 6',
     name: 'M9',
@@ -1076,8 +1076,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Keeley',
     name: 'Octa Pspsps Psi',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 3.9,
+    depthIn: 5.0,
     aliases: ['Transfigurating Fuzz Cat', 'Octa Pspsps'],
   },
   {
@@ -1152,8 +1152,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Summer School Electronics',
     name: 'Meowdle School Chorus',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 3.66,
+    depthIn: 4.69,
     aliases: ['Meowdle School', 'Middle School Cat Chorus'],
   },
   {
