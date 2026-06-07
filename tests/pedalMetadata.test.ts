@@ -462,8 +462,8 @@ describe('extractPedalMetadata — OpenGraph fallback', () => {
     expect(outcome.metadata.name).toBe('Phase 90');
     // Brand + name match a catalog row, which fills the dims — meta
     // tags themselves still don't carry dimensions.
-    expect(outcome.metadata.widthIn).toBe(2.36);
-    expect(outcome.metadata.depthIn).toBe(4.38);
+    expect(outcome.metadata.widthIn).toBe(2.25);
+    expect(outcome.metadata.depthIn).toBe(4.25);
   });
 
   it('does not surface dimensions from meta tags (medium confidence)', async () => {

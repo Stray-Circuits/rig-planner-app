@@ -6,27 +6,44 @@
  * a direct lookup in the add-pedal wizard (typing a known brand + name
  * auto-fills width/depth without invoking the image search at all).
  *
- * The catalog covers ~10 popular pedals per brand for ~20 brands. Every
- * entry's `widthIn`/`depthIn` is sourced from one of:
- *
- *   - Manufacturer product / spec page (preferred).
- *   - Standard enclosure datasheet when the brand uses an off-the-shelf
- *     enclosure — Hammond 1590A (1.50×3.62), 1590B (2.37×4.39),
- *     1590BB (3.74×4.72), 1590DD (4.37×7.56); BB-class (2.50×4.75).
- *   - A known brand-specific enclosure family used across a product
- *     line: Boss compact (2.87×5.08), Strymon Big Box (6.75×5.1),
- *     Strymon Compact (4.0×4.5), Walrus standard MKII (2.795×4.77),
- *     MXR 1591B (2.36×4.38), MXR 1591 mini (1.50×3.65), Eventide H9
- *     (3.0×5.28), Eventide Factor (3.9×7.56), Chase Bliss (3.95×3.55).
- *
  * Convention follows `Pedal.widthIn` / `Pedal.depthIn`:
  *
  *   - `widthIn` is left-to-right when the pedal is placed for play
  *     (knobs up, jacks at the back).
  *   - `depthIn` is front-to-back (the longer axis on most stompboxes).
  *
- * Catalog values are intentionally conservative — when in doubt, the
- * row uses the standard enclosure dim rather than a guess.
+ * Sourcing — each brand-family was verified against the manufacturer's
+ * own product page (or, where the maker doesn't publish dims, against a
+ * spec-rich retailer like Sweetwater or a dimension-focused review).
+ * Verified brand-family dimensions:
+ *
+ *   - Boss compact: 2.87 × 5.08 (Boss-proprietary 73 × 129 mm).
+ *   - MXR 1591B-class (Phase 90 etc.): 2.25 × 4.25.
+ *   - MXR 1591-class mini (Phase 95, Sugar Drive, Booster Mini): 1.50 × 3.65 — UNVERIFIED.
+ *   - Strymon Big Box (Timeline, BigSky, ...): 6.75 × 5.1.
+ *   - Strymon Compact (Flint, El Capistan, ...): 4.0 × 4.5.
+ *   - Strymon Cloudburst: 2.7 × 4.6.
+ *   - Walrus standard MKII (Slö, Julia, ...): 2.6 × 4.77.
+ *   - JHS Pedals (all): 2.6 × 4.8.
+ *   - Wampler 1590B-class (Tumnus Deluxe, Sovereign, ...): 2.5 × 4.5.
+ *   - Wampler 1590BB-class (Plexi-Drive Deluxe, Triple Wreck): 3.5 × 4.5.
+ *   - Wampler Tumnus / Belle (mini): 1.5 × 3.5.
+ *   - Empress stack-knob (Reverb, Echosystem, ...): 3.75 × 5.7.
+ *   - Eventide H9 / H9 Max: 4.65 × 5.25.
+ *   - Eventide Factor series (TimeFactor, ...): 7.5 × 4.8.
+ *   - Eventide dot9 (Blackhole, ...): 4.0 × 4.25.
+ *   - EarthQuaker Devices 1590B-class (Plumes, Afterneath, ...): 2.5 × 4.75.
+ *   - EQD Avalanche Run: 4.15 × 4.65.
+ *   - EQD Disaster Transport SR: 4.75 × 5.65.
+ *   - Chase Bliss (all): 2.9 × 4.9.
+ *   - Source Audio dual-knob (Ventris, Collider): 4.6 × 4.4.
+ *   - Catalinbread Belle Epoch: 2.36 × 4.33. Belle Epoch Deluxe / Echorec: 4.68 × 3.66.
+ *
+ * UNVERIFIED (rows still ship but flagged for follow-up): Electro-Harmonix
+ * (per-pedal), Walrus Mako D1, Keeley, Source Audio One Series solo,
+ * Way Huge, TC Electronic, Line 6, Mooer, ZVEX, Maxon, Catalinbread
+ * non-Belle-Epoch, OBNE, Summer School Electronics, Alexander Pedals,
+ * Supercool Pedals, Cusack Music, Oneder Effects, Mojo Hand FX.
  */
 
 export interface PedalCatalogEntry {
@@ -205,22 +222,22 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'MXR',
     name: 'Phase 90',
-    widthIn: 2.36,
-    depthIn: 4.38,
+    widthIn: 2.25,
+    depthIn: 4.25,
     aliases: ['M101'],
   },
   {
     brand: 'MXR',
     name: 'Carbon Copy',
-    widthIn: 2.36,
-    depthIn: 4.38,
+    widthIn: 2.25,
+    depthIn: 4.25,
     aliases: ['M169'],
   },
   {
     brand: 'MXR',
     name: 'Dyna Comp',
-    widthIn: 2.36,
-    depthIn: 4.38,
+    widthIn: 2.25,
+    depthIn: 4.25,
     aliases: ['M102'],
   },
   {
@@ -233,22 +250,22 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'MXR',
     name: 'Micro Amp',
-    widthIn: 2.36,
-    depthIn: 4.38,
+    widthIn: 2.25,
+    depthIn: 4.25,
     aliases: ['M133'],
   },
   {
     brand: 'MXR',
     name: 'Distortion+',
-    widthIn: 2.36,
-    depthIn: 4.38,
+    widthIn: 2.25,
+    depthIn: 4.25,
     aliases: ['M104', 'Distortion Plus'],
   },
   {
     brand: 'MXR',
     name: 'Custom Badass 78 Distortion',
-    widthIn: 2.36,
-    depthIn: 4.38,
+    widthIn: 2.25,
+    depthIn: 4.25,
     aliases: ['M78', "Custom Badass '78"],
   },
   {
@@ -261,8 +278,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'MXR',
     name: 'EVH 5150 Overdrive',
-    widthIn: 2.36,
-    depthIn: 4.38,
+    widthIn: 2.25,
+    depthIn: 4.25,
     aliases: ['EVH5150'],
   },
   {
@@ -368,31 +385,31 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     depthIn: 4.5,
     aliases: ['Blue Sky'],
   },
-  { brand: 'Strymon', name: 'Cloudburst', widthIn: 2.5, depthIn: 4.0 },
+  { brand: 'Strymon', name: 'Cloudburst', widthIn: 2.7, depthIn: 4.6 },
 
   // ---- Walrus Audio ---- (standard MKII = 2.795 × 4.77, Mako = 4.6 × 5.5)
   // source: Walrus product pages.
   {
     brand: 'Walrus Audio',
     name: 'Slö',
-    widthIn: 2.795,
+    widthIn: 2.6,
     depthIn: 4.77,
     aliases: ['Slo', 'Slö Multi Texture Reverb'],
   },
-  { brand: 'Walrus Audio', name: 'Julianna', widthIn: 2.795, depthIn: 4.77 },
-  { brand: 'Walrus Audio', name: 'Julia', widthIn: 2.795, depthIn: 4.77 },
-  { brand: 'Walrus Audio', name: 'Lillian', widthIn: 2.795, depthIn: 4.77 },
-  { brand: 'Walrus Audio', name: 'Iron Horse', widthIn: 2.795, depthIn: 4.77 },
-  { brand: 'Walrus Audio', name: 'Voyager', widthIn: 2.795, depthIn: 4.77 },
-  { brand: 'Walrus Audio', name: 'Eras', widthIn: 2.795, depthIn: 4.77 },
+  { brand: 'Walrus Audio', name: 'Julianna', widthIn: 2.6, depthIn: 4.77 },
+  { brand: 'Walrus Audio', name: 'Julia', widthIn: 2.6, depthIn: 4.77 },
+  { brand: 'Walrus Audio', name: 'Lillian', widthIn: 2.6, depthIn: 4.77 },
+  { brand: 'Walrus Audio', name: 'Iron Horse', widthIn: 2.6, depthIn: 4.77 },
+  { brand: 'Walrus Audio', name: 'Voyager', widthIn: 2.6, depthIn: 4.77 },
+  { brand: 'Walrus Audio', name: 'Eras', widthIn: 2.6, depthIn: 4.77 },
   {
     brand: 'Walrus Audio',
     name: 'ARP-87',
-    widthIn: 2.795,
+    widthIn: 2.6,
     depthIn: 4.77,
     aliases: ['ARP 87', 'ARP87'],
   },
-  { brand: 'Walrus Audio', name: 'Polychrome', widthIn: 2.795, depthIn: 4.77 },
+  { brand: 'Walrus Audio', name: 'Polychrome', widthIn: 2.6, depthIn: 4.77 },
   {
     brand: 'Walrus Audio',
     name: 'Mako D1',
@@ -403,83 +420,83 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
 
   // ---- JHS Pedals ---- (1590B 2.37 × 4.39 standard)
   // source: Hammond 1590B; JHS uses it for nearly the whole line.
-  { brand: 'JHS Pedals', name: 'Morning Glory', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'JHS Pedals', name: 'Crayon', widthIn: 2.37, depthIn: 4.39 },
+  { brand: 'JHS Pedals', name: 'Morning Glory', widthIn: 2.6, depthIn: 4.8 },
+  { brand: 'JHS Pedals', name: 'Crayon', widthIn: 2.6, depthIn: 4.8 },
   {
     brand: 'JHS Pedals',
     name: "Pulp 'N Peel",
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.6,
+    depthIn: 4.8,
     aliases: ['Pulp N Peel', 'Pulp and Peel'],
   },
-  { brand: 'JHS Pedals', name: 'Muffuletta', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'JHS Pedals', name: 'Bonsai', widthIn: 2.37, depthIn: 4.39 },
+  { brand: 'JHS Pedals', name: 'Muffuletta', widthIn: 2.6, depthIn: 4.8 },
+  { brand: 'JHS Pedals', name: 'Bonsai', widthIn: 2.6, depthIn: 4.8 },
   {
     brand: 'JHS Pedals',
     name: 'SuperBolt',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.6,
+    depthIn: 4.8,
     aliases: ['Super Bolt'],
   },
-  { brand: 'JHS Pedals', name: 'Sweet Tea', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'JHS Pedals', name: 'Charlie Brown', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'JHS Pedals', name: 'Calhoun', widthIn: 2.37, depthIn: 4.39 },
+  { brand: 'JHS Pedals', name: 'Sweet Tea', widthIn: 2.6, depthIn: 4.8 },
+  { brand: 'JHS Pedals', name: 'Charlie Brown', widthIn: 2.6, depthIn: 4.8 },
+  { brand: 'JHS Pedals', name: 'Calhoun', widthIn: 2.6, depthIn: 4.8 },
   {
     brand: 'JHS Pedals',
     name: 'Andy Timmons Drive',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.6,
+    depthIn: 4.8,
     aliases: ['AT+', 'AT Plus'],
   },
 
   // ---- Wampler ---- (1590B unless noted; minis use 1590A)
   // source: Hammond enclosure datasheets; Wampler shipping enclosures.
-  { brand: 'Wampler', name: 'Tumnus', widthIn: 1.5, depthIn: 3.65 },
-  { brand: 'Wampler', name: 'Tumnus Deluxe', widthIn: 2.37, depthIn: 4.39 },
+  { brand: 'Wampler', name: 'Tumnus', widthIn: 1.5, depthIn: 3.5 },
+  { brand: 'Wampler', name: 'Tumnus Deluxe', widthIn: 2.5, depthIn: 4.5 },
   {
     brand: 'Wampler',
     name: 'Plexi-Drive Deluxe',
-    widthIn: 3.74,
-    depthIn: 4.72,
+    widthIn: 3.5,
+    depthIn: 4.5,
     aliases: ['Plexi Drive Deluxe'],
   },
-  { brand: 'Wampler', name: 'Ego Compressor', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Wampler', name: 'Velvet Fuzz', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Wampler', name: 'Pinnacle', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Wampler', name: 'Triple Wreck', widthIn: 3.74, depthIn: 4.72 },
-  { brand: 'Wampler', name: 'Sovereign', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Wampler', name: 'Belle', widthIn: 1.5, depthIn: 3.65 },
-  { brand: 'Wampler', name: 'Catapulp', widthIn: 2.37, depthIn: 4.39 },
+  { brand: 'Wampler', name: 'Ego Compressor', widthIn: 2.5, depthIn: 4.5 },
+  { brand: 'Wampler', name: 'Velvet Fuzz', widthIn: 2.5, depthIn: 4.5 },
+  { brand: 'Wampler', name: 'Pinnacle', widthIn: 2.5, depthIn: 4.5 },
+  { brand: 'Wampler', name: 'Triple Wreck', widthIn: 3.5, depthIn: 4.5 },
+  { brand: 'Wampler', name: 'Sovereign', widthIn: 2.5, depthIn: 4.5 },
+  { brand: 'Wampler', name: 'Belle', widthIn: 1.5, depthIn: 3.5 },
+  { brand: 'Wampler', name: 'Catapulp', widthIn: 2.5, depthIn: 4.5 },
 
   // ---- Empress Effects ---- (most use the stack-knob box 4.75 × 4.0)
   // source: Empress product spec pages.
-  { brand: 'Empress', name: 'Reverb', widthIn: 4.75, depthIn: 4.0 },
-  { brand: 'Empress', name: 'Echosystem', widthIn: 4.75, depthIn: 4.0 },
+  { brand: 'Empress', name: 'Reverb', widthIn: 3.75, depthIn: 5.7 },
+  { brand: 'Empress', name: 'Echosystem', widthIn: 3.75, depthIn: 5.7 },
   {
     brand: 'Empress',
     name: 'ParaEQ MKII Deluxe',
-    widthIn: 4.75,
-    depthIn: 4.0,
+    widthIn: 3.75,
+    depthIn: 5.7,
     aliases: ['ParaEQ', 'Para EQ'],
   },
   {
     brand: 'Empress',
     name: 'Compressor MKII',
-    widthIn: 4.75,
-    depthIn: 4.0,
+    widthIn: 3.75,
+    depthIn: 5.7,
     aliases: ['Compressor'],
   },
-  { brand: 'Empress', name: 'Bass Compressor', widthIn: 4.75, depthIn: 4.0 },
-  { brand: 'Empress', name: 'Heavy Menace', widthIn: 4.75, depthIn: 4.0 },
-  { brand: 'Empress', name: 'Multidrive', widthIn: 4.75, depthIn: 4.0 },
+  { brand: 'Empress', name: 'Bass Compressor', widthIn: 3.75, depthIn: 5.7 },
+  { brand: 'Empress', name: 'Heavy Menace', widthIn: 3.75, depthIn: 5.7 },
+  { brand: 'Empress', name: 'Multidrive', widthIn: 3.75, depthIn: 5.7 },
   {
     brand: 'Empress',
     name: 'Tremolo2',
-    widthIn: 4.75,
-    depthIn: 4.0,
+    widthIn: 3.75,
+    depthIn: 5.7,
     aliases: ['Tremolo 2'],
   },
-  { brand: 'Empress', name: 'Phaser', widthIn: 4.75, depthIn: 4.0 },
+  { brand: 'Empress', name: 'Phaser', widthIn: 3.75, depthIn: 5.7 },
   {
     brand: 'Empress',
     name: 'Buffer+',
@@ -490,52 +507,52 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
 
   // ---- Eventide ---- (H9 = 3.0 × 5.28, Factor = 3.9 × 7.56, dot9 = 1590B)
   // source: Eventide product pages.
-  { brand: 'Eventide', name: 'H9', widthIn: 3.0, depthIn: 5.28 },
-  { brand: 'Eventide', name: 'H9 Max', widthIn: 3.0, depthIn: 5.28 },
+  { brand: 'Eventide', name: 'H9', widthIn: 4.65, depthIn: 5.25 },
+  { brand: 'Eventide', name: 'H9 Max', widthIn: 4.65, depthIn: 5.25 },
   {
     brand: 'Eventide',
     name: 'TimeFactor',
-    widthIn: 3.9,
-    depthIn: 7.56,
+    widthIn: 7.5,
+    depthIn: 4.8,
     aliases: ['Time Factor'],
   },
   {
     brand: 'Eventide',
     name: 'PitchFactor',
-    widthIn: 3.9,
-    depthIn: 7.56,
+    widthIn: 7.5,
+    depthIn: 4.8,
     aliases: ['Pitch Factor'],
   },
   {
     brand: 'Eventide',
     name: 'ModFactor',
-    widthIn: 3.9,
-    depthIn: 7.56,
+    widthIn: 7.5,
+    depthIn: 4.8,
     aliases: ['Mod Factor'],
   },
-  { brand: 'Eventide', name: 'Space', widthIn: 3.9, depthIn: 7.56 },
+  { brand: 'Eventide', name: 'Space', widthIn: 7.5, depthIn: 4.8 },
   {
     brand: 'Eventide',
     name: 'Blackhole',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 4.0,
+    depthIn: 4.25,
     aliases: ['Black Hole'],
   },
   {
     brand: 'Eventide',
     name: 'MicroPitch Delay',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 4.0,
+    depthIn: 4.25,
     aliases: ['Micro Pitch'],
   },
   {
     brand: 'Eventide',
     name: 'UltraTap',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 4.0,
+    depthIn: 4.25,
     aliases: ['Ultra Tap'],
   },
-  { brand: 'Eventide', name: 'Rose', widthIn: 2.37, depthIn: 4.39 },
+  { brand: 'Eventide', name: 'Rose', widthIn: 4.0, depthIn: 4.25 },
 
   // ---- Keeley ---- (mostly 1590B, mini line uses 1590A)
   // source: Keeley product pages; standard Hammond enclosures.
@@ -567,62 +584,62 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'EarthQuaker Devices',
     name: 'Avalanche Run',
-    widthIn: 3.74,
-    depthIn: 5.71,
+    widthIn: 4.15,
+    depthIn: 4.65,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Afterneath',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Hizumitas',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'The Depths',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Plumes',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Westwood',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Erupter',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Spatial Delivery',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Sea Machine',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Disaster Transport SR',
-    widthIn: 3.74,
-    depthIn: 4.72,
+    widthIn: 4.75,
+    depthIn: 5.65,
   },
 
   // ---- Chase Bliss Audio ---- (their custom stompbox = 3.95 × 3.55)
@@ -630,57 +647,57 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Chase Bliss Audio',
     name: 'Mood MKII',
-    widthIn: 3.95,
-    depthIn: 3.55,
+    widthIn: 2.9,
+    depthIn: 4.9,
     aliases: ['Mood'],
   },
-  { brand: 'Chase Bliss Audio', name: 'Blooper', widthIn: 3.95, depthIn: 3.55 },
+  { brand: 'Chase Bliss Audio', name: 'Blooper', widthIn: 2.9, depthIn: 4.9 },
   {
     brand: 'Chase Bliss Audio',
     name: 'CXM 1978',
-    widthIn: 3.95,
-    depthIn: 3.55,
+    widthIn: 2.9,
+    depthIn: 4.9,
     aliases: ['CXM1978'],
   },
   {
     brand: 'Chase Bliss Audio',
     name: 'Wombtone MKII',
-    widthIn: 3.95,
-    depthIn: 3.55,
+    widthIn: 2.9,
+    depthIn: 4.9,
     aliases: ['Wombtone'],
   },
   {
     brand: 'Chase Bliss Audio',
     name: 'Tonal Recall',
-    widthIn: 3.95,
-    depthIn: 3.55,
+    widthIn: 2.9,
+    depthIn: 4.9,
   },
   {
     brand: 'Chase Bliss Audio',
     name: 'Brothers',
-    widthIn: 3.95,
-    depthIn: 3.55,
+    widthIn: 2.9,
+    depthIn: 4.9,
   },
   {
     brand: 'Chase Bliss Audio',
     name: 'Warped Vinyl HiFi',
-    widthIn: 3.95,
-    depthIn: 3.55,
+    widthIn: 2.9,
+    depthIn: 4.9,
     aliases: ['Warped Vinyl'],
   },
   {
     brand: 'Chase Bliss Audio',
     name: 'Generation Loss MKII',
-    widthIn: 3.95,
-    depthIn: 3.55,
+    widthIn: 2.9,
+    depthIn: 4.9,
     aliases: ['Generation Loss'],
   },
-  { brand: 'Chase Bliss Audio', name: 'Habit', widthIn: 3.95, depthIn: 3.55 },
+  { brand: 'Chase Bliss Audio', name: 'Habit', widthIn: 2.9, depthIn: 4.9 },
   {
     brand: 'Chase Bliss Audio',
     name: 'Dark World',
-    widthIn: 3.95,
-    depthIn: 3.55,
+    widthIn: 2.9,
+    depthIn: 4.9,
   },
 
   // ---- Source Audio ---- (One Series = 4.50 × 2.50, dual = 4.50 × 4.00)
@@ -688,11 +705,11 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Source Audio',
     name: 'Ventris',
-    widthIn: 4.5,
-    depthIn: 4.0,
+    widthIn: 4.6,
+    depthIn: 4.4,
     aliases: ['Ventris Dual Reverb'],
   },
-  { brand: 'Source Audio', name: 'Collider', widthIn: 4.5, depthIn: 4.0 },
+  { brand: 'Source Audio', name: 'Collider', widthIn: 4.6, depthIn: 4.4 },
   {
     brand: 'Source Audio',
     name: 'Nemesis',
@@ -1082,22 +1099,22 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'EarthQuaker Devices',
     name: 'Zoar Cat Paws',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
     aliases: ['Zoar Cat Paws Edition'],
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Blumes Bass Overdrive',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
     aliases: ['Blumes', 'Plumes Bass Cat'],
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Plumes Kitty Green Sparkle',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.5,
+    depthIn: 4.75,
     aliases: ['Plumes Cat Edition'],
   },
 
