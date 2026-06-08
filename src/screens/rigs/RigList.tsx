@@ -5,6 +5,7 @@ import { usePlacedPedalsStore } from '../../stores/placedPedalsStore';
 import { useRigsStore } from '../../stores/rigsStore';
 import { findExistingRigForImport, importRig } from '../../data/rigImportRepo';
 import { parseRigExport, type RigExport } from '../../lib/rigPortability';
+import { openTextFile } from '../../lib/fileDownload';
 import { RigThumb } from '../../canvas/RigThumb';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from '../rig/PedalLibrarySheet';
@@ -42,21 +43,33 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
     collisionWith: string | null;
   } | null>(null);
 
-  const handleImportFilePicked = (file: File) => {
+  const handleImportText = async (text: string) => {
+    try {
+      const exp = parseRigExport(text);
+      const existing = await findExistingRigForImport(exp);
+      setPendingImport({ exp, collisionWith: existing?.name ?? null });
+    } catch (err) {
+      setImportError(
+        err instanceof Error
+          ? `Import failed: ${err.message}`
+          : `Import failed: ${String(err)}`,
+      );
+    }
+  };
+
+  const triggerImport = () => {
     setImportError(null);
     void (async () => {
-      try {
-        const text = await file.text();
-        const exp = parseRigExport(text);
-        const existing = await findExistingRigForImport(exp);
-        setPendingImport({ exp, collisionWith: existing?.name ?? null });
-      } catch (err) {
-        setImportError(
-          err instanceof Error
-            ? `Import failed: ${err.message}`
-            : `Import failed: ${String(err)}`,
-        );
+      const result = await openTextFile({
+        filters: [{ name: 'Rig export', extensions: ['json'] }],
+      });
+      if (result.kind === 'opened') {
+        await handleImportText(result.text);
+        return;
       }
+      if (result.kind === 'cancelled') return;
+      // Browser dev: fall through to the hidden <input type="file">.
+      importInputRef.current?.click();
     })();
   };
 
@@ -149,7 +162,7 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
               <button
                 type="button"
                 className={styles.newRigCard}
-                onClick={() => importInputRef.current?.click()}
+                onClick={triggerImport}
               >
                 <span
                   className={`${styles.newRigThumb} ${styles.importThumb}`}
@@ -196,7 +209,12 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
                 const file = e.target.files?.[0];
                 // Reset so the same file can be picked again later.
                 e.target.value = '';
-                if (file) handleImportFilePicked(file);
+                if (!file) return;
+                setImportError(null);
+                void (async () => {
+                  const text = await file.text();
+                  await handleImportText(text);
+                })();
               }}
             />
           </section>
