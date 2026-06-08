@@ -45,13 +45,21 @@
  *   - Empress Buffer+: 1.26 × 4.49.
  *   - Line 6 HX Stomp XL: 4.72 × 12.44.
  *   - Way Huge Smalls Aqua-Puss: 2.40 × 4.09.
+ *   - Source Audio One Series solo (Nemesis, Spectrum, ...): 2.76 × 4.49.
+ *   - ZVEX standard Vexter (Fuzz Factory, SHO, ...): 2.38 × 4.70.
+ *   - ZVEX vertical (Box of Rock Vertical, '59 Sound vertical): 2.625 × 4.31.
+ *   - ZVEX Fuzz Factory 7: 3.64 × 4.80. ZVEX Probe: 4.70 × 7.50.
+ *   - Keeley NocPurrne Reverb: 4.61 × 6.18.
+ *   - Keeley Fuzz Baller / Fuzz Bender base: 3.74 × 4.33.
+ *   - Maxon Nine Series compact (OD-808 etc.): 2.40 × 4.41.
+ *   - Maxon OD-820 Overdrive Pro: 4.61 × 5.91. Maxon AD-999: 4.72 × 5.98.
  *
- * UNVERIFIED (rows still ship but flagged for follow-up): Electro-Harmonix
- * (per-pedal), Walrus Mako D1, Source Audio One Series solo, Way Huge
- * non-Smalls, TC Electronic, most Line 6, ZVEX, Maxon, Catalinbread
- * non-Belle-Epoch, OBNE, Summer School Electronics, Alexander Pedals,
- * Supercool Pedals, Cusack Music, Oneder Effects, Mojo Hand FX, and
- * the ~30 pedals where Brave/Thomann couldn't surface dim data.
+ * UNVERIFIED (rows still ship with conservative estimates; no maker /
+ * spec-host page surfaced labeled dim data through Brave + WebKit):
+ * Electro-Harmonix (per pedal), Walrus Mako D1, Way Huge non-Smalls,
+ * all of TC Electronic, most of Line 6, Catalinbread non-Belle-Epoch,
+ * OBNE, Summer School Electronics, Alexander Pedals, Supercool Pedals,
+ * Cusack Music, Oneder Effects, Mojo Hand FX.
  */
 
 export interface PedalCatalogEntry {
@@ -721,27 +729,27 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Source Audio',
     name: 'Nemesis',
-    widthIn: 4.5,
-    depthIn: 2.5,
+    widthIn: 2.76,
+    depthIn: 4.49,
     aliases: ['Nemesis Delay'],
   },
-  { brand: 'Source Audio', name: 'Spectrum', widthIn: 4.5, depthIn: 2.5 },
-  { brand: 'Source Audio', name: 'EQ2', widthIn: 4.5, depthIn: 2.5 },
+  { brand: 'Source Audio', name: 'Spectrum', widthIn: 2.76, depthIn: 4.49 },
+  { brand: 'Source Audio', name: 'EQ2', widthIn: 2.76, depthIn: 4.49 },
   {
     brand: 'Source Audio',
     name: 'True Spring',
-    widthIn: 4.5,
-    depthIn: 2.5,
+    widthIn: 2.76,
+    depthIn: 4.49,
     aliases: ['True Spring Reverb'],
   },
-  { brand: 'Source Audio', name: 'ZIO', widthIn: 4.5, depthIn: 2.5 },
-  { brand: 'Source Audio', name: 'C4 Synth', widthIn: 4.5, depthIn: 2.5 },
-  { brand: 'Source Audio', name: 'Aftershock', widthIn: 4.5, depthIn: 2.5 },
+  { brand: 'Source Audio', name: 'ZIO', widthIn: 2.76, depthIn: 4.49 },
+  { brand: 'Source Audio', name: 'C4 Synth', widthIn: 2.76, depthIn: 4.49 },
+  { brand: 'Source Audio', name: 'Aftershock', widthIn: 2.76, depthIn: 4.49 },
   {
     brand: 'Source Audio',
     name: 'Vertigo',
-    widthIn: 4.5,
-    depthIn: 2.5,
+    widthIn: 2.76,
+    depthIn: 4.49,
     aliases: ['Vertigo Tremolo'],
   },
 
@@ -888,34 +896,34 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
 
   // ---- ZVEX ---- (Vexter cast = 3.70 × 4.50)
   // source: ZVEX Vexter spec.
-  { brand: 'ZVEX', name: 'Fuzz Factory', widthIn: 3.7, depthIn: 4.5 },
-  { brand: 'ZVEX', name: 'Fuzz Factory 7', widthIn: 3.7, depthIn: 4.5 },
-  { brand: 'ZVEX', name: 'Box of Rock', widthIn: 3.7, depthIn: 4.5 },
+  { brand: 'ZVEX', name: 'Fuzz Factory', widthIn: 2.38, depthIn: 4.7 },
+  { brand: 'ZVEX', name: 'Fuzz Factory 7', widthIn: 3.64, depthIn: 4.8 },
+  { brand: 'ZVEX', name: 'Box of Rock', widthIn: 2.625, depthIn: 4.31 },
   {
     brand: 'ZVEX',
     name: 'Super Hard On',
-    widthIn: 3.7,
-    depthIn: 4.5,
+    widthIn: 2.38,
+    depthIn: 4.7,
     aliases: ['SHO'],
   },
-  { brand: 'ZVEX', name: 'Mastotron', widthIn: 3.7, depthIn: 4.5 },
-  { brand: 'ZVEX', name: 'Channel 2', widthIn: 3.7, depthIn: 4.5 },
-  { brand: 'ZVEX', name: 'Distortron', widthIn: 3.7, depthIn: 4.5 },
+  { brand: 'ZVEX', name: 'Mastotron', widthIn: 2.38, depthIn: 4.7 },
+  { brand: 'ZVEX', name: 'Channel 2', widthIn: 2.38, depthIn: 4.7 },
+  { brand: 'ZVEX', name: 'Distortron', widthIn: 2.38, depthIn: 4.7 },
   {
     brand: 'ZVEX',
     name: 'Lo-Fi Loop Junky',
-    widthIn: 3.7,
-    depthIn: 4.5,
+    widthIn: 2.38,
+    depthIn: 4.7,
     aliases: ['Lo Fi Loop Junky'],
   },
   {
     brand: 'ZVEX',
     name: "'59 Sound",
-    widthIn: 3.7,
-    depthIn: 4.5,
+    widthIn: 2.625,
+    depthIn: 4.31,
     aliases: ['59 Sound'],
   },
-  { brand: 'ZVEX', name: 'Probe', widthIn: 3.7, depthIn: 4.5 },
+  { brand: 'ZVEX', name: 'Probe', widthIn: 4.7, depthIn: 7.5 },
 
   // ---- Catalinbread ---- (1590B; Belle Epoch Deluxe is custom)
   // source: Catalinbread product pages; Hammond 1590B for the rest.
@@ -945,71 +953,71 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Maxon',
     name: 'OD-808',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 2.4,
+    depthIn: 4.41,
     aliases: ['OD808'],
   },
   {
     brand: 'Maxon',
     name: 'OD-9',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 2.4,
+    depthIn: 4.41,
     aliases: ['OD9'],
   },
   {
     brand: 'Maxon',
     name: 'SD-9 Sonic Distortion',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 2.4,
+    depthIn: 4.41,
     aliases: ['SD-9', 'SD9'],
   },
   {
     brand: 'Maxon',
     name: 'OD-820 Overdrive Pro',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 4.61,
+    depthIn: 5.91,
     aliases: ['OD-820', 'OD820'],
   },
   {
     brand: 'Maxon',
     name: 'AD-9 Analog Delay',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 2.4,
+    depthIn: 4.41,
     aliases: ['AD-9', 'AD9'],
   },
   {
     brand: 'Maxon',
     name: 'AD-999',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 4.72,
+    depthIn: 5.98,
     aliases: ['AD999'],
   },
   {
     brand: 'Maxon',
     name: 'PT-999 Phase Tone',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 2.4,
+    depthIn: 4.41,
     aliases: ['PT-999', 'PT999'],
   },
   {
     brand: 'Maxon',
     name: 'AF-9 Auto Filter',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 2.4,
+    depthIn: 4.41,
     aliases: ['AF-9', 'AF9'],
   },
   {
     brand: 'Maxon',
     name: 'ST-9 Pro+',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 2.4,
+    depthIn: 4.41,
     aliases: ['ST-9', 'ST9'],
   },
   {
     brand: 'Maxon',
     name: 'VOP-9 Vintage Octave',
-    widthIn: 2.84,
-    depthIn: 4.99,
+    widthIn: 2.4,
+    depthIn: 4.41,
     aliases: ['VOP-9', 'VOP9'],
   },
 
@@ -1028,8 +1036,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Keeley',
     name: 'NocPurrne Reverb',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 4.61,
+    depthIn: 6.18,
     aliases: ['NocPurrne', 'Andy Timmons NocPurrne'],
   },
   {
@@ -1042,8 +1050,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Keeley',
     name: 'Fuzz Baller',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 3.74,
+    depthIn: 4.33,
     aliases: ['Fuzz Bender Cat Edition', "B's Fuzz Baller"],
   },
   {
