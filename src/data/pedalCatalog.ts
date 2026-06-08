@@ -27,11 +27,18 @@
  * Echosystem), where the maker's published "Length × Width" maps to
  * our axes in the opposite direction from a naïve reading.
  *
- * Cat-art editions B's Music Shop sells (cat-themed repaints of
- * Keeley / OBNE / SSE / Alexander / Supercool / Cusack / Oneder /
- * Mojo Hand pedals) aren't in PP — those still carry the
- * base-pedal estimate we derived from manufacturer pages or the
- * Hammond-default heuristic.
+ * Cat-art editions B's Music Shop sells are repaints of standard
+ * manufacturer pedals — same enclosure, custom color/artwork — so we
+ * map each cat name to its base pedal (e.g. Keeley Catverns → Keeley
+ * Caverns V2, OBNE Purr-ting → OBNE Parting, Alexander Space Furrrce
+ * → Alexander Space Force) and adopt the base-pedal dims from PP.
+ * Two outliers don't have a clean PP match for their base:
+ *
+ *   - OBNE Dark Paw   — assumed to be Dark Star (2.87 × 4.96).
+ *   - Alexander Ninja Cat — falls back to Alexander's Marshmallow-
+ *                           class default (2.89 × 4.88).
+ *   - SSE Meowdle School Chorus — no SSE chorus in PP; uses the SSE
+ *                                 compact default (2.6 × 5.03).
  */
 
 export interface PedalCatalogEntry {
@@ -1013,78 +1020,78 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Keeley',
     name: 'NocPurrne Reverb',
-    widthIn: 4.61,
-    depthIn: 6.18,
+    widthIn: 4.0,
+    depthIn: 5.04,
     aliases: ['NocPurrne', 'Andy Timmons NocPurrne'],
   },
   {
     brand: 'Keeley',
     name: 'Mews Driver',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 2.6,
+    depthIn: 4.76,
     aliases: ['Andy Timmons Mews Driver', 'MK3 Mews Driver'],
   },
   {
     brand: 'Keeley',
     name: 'Fuzz Baller',
-    widthIn: 3.74,
-    depthIn: 4.33,
+    widthIn: 4.7,
+    depthIn: 3.79,
     aliases: ['Fuzz Bender Cat Edition', "B's Fuzz Baller"],
   },
   {
     brand: 'Keeley',
     name: 'Supurr Rodent',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 2.6,
+    depthIn: 4.76,
     aliases: ['Super Rodent Cat Edition'],
   },
   {
     brand: 'Keeley',
     name: 'Angry Orange Cat',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 2.6,
+    depthIn: 4.76,
     aliases: ['AOC', '4-in-1 Distortion Fuzz Cat'],
   },
   {
     brand: 'Keeley',
     name: 'Super Cat Mod',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 2.73,
+    depthIn: 4.5,
     aliases: ['Super Phat Mod Cat'],
   },
   {
     brand: 'Keeley',
     name: 'CATana',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 3.26,
+    depthIn: 4.5,
     aliases: ['Katana Clean Boost Cat'],
   },
   {
     brand: 'Keeley',
     name: 'Catverns',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 3.7,
+    depthIn: 4.9,
     aliases: ['Caverns V2 Cat Edition'],
   },
   {
     brand: 'Keeley',
     name: 'Octa Pspsps Psi',
-    widthIn: 3.9,
-    depthIn: 5.0,
+    widthIn: 4.0,
+    depthIn: 5.04,
     aliases: ['Transfigurating Fuzz Cat', 'Octa Pspsps'],
   },
   {
     brand: 'Keeley',
     name: 'Mini-Kittyana Smol Boost',
-    widthIn: 1.85,
-    depthIn: 3.74,
+    widthIn: 1.77,
+    depthIn: 3.62,
     aliases: ['Katana Mini Boost Cat', 'Mini Kittyana'],
   },
   {
     brand: 'Keeley',
     name: 'CAT-Comp ComPURRessor+',
-    widthIn: 2.68,
-    depthIn: 4.41,
+    widthIn: 2.73,
+    depthIn: 4.5,
     aliases: ['Compressor Plus Cat', 'CAT-Comp'],
   },
 
@@ -1092,22 +1099,22 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'EarthQuaker Devices',
     name: 'Zoar Cat Paws',
-    widthIn: 2.5,
-    depthIn: 4.75,
+    widthIn: 2.6,
+    depthIn: 4.94,
     aliases: ['Zoar Cat Paws Edition'],
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Blumes Bass Overdrive',
-    widthIn: 2.5,
-    depthIn: 4.75,
+    widthIn: 2.6,
+    depthIn: 4.94,
     aliases: ['Blumes', 'Plumes Bass Cat'],
   },
   {
     brand: 'EarthQuaker Devices',
     name: 'Plumes Kitty Green Sparkle',
-    widthIn: 2.5,
-    depthIn: 4.75,
+    widthIn: 2.6,
+    depthIn: 4.94,
     aliases: ['Plumes Cat Edition'],
   },
 
@@ -1116,28 +1123,28 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Old Blood Noise Endeavors',
     name: 'Purr-ting',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 4.25,
+    depthIn: 4.84,
     aliases: ['Parting Cat Edition', 'Purrting'],
   },
   {
     brand: 'Old Blood Noise Endeavors',
     name: 'Dark Paw',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.87,
+    depthIn: 4.96,
   },
   {
     brand: 'Old Blood Noise Endeavors',
     name: 'Meowdy Pardner Fuzz',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 4.25,
+    depthIn: 4.84,
     aliases: ['Meowdy Pardner', "B's Music OBNE Fuzz"],
   },
   {
     brand: 'Old Blood Noise Endeavors',
     name: 'Purrcession',
-    widthIn: 3.74,
-    depthIn: 4.72,
+    widthIn: 2.87,
+    depthIn: 4.96,
     aliases: ['Procession Sci-Fi Reverb Cat', 'Procession Cat Edition'],
   },
 
@@ -1145,22 +1152,22 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Summer School Electronics',
     name: 'Meowdle School Chorus',
-    widthIn: 3.66,
-    depthIn: 4.69,
+    widthIn: 2.6,
+    depthIn: 5.03,
     aliases: ['Meowdle School', 'Middle School Cat Chorus'],
   },
   {
     brand: 'Summer School Electronics',
     name: 'Cats Reunion',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 3.7,
+    depthIn: 4.92,
     aliases: ['Class Reunion Cat', 'Cats Reunion Custom Green'],
   },
   {
     brand: 'Summer School Electronics',
     name: 'Science Fur',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.6,
+    depthIn: 5.07,
     aliases: ['Science Fair Cat', 'Science Fur Cat'],
   },
 
@@ -1169,15 +1176,15 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Alexander Pedals',
     name: 'Ninja Cat',
-    widthIn: 3.5,
-    depthIn: 4.5,
+    widthIn: 2.89,
+    depthIn: 4.88,
     aliases: ['Ninja Cat Series', 'Alexander Ninja Cat'],
   },
   {
     brand: 'Alexander Pedals',
     name: 'Luminous Fish Stealer',
-    widthIn: 3.5,
-    depthIn: 4.5,
+    widthIn: 2.89,
+    depthIn: 4.88,
     aliases: ['Luminous Fish Stealer Phaseshifter', 'Phaseshifter Cat'],
   },
   {
@@ -1190,8 +1197,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Alexander Pedals',
     name: 'Flanger the 13th Cat Fight',
-    widthIn: 3.5,
-    depthIn: 4.5,
+    widthIn: 2.89,
+    depthIn: 4.88,
     aliases: ['Cat Fight Flanger', 'Flanger 13th Cat'],
   },
 
@@ -1200,8 +1207,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Supercool Pedals',
     name: 'The Barstow Cat',
-    widthIn: 3.74,
-    depthIn: 4.72,
+    widthIn: 4.01,
+    depthIn: 4.79,
     aliases: ['Barstow Cat'],
   },
 
@@ -1209,8 +1216,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Cusack Music',
     name: 'The Meowdulator',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 4.7,
+    depthIn: 4.01,
     aliases: ['Meowdulator', 'Cat Synth'],
   },
 

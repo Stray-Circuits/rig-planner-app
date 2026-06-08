@@ -121,10 +121,11 @@ describe('findPedalInCatalog', () => {
   // ---- B's Music Shop cat-art editions ----
 
   it("matches a Keeley B's Music Shop cat edition by its cat name", () => {
+    // Catverns inherits Keeley Caverns V2's PP dim (3.7 × 4.9).
     const hit = findPedalInCatalog('Keeley', 'Catverns');
     expect(hit?.name).toBe('Catverns');
-    expect(hit?.widthIn).toBe(2.68);
-    expect(hit?.depthIn).toBe(4.41);
+    expect(hit?.widthIn).toBe(3.7);
+    expect(hit?.depthIn).toBe(4.9);
   });
 
   it("falls back to a cat edition's base-pedal alias", () => {
@@ -133,26 +134,27 @@ describe('findPedalInCatalog', () => {
   });
 
   it('matches OBNE cat editions under their full brand', () => {
+    // Purr-ting inherits OBNE Parting's PP dim (4.25 × 4.84).
     const hit = findPedalInCatalog('Old Blood Noise Endeavors', 'Purr-ting');
-    expect(hit?.widthIn).toBe(2.37);
-    expect(hit?.depthIn).toBe(4.39);
+    expect(hit?.widthIn).toBe(4.25);
+    expect(hit?.depthIn).toBe(4.84);
   });
 
-  it('matches OBNE Purrcession with its 1590BB dims', () => {
+  it('matches OBNE Purrcession with the Procession dim from PP', () => {
     const hit = findPedalInCatalog('Old Blood Noise Endeavors', 'Purrcession');
-    expect(hit?.widthIn).toBe(3.74);
-    expect(hit?.depthIn).toBe(4.72);
+    expect(hit?.widthIn).toBe(2.87);
+    expect(hit?.depthIn).toBe(4.96);
   });
 
-  it('matches Alexander Pedals cat editions with their custom-enclosure dims', () => {
+  it('matches Alexander Pedals cat editions with the Marshmallow-class dim', () => {
     const hit = findPedalInCatalog('Alexander Pedals', 'Ninja Cat');
-    expect(hit?.widthIn).toBe(3.5);
-    expect(hit?.depthIn).toBe(4.5);
+    expect(hit?.widthIn).toBe(2.89);
+    expect(hit?.depthIn).toBe(4.88);
   });
 
-  it("matches Supercool's Barstow Cat in the 1590BB enclosure", () => {
+  it("matches Supercool's Barstow Cat with the Barstow Bat base dim", () => {
     const hit = findPedalInCatalog('Supercool Pedals', 'The Barstow Cat');
-    expect(hit?.widthIn).toBe(3.74);
-    expect(hit?.depthIn).toBe(4.72);
+    expect(hit?.widthIn).toBe(4.01);
+    expect(hit?.depthIn).toBe(4.79);
   });
 });
