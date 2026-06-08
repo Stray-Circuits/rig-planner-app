@@ -53,13 +53,19 @@
  *   - Keeley Fuzz Baller / Fuzz Bender base: 3.74 × 4.33.
  *   - Maxon Nine Series compact (OD-808 etc.): 2.40 × 4.41.
  *   - Maxon OD-820 Overdrive Pro: 4.61 × 5.91. Maxon AD-999: 4.72 × 5.98.
+ *   - EHX Nano Big Muff: 2.76 × 4.53. Memory Boy Deluxe: 4.0 × 4.74.
+ *   - EHX Holy Grail Nano: 2.75 × 4.5. Cathedral: 4.76 × 5.75. Pog 2: 4.76 × 5.75.
+ *   - TC Electronic Plethora X5: 4.57 × 11.75.
+ *   - Line 6 DL4 MkII: 4.48 × 9.25. Line 6 Helix Floor: 12.0 × 22.0.
  *
  * UNVERIFIED (rows still ship with conservative estimates; no maker /
- * spec-host page surfaced labeled dim data through Brave + WebKit):
- * Electro-Harmonix (per pedal), Walrus Mako D1, Way Huge non-Smalls,
- * all of TC Electronic, most of Line 6, Catalinbread non-Belle-Epoch,
- * OBNE, Summer School Electronics, Alexander Pedals, Supercool Pedals,
- * Cusack Music, Oneder Effects, Mojo Hand FX.
+ * spec-host page surfaced labeled dim data through Brave + WebKit +
+ * snippet mining): remaining Electro-Harmonix (Big Muff Pi, Soul Food,
+ * Mel9, Pitch Fork, Small Stone), Walrus Mako D1, Way Huge non-Smalls,
+ * most of TC Electronic, most of Line 6 (HX Stomp / Effects / One, M5/M9,
+ * Helix LT, Pod Go), Catalinbread non-Belle-Epoch, OBNE, Summer School
+ * Electronics, Alexander Pedals, Supercool Pedals, Cusack Music,
+ * Oneder Effects, Mojo Hand FX.
  */
 
 export interface PedalCatalogEntry {
@@ -318,8 +324,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Electro-Harmonix',
     name: 'Nano Big Muff',
-    widthIn: 2.25,
-    depthIn: 4.5,
+    widthIn: 2.76,
+    depthIn: 4.53,
   },
   {
     brand: 'Electro-Harmonix',
@@ -330,20 +336,20 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Electro-Harmonix',
     name: 'Memory Boy Deluxe',
-    widthIn: 4.75,
-    depthIn: 4.75,
+    widthIn: 4.0,
+    depthIn: 4.74,
   },
   {
     brand: 'Electro-Harmonix',
     name: 'Holy Grail Nano',
-    widthIn: 2.38,
-    depthIn: 3.63,
+    widthIn: 2.75,
+    depthIn: 4.5,
   },
   {
     brand: 'Electro-Harmonix',
     name: 'Cathedral',
-    widthIn: 5.63,
-    depthIn: 6.75,
+    widthIn: 4.76,
+    depthIn: 5.75,
   },
   {
     brand: 'Electro-Harmonix',
@@ -355,8 +361,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Electro-Harmonix',
     name: 'Pog 2',
-    widthIn: 4.5,
-    depthIn: 7.5,
+    widthIn: 4.76,
+    depthIn: 5.75,
     aliases: ['POG2'],
   },
   {
@@ -842,7 +848,12 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     depthIn: 5.4,
     aliases: ['Mojomojo', 'MojoMojo'],
   },
-  { brand: 'TC Electronic', name: 'Plethora X5', widthIn: 5.3, depthIn: 9.6 },
+  {
+    brand: 'TC Electronic',
+    name: 'Plethora X5',
+    widthIn: 4.57,
+    depthIn: 11.75,
+  },
 
   // ---- Line 6 ---- (sizes vary widely by line)
   // source: Line 6 product spec pages.
@@ -867,11 +878,11 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Line 6',
     name: 'DL4 MkII',
-    widthIn: 3.5,
-    depthIn: 9.5,
+    widthIn: 4.48,
+    depthIn: 9.25,
     aliases: ['DL4'],
   },
-  { brand: 'Line 6', name: 'Helix Floor', widthIn: 5.59, depthIn: 22.05 },
+  { brand: 'Line 6', name: 'Helix Floor', widthIn: 12.0, depthIn: 22.0 },
   { brand: 'Line 6', name: 'Helix LT', widthIn: 5.59, depthIn: 16.5 },
   { brand: 'Line 6', name: 'Pod Go', widthIn: 5.51, depthIn: 14.96 },
 
