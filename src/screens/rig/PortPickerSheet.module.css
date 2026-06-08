@@ -67,11 +67,13 @@
 }
 
 .rowLabel {
+  display: block;
   font-size: 15px;
   font-weight: 500;
 }
 
 .rowSub {
+  display: block;
   font-size: 12px;
   color: var(--muted);
   text-transform: lowercase;
