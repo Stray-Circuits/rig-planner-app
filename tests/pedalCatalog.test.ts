@@ -123,8 +123,8 @@ describe('findPedalInCatalog', () => {
   it("matches a Keeley B's Music Shop cat edition by its cat name", () => {
     const hit = findPedalInCatalog('Keeley', 'Catverns');
     expect(hit?.name).toBe('Catverns');
-    expect(hit?.widthIn).toBe(2.37);
-    expect(hit?.depthIn).toBe(4.39);
+    expect(hit?.widthIn).toBe(2.68);
+    expect(hit?.depthIn).toBe(4.41);
   });
 
   it("falls back to a cat edition's base-pedal alias", () => {

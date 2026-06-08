@@ -38,12 +38,20 @@
  *   - Chase Bliss (all): 2.9 × 4.9.
  *   - Source Audio dual-knob (Ventris, Collider): 4.6 × 4.4.
  *   - Catalinbread Belle Epoch: 2.36 × 4.33. Belle Epoch Deluxe / Echorec: 4.68 × 3.66.
+ *   - Keeley 1590B-class (Compressor Plus, Caverns V2, NocPurrne, ...): 2.68 × 4.41.
+ *   - Keeley stack-knob (Halo, Synth-1, Loomer, Dark Side, ...): 3.90 × 4.72.
+ *   - Keeley mini (Compressor Mini, Mini-Kittyana): 1.85 × 3.74.
+ *   - Mooer Micro series (all): 1.65 × 3.68.
+ *   - Empress Buffer+: 1.26 × 4.49.
+ *   - Line 6 HX Stomp XL: 4.72 × 12.44.
+ *   - Way Huge Smalls Aqua-Puss: 2.40 × 4.09.
  *
  * UNVERIFIED (rows still ship but flagged for follow-up): Electro-Harmonix
- * (per-pedal), Walrus Mako D1, Keeley, Source Audio One Series solo,
- * Way Huge, TC Electronic, Line 6, Mooer, ZVEX, Maxon, Catalinbread
+ * (per-pedal), Walrus Mako D1, Source Audio One Series solo, Way Huge
+ * non-Smalls, TC Electronic, most Line 6, ZVEX, Maxon, Catalinbread
  * non-Belle-Epoch, OBNE, Summer School Electronics, Alexander Pedals,
- * Supercool Pedals, Cusack Music, Oneder Effects, Mojo Hand FX.
+ * Supercool Pedals, Cusack Music, Oneder Effects, Mojo Hand FX, and
+ * the ~30 pedals where Brave/Thomann couldn't surface dim data.
  */
 
 export interface PedalCatalogEntry {
@@ -500,8 +508,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Empress',
     name: 'Buffer+',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 1.26,
+    depthIn: 4.49,
     aliases: ['Buffer Plus'],
   },
 
@@ -556,26 +564,26 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
 
   // ---- Keeley ---- (mostly 1590B, mini line uses 1590A)
   // source: Keeley product pages; standard Hammond enclosures.
-  { brand: 'Keeley', name: 'Compressor Plus', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Keeley', name: 'Caverns V2', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Keeley', name: 'Halo', widthIn: 3.74, depthIn: 4.72 },
+  { brand: 'Keeley', name: 'Compressor Plus', widthIn: 2.68, depthIn: 4.41 },
+  { brand: 'Keeley', name: 'Caverns V2', widthIn: 2.68, depthIn: 4.41 },
+  { brand: 'Keeley', name: 'Halo', widthIn: 3.9, depthIn: 4.72 },
   {
     brand: 'Keeley',
     name: 'Synth-1',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 3.9,
+    depthIn: 4.72,
     aliases: ['Synth 1'],
   },
-  { brand: 'Keeley', name: 'Compressor Mini', widthIn: 1.5, depthIn: 3.65 },
-  { brand: 'Keeley', name: 'Loomer', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Keeley', name: 'Dark Side', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Keeley', name: 'Hooke', widthIn: 2.37, depthIn: 4.39 },
-  { brand: 'Keeley', name: 'Memphis Sun', widthIn: 2.37, depthIn: 4.39 },
+  { brand: 'Keeley', name: 'Compressor Mini', widthIn: 1.85, depthIn: 3.74 },
+  { brand: 'Keeley', name: 'Loomer', widthIn: 3.9, depthIn: 4.72 },
+  { brand: 'Keeley', name: 'Dark Side', widthIn: 3.9, depthIn: 4.72 },
+  { brand: 'Keeley', name: 'Hooke', widthIn: 3.9, depthIn: 4.72 },
+  { brand: 'Keeley', name: 'Memphis Sun', widthIn: 3.9, depthIn: 4.72 },
   {
     brand: 'Keeley',
     name: 'Vibe-O-Verb',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 3.9,
+    depthIn: 4.72,
     aliases: ['Vibe O Verb'],
   },
 
@@ -757,8 +765,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Way Huge',
     name: 'Smalls Aqua-Puss',
-    widthIn: 1.5,
-    depthIn: 3.65,
+    widthIn: 2.4,
+    depthIn: 4.09,
     aliases: ['Smalls Aqua Puss'],
   },
 
@@ -831,7 +839,7 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   // ---- Line 6 ---- (sizes vary widely by line)
   // source: Line 6 product spec pages.
   { brand: 'Line 6', name: 'HX Stomp', widthIn: 4.59, depthIn: 6.77 },
-  { brand: 'Line 6', name: 'HX Stomp XL', widthIn: 6.77, depthIn: 8.0 },
+  { brand: 'Line 6', name: 'HX Stomp XL', widthIn: 4.72, depthIn: 12.44 },
   { brand: 'Line 6', name: 'HX Effects', widthIn: 4.59, depthIn: 12.01 },
   { brand: 'Line 6', name: 'HX One', widthIn: 3.8, depthIn: 4.9 },
   {
@@ -861,22 +869,22 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
 
   // ---- Mooer ---- (Micro series = 1.46 × 3.72)
   // source: Mooer Micro spec; standard form factor for the line.
-  { brand: 'Mooer', name: 'Yellow Comp', widthIn: 1.46, depthIn: 3.72 },
-  { brand: 'Mooer', name: 'Pure Boost', widthIn: 1.46, depthIn: 3.72 },
-  { brand: 'Mooer', name: 'Hustle Drive', widthIn: 1.46, depthIn: 3.72 },
-  { brand: 'Mooer', name: 'Ana Echo', widthIn: 1.46, depthIn: 3.72 },
+  { brand: 'Mooer', name: 'Yellow Comp', widthIn: 1.65, depthIn: 3.68 },
+  { brand: 'Mooer', name: 'Pure Boost', widthIn: 1.65, depthIn: 3.68 },
+  { brand: 'Mooer', name: 'Hustle Drive', widthIn: 1.65, depthIn: 3.68 },
+  { brand: 'Mooer', name: 'Ana Echo', widthIn: 1.65, depthIn: 3.68 },
   {
     brand: 'Mooer',
     name: 'ShimVerb Pro',
-    widthIn: 1.46,
-    depthIn: 3.72,
+    widthIn: 1.65,
+    depthIn: 3.68,
     aliases: ['ShimVerb'],
   },
-  { brand: 'Mooer', name: 'Reecho', widthIn: 1.46, depthIn: 3.72 },
-  { brand: 'Mooer', name: 'Microverb', widthIn: 1.46, depthIn: 3.72 },
-  { brand: 'Mooer', name: 'Lofi Machine', widthIn: 1.46, depthIn: 3.72 },
-  { brand: 'Mooer', name: 'Phaser Player', widthIn: 1.46, depthIn: 3.72 },
-  { brand: 'Mooer', name: 'Mod Factory', widthIn: 1.46, depthIn: 3.72 },
+  { brand: 'Mooer', name: 'Reecho', widthIn: 1.65, depthIn: 3.68 },
+  { brand: 'Mooer', name: 'Microverb', widthIn: 1.65, depthIn: 3.68 },
+  { brand: 'Mooer', name: 'Lofi Machine', widthIn: 1.65, depthIn: 3.68 },
+  { brand: 'Mooer', name: 'Phaser Player', widthIn: 1.65, depthIn: 3.68 },
+  { brand: 'Mooer', name: 'Mod Factory', widthIn: 1.65, depthIn: 3.68 },
 
   // ---- ZVEX ---- (Vexter cast = 3.70 × 4.50)
   // source: ZVEX Vexter spec.
@@ -1020,57 +1028,57 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Keeley',
     name: 'NocPurrne Reverb',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['NocPurrne', 'Andy Timmons NocPurrne'],
   },
   {
     brand: 'Keeley',
     name: 'Mews Driver',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['Andy Timmons Mews Driver', 'MK3 Mews Driver'],
   },
   {
     brand: 'Keeley',
     name: 'Fuzz Baller',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['Fuzz Bender Cat Edition', "B's Fuzz Baller"],
   },
   {
     brand: 'Keeley',
     name: 'Supurr Rodent',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['Super Rodent Cat Edition'],
   },
   {
     brand: 'Keeley',
     name: 'Angry Orange Cat',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['AOC', '4-in-1 Distortion Fuzz Cat'],
   },
   {
     brand: 'Keeley',
     name: 'Super Cat Mod',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['Super Phat Mod Cat'],
   },
   {
     brand: 'Keeley',
     name: 'CATana',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['Katana Clean Boost Cat'],
   },
   {
     brand: 'Keeley',
     name: 'Catverns',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['Caverns V2 Cat Edition'],
   },
   {
@@ -1083,15 +1091,15 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   {
     brand: 'Keeley',
     name: 'Mini-Kittyana Smol Boost',
-    widthIn: 1.5,
-    depthIn: 3.65,
+    widthIn: 1.85,
+    depthIn: 3.74,
     aliases: ['Katana Mini Boost Cat', 'Mini Kittyana'],
   },
   {
     brand: 'Keeley',
     name: 'CAT-Comp ComPURRessor+',
-    widthIn: 2.37,
-    depthIn: 4.39,
+    widthIn: 2.68,
+    depthIn: 4.41,
     aliases: ['Compressor Plus Cat', 'CAT-Comp'],
   },
 
