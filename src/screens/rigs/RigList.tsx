@@ -60,16 +60,24 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
   const triggerImport = () => {
     setImportError(null);
     void (async () => {
-      const result = await openTextFile({
-        filters: [{ name: 'Rig export', extensions: ['json'] }],
-      });
-      if (result.kind === 'opened') {
-        await handleImportText(result.text);
-        return;
+      try {
+        const result = await openTextFile({
+          filters: [{ name: 'Rig export', extensions: ['json'] }],
+        });
+        if (result.kind === 'opened') {
+          await handleImportText(result.text);
+          return;
+        }
+        if (result.kind === 'cancelled') return;
+        // Browser dev: fall through to the hidden <input type="file">.
+        importInputRef.current?.click();
+      } catch (err) {
+        setImportError(
+          err instanceof Error
+            ? `Import failed: ${err.message}`
+            : `Import failed: ${String(err)}`,
+        );
       }
-      if (result.kind === 'cancelled') return;
-      // Browser dev: fall through to the hidden <input type="file">.
-      importInputRef.current?.click();
     })();
   };
 
@@ -212,8 +220,16 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
                 if (!file) return;
                 setImportError(null);
                 void (async () => {
-                  const text = await file.text();
-                  await handleImportText(text);
+                  try {
+                    const text = await file.text();
+                    await handleImportText(text);
+                  } catch (err) {
+                    setImportError(
+                      err instanceof Error
+                        ? `Import failed: ${err.message}`
+                        : `Import failed: ${String(err)}`,
+                    );
+                  }
                 })();
               }}
             />
