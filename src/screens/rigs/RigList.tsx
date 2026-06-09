@@ -127,6 +127,14 @@ export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
 
   return (
     <div className={styles.screen}>
+      <div
+        className={styles.catWatermark}
+        aria-hidden
+        style={{
+          WebkitMaskImage: `url(${catSilhouetteUrl})`,
+          maskImage: `url(${catSilhouetteUrl})`,
+        }}
+      />
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <i className="ti ti-circuit-board" aria-hidden />
@@ -265,14 +273,6 @@ export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
                 </span>
                 <span className={styles.brandSub}>About &amp; links →</span>
               </span>
-              <span
-                className={styles.brandCat}
-                aria-hidden
-                style={{
-                  WebkitMaskImage: `url(${catSilhouetteUrl})`,
-                  maskImage: `url(${catSilhouetteUrl})`,
-                }}
-              />
             </button>
           </footer>
         ) : null}

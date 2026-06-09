@@ -5,6 +5,34 @@
   background: var(--bg);
 }
 
+/* Fixed cat silhouette watermark behind all content. pointer-events:none so
+   it never intercepts taps; opacity tuned to peek through gaps without
+   competing with rig cards. Themes via mask + currentColor-like fill. */
+.catWatermark {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(80vw, 600px);
+  aspect-ratio: 556 / 306;
+  background: var(--fg);
+  opacity: 0.04;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Lift real content above the watermark. */
+.header,
+.body {
+  position: relative;
+  z-index: 1;
+}
+
 .header {
   background: var(--surface);
   border-bottom: 0.5px solid var(--border);
@@ -380,20 +408,6 @@
   color: var(--muted);
 }
 
-.brandCat {
-  width: 64px;
-  aspect-ratio: 830 / 430;
-  flex-shrink: 0;
-  background: var(--muted-soft);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  opacity: 0.6;
-}
-
 @media (min-width: 720px) {
   .brandBadge {
     width: 64px;
@@ -401,8 +415,5 @@
   }
   .brandHeadline {
     font-size: 16px;
-  }
-  .brandCat {
-    width: 80px;
   }
 }
