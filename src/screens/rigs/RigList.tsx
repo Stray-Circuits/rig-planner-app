@@ -11,7 +11,7 @@ import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from '../rig/PedalLibrarySheet';
 import { useSignalChainStore } from '../../stores/signalChainStore';
 import { Button, Sheet, SheetItem, SpinnerOverlay, TextField } from '../../ui';
-import scBadgeUrl from '../../assets/brand/stray-circuits-est-2025.svg';
+import scBadgeUrl from '../../assets/brand/StrayCircuits-icon-only.svg';
 import catSilhouetteUrl from '../../assets/brand/cat-silhouette.svg';
 import styles from './RigList.module.css';
 
