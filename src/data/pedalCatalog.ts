@@ -112,6 +112,15 @@ const VARIANT_QUALIFIERS = new Set([
   'large',
 ]);
 
+/**
+ * Subset of `VARIANT_QUALIFIERS` that names a size class — pedals
+ * carrying any of these tend to share an enclosure within a brand
+ * regardless of the specific circuit. So when the exact product isn't
+ * in the catalog but the brand has at least one verified entry with
+ * the same size qualifier, that entry's dim is a defensible fallback.
+ */
+const SIZE_CLASS_QUALIFIERS = new Set(['mini', 'micro', 'nano', 'smol']);
+
 function isNameCompatible(
   catalogTokens: string[],
   userTokens: string[],
@@ -175,6 +184,15 @@ export function findPedalInCatalog(
 
   let best: PedalCatalogEntry | null = null;
   let bestSpecificity = -1;
+  // For the size-class fallback: track any same-brand catalog entry
+  // whose canonical name carries the same size qualifier as the user's
+  // input (mini / micro / nano / smol). When the exact product isn't
+  // in the catalog this is a defensible auto-fill — within a brand,
+  // mini-class pedals tend to share an enclosure regardless of circuit.
+  const userSizeQualifiers = userNameTokens.filter((t) =>
+    SIZE_CLASS_QUALIFIERS.has(t),
+  );
+  let sizeClassFallback: PedalCatalogEntry | null = null;
 
   for (const { entry, brandNorm, variantTokens } of getIndex()) {
     if (
@@ -195,13 +213,21 @@ export function findPedalInCatalog(
         }
       }
     }
-    if (!anyMatch) continue;
-    if (bestSpecForEntry > bestSpecificity) {
+    if (anyMatch && bestSpecForEntry > bestSpecificity) {
       best = entry;
       bestSpecificity = bestSpecForEntry;
     }
+    // Size-class fallback: same brand AND the entry's canonical name
+    // carries one of the same size qualifiers as the user's name.
+    if (
+      !sizeClassFallback &&
+      userSizeQualifiers.length > 0 &&
+      variantTokens[0]?.some((t) => userSizeQualifiers.includes(t))
+    ) {
+      sizeClassFallback = entry;
+    }
   }
-  return best;
+  return best ?? sizeClassFallback;
 }
 
 // ---------- Catalog data ----------
@@ -851,7 +877,21 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     brand: 'TC Electronic',
     name: 'Hall of Fame Mini',
     widthIn: 2,
-    depthIn: 3.7,
+    depthIn: 3.75,
+  },
+  {
+    brand: 'TC Electronic',
+    name: 'PolyTune Mini',
+    widthIn: 2,
+    depthIn: 3.75,
+    aliases: ['PolyTune 3 Mini', 'PolyTune 2 Mini'],
+  },
+  {
+    brand: 'TC Electronic',
+    name: 'PolyTune Mini Noir',
+    widthIn: 2,
+    depthIn: 3.75,
+    aliases: ['PolyTune 3 Mini Noir', 'PolyTune 2 Mini Noir'],
   },
   {
     brand: 'TC Electronic',

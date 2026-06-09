@@ -120,11 +120,10 @@ describe('findPedalInCatalog', () => {
 
   it('rejects matches where the user named a variant the catalog row lacks (#73 round 12)', () => {
     // 'PolyTune 3' has an alias 'PolyTune'. Without the variant guard,
-    // typing "polytune mini" would match because catalog [polytune] is
-    // a subset of user [polytune, mini]. But PolyTune Mini is a
-    // physically different pedal at a different size, so the qualifier
-    // mismatch is evidence of a different product — reject.
-    expect(findPedalInCatalog('TC Electronic', 'PolyTune Mini')).toBeNull();
+    // typing "polytune deluxe" would match because catalog [polytune]
+    // is a subset of user [polytune, deluxe]. But the qualifier
+    // mismatch (catalog lacks "deluxe") is evidence of a different
+    // product — reject.
     expect(
       findPedalInCatalog('TC Electronic', 'Hall of Fame Deluxe'),
     ).toBeNull();
@@ -145,6 +144,42 @@ describe('findPedalInCatalog', () => {
     expect(findPedalInCatalog('TC Electronic', 'PolyTune')?.name).toBe(
       'PolyTune 3',
     );
+  });
+
+  it('matches the explicit PolyTune Mini / Mini Noir rows (#73 round 13)', () => {
+    // Added because round-9 PP adoption left these out and they're
+    // very popular — round-12's qualifier guard would otherwise reject
+    // "polytune mini" as a false positive.
+    const mini = findPedalInCatalog('TC Electronic', 'PolyTune Mini');
+    expect(mini?.name).toBe('PolyTune Mini');
+    expect(mini?.widthIn).toBe(2);
+    expect(mini?.depthIn).toBe(3.75);
+    expect(findPedalInCatalog('TC Electronic', 'PolyTune 3 Mini')?.name).toBe(
+      'PolyTune Mini',
+    );
+    const noir = findPedalInCatalog('TC Electronic', 'PolyTune Mini Noir');
+    expect(noir?.name).toBe('PolyTune Mini Noir');
+    expect(noir?.widthIn).toBe(2);
+    expect(noir?.depthIn).toBe(3.75);
+  });
+
+  it('falls back to a same-brand same-size-class entry when the exact pedal is missing (#73 round 13)', () => {
+    // User types a TC Electronic Mini variant we don't carry (e.g.,
+    // "Spark Mini"). The qualifier guard would reject every TC
+    // Electronic row whose name lacks "mini". The size-class fallback
+    // then offers up the first same-brand "Mini" row's dim — usually
+    // safe because a brand's mini-class pedals share an enclosure.
+    const sparkMini = findPedalInCatalog('TC Electronic', 'Spark Mini');
+    expect(sparkMini?.widthIn).toBe(2);
+    expect(sparkMini?.depthIn).toBe(3.75);
+  });
+
+  it('returns null when neither an exact match nor a same-class fallback exists', () => {
+    // Boss doesn't make mini-format pedals (no Boss row with "mini" in
+    // the canonical name), so a typed "Boss DS-1 Mini" can't even
+    // fall back to a brand-class dim — return null so the user gets
+    // no auto-fill and types the dims themselves.
+    expect(findPedalInCatalog('Boss', 'DS-1 Mini')).toBeNull();
   });
 
   // ---- B's Music Shop cat-art editions ----
