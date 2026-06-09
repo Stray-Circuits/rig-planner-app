@@ -15,7 +15,7 @@
   width: min(80vw, 600px);
   aspect-ratio: 556 / 306;
   background: var(--fg);
-  opacity: 0.04;
+  opacity: 0.06;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
@@ -24,6 +24,14 @@
   mask-size: contain;
   pointer-events: none;
   z-index: 0;
+}
+
+/* Dark mode loses more contrast at the same opacity — bump it so the cat
+   stays visible against the near-black background. */
+@media (prefers-color-scheme: dark) {
+  .catWatermark {
+    opacity: 0.12;
+  }
 }
 
 /* Lift real content above the watermark. */
@@ -387,6 +395,14 @@
   height: 56px;
   flex-shrink: 0;
   display: block;
+}
+
+/* The icon-only logo ships as pure black artwork; invert it in dark mode
+   so it reads against the dark surface. */
+@media (prefers-color-scheme: dark) {
+  .brandBadge {
+    filter: invert(1);
+  }
 }
 
 .brandText {
