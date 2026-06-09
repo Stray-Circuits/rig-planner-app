@@ -4,6 +4,7 @@ import { seedDefaultPedals } from '../data/seedPedals';
 import { useBackHandler } from '../lib/useBackHandler';
 import { useRigsStore } from '../stores/rigsStore';
 import { useUiStore } from '../stores/uiStore';
+import { AboutScreen } from '../screens/about/AboutScreen';
 import { NewRigWizard } from '../screens/new-rig/NewRigWizard';
 import { RigList } from '../screens/rigs/RigList';
 import { RigScreen } from '../screens/rig/RigScreen';
@@ -18,7 +19,8 @@ type BootState =
 type Route =
   | { kind: 'rigs' }
   | { kind: 'new-rig' }
-  | { kind: 'rig'; rigId: string };
+  | { kind: 'rig'; rigId: string }
+  | { kind: 'about' };
 
 export function App() {
   const [boot, setBoot] = useState<BootState>({ status: 'loading' });
@@ -71,7 +73,10 @@ export function App() {
   // new-rig (when rigs exist) → rigs list. Top-level back at the rigs
   // list falls through to the OS so Tauri Android exits the app.
   useBackHandler(
-    route !== null && (route.kind === 'rig' || route.kind === 'new-rig'),
+    route !== null &&
+      (route.kind === 'rig' ||
+        route.kind === 'new-rig' ||
+        route.kind === 'about'),
     () => {
       if (!route) return false;
       if (route.kind === 'rig') {
@@ -79,6 +84,10 @@ export function App() {
         return true;
       }
       if (route.kind === 'new-rig' && rigs.length > 0) {
+        setRoute({ kind: 'rigs' });
+        return true;
+      }
+      if (route.kind === 'about') {
         setRoute({ kind: 'rigs' });
         return true;
       }
@@ -132,8 +141,13 @@ export function App() {
           void openRig(rig.id);
           setRoute({ kind: 'rig', rigId: rig.id });
         }}
+        onOpenAbout={() => setRoute({ kind: 'about' })}
       />
     );
+  }
+
+  if (route.kind === 'about') {
+    return <AboutScreen onBack={() => setRoute({ kind: 'rigs' })} />;
   }
 
   const rig = rigs.find((r) => r.id === route.rigId);

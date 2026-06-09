@@ -11,6 +11,8 @@ import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from '../rig/PedalLibrarySheet';
 import { useSignalChainStore } from '../../stores/signalChainStore';
 import { Button, Sheet, SheetItem, SpinnerOverlay, TextField } from '../../ui';
+import scBadgeUrl from '../../assets/brand/stray-circuits-est-2025.svg';
+import catSilhouetteUrl from '../../assets/brand/cat-silhouette.svg';
 import styles from './RigList.module.css';
 
 const EMPTY_PLACED: never[] = [];
@@ -18,9 +20,10 @@ const EMPTY_PLACED: never[] = [];
 interface RigListProps {
   onOpenRig: (rig: Rig) => void;
   onCreateRig: () => void;
+  onOpenAbout?: () => void;
 }
 
-export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
+export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
   const rigs = useRigsStore((s) => s.rigs);
   const status = useRigsStore((s) => s.status);
   const loadRigs = useRigsStore((s) => s.loadRigs);
@@ -239,6 +242,39 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
           <p className={styles.importError} role="alert">
             {importError}
           </p>
+        ) : null}
+
+        {status === 'ready' && onOpenAbout ? (
+          <footer className={styles.brandFooter}>
+            <button
+              type="button"
+              className={styles.brandCard}
+              onClick={onOpenAbout}
+              aria-label="About Stray Circuits"
+            >
+              <img
+                className={styles.brandBadge}
+                src={scBadgeUrl}
+                alt=""
+                aria-hidden
+                draggable={false}
+              />
+              <span className={styles.brandText}>
+                <span className={styles.brandHeadline}>
+                  Rig Planner by Stray Circuits
+                </span>
+                <span className={styles.brandSub}>About &amp; links →</span>
+              </span>
+              <span
+                className={styles.brandCat}
+                aria-hidden
+                style={{
+                  WebkitMaskImage: `url(${catSilhouetteUrl})`,
+                  maskImage: `url(${catSilhouetteUrl})`,
+                }}
+              />
+            </button>
+          </footer>
         ) : null}
       </main>
 

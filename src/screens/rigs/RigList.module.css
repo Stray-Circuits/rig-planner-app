@@ -317,3 +317,92 @@
   margin-top: 1px;
   flex-shrink: 0;
 }
+
+/* Stray Circuits brand footer — single tap target opens the About screen.
+   Badge on the left, headline + sub in the middle, cat silhouette on the
+   right as a faint accent so the row reads as branded without crowding. */
+.brandFooter {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 0.5px solid var(--border);
+}
+
+.brandCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font: inherit;
+  color: var(--fg);
+  text-align: left;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.brandCard:hover {
+  background: var(--surface-alt);
+  border-color: var(--border-strong);
+}
+
+.brandCard:active {
+  transform: scale(0.99);
+}
+
+.brandBadge {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.brandText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brandHeadline {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.brandSub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.brandCat {
+  width: 64px;
+  aspect-ratio: 830 / 430;
+  flex-shrink: 0;
+  background: var(--muted-soft);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  opacity: 0.6;
+}
+
+@media (min-width: 720px) {
+  .brandBadge {
+    width: 64px;
+    height: 64px;
+  }
+  .brandHeadline {
+    font-size: 16px;
+  }
+  .brandCat {
+    width: 80px;
+  }
+}
