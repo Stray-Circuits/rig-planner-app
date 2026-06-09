@@ -118,6 +118,35 @@ describe('findPedalInCatalog', () => {
     expect(hit?.name).toBe('Phase 90');
   });
 
+  it('rejects matches where the user named a variant the catalog row lacks (#73 round 12)', () => {
+    // 'PolyTune 3' has an alias 'PolyTune'. Without the variant guard,
+    // typing "polytune mini" would match because catalog [polytune] is
+    // a subset of user [polytune, mini]. But PolyTune Mini is a
+    // physically different pedal at a different size, so the qualifier
+    // mismatch is evidence of a different product — reject.
+    expect(findPedalInCatalog('TC Electronic', 'PolyTune Mini')).toBeNull();
+    expect(
+      findPedalInCatalog('TC Electronic', 'Hall of Fame Deluxe'),
+    ).toBeNull();
+    // The qualifier check is one-directional — `catalog ⊆ user` ALSO
+    // requires every catalog token to be present in user input, so a
+    // catalog row "Compressor Mini" already requires the user to type
+    // "mini". The new check guards the *other* direction.
+    expect(findPedalInCatalog('Keeley', 'Compressor Mini')?.name).toBe(
+      'Compressor Mini',
+    );
+    expect(findPedalInCatalog('Keeley', 'Compressor Plus')?.name).toBe(
+      'Compressor Plus',
+    );
+    // Sanity: a clean exact-or-superset match still works.
+    expect(findPedalInCatalog('TC Electronic', 'PolyTune 3')?.name).toBe(
+      'PolyTune 3',
+    );
+    expect(findPedalInCatalog('TC Electronic', 'PolyTune')?.name).toBe(
+      'PolyTune 3',
+    );
+  });
+
   // ---- B's Music Shop cat-art editions ----
 
   it("matches a Keeley B's Music Shop cat edition by its cat name", () => {

@@ -74,12 +74,55 @@ function normalize(s: string): string {
     .trim();
 }
 
+/**
+ * Tokens that name a *variant* of a base pedal rather than describing
+ * the same pedal — e.g. "mini" / "deluxe" / "v2" mark different
+ * products at different sizes. The lookup is `catalog ⊆ user`, which
+ * lets the user paste a longer marketing name and still match the
+ * catalog's short canonical form. But that same flexibility lets
+ * `"polytune mini"` match the bare "PolyTune" alias of `PolyTune 3`,
+ * because [polytune] ⊆ [polytune, mini]. When the user has a variant
+ * qualifier the catalog row lacks, that's evidence of a different
+ * product — reject the match.
+ */
+const VARIANT_QUALIFIERS = new Set([
+  'mini',
+  'micro',
+  'nano',
+  'deluxe',
+  'xl',
+  'jr',
+  'plus',
+  'smol',
+  'mk2',
+  'mkii',
+  'mk3',
+  'mkiii',
+  'mkiv',
+  'mk4',
+  'mkv',
+  'mk5',
+  'v1',
+  'v2',
+  'v3',
+  'v4',
+  'bass',
+  'stereo',
+  'small',
+  'large',
+]);
+
 function isNameCompatible(
   catalogTokens: string[],
   userTokens: string[],
 ): boolean {
   if (catalogTokens.length === 0 || userTokens.length === 0) return false;
-  return catalogTokens.every((t) => userTokens.includes(t));
+  if (!catalogTokens.every((t) => userTokens.includes(t))) return false;
+  // Reject when the user named a variant the catalog row doesn't carry.
+  for (const t of userTokens) {
+    if (VARIANT_QUALIFIERS.has(t) && !catalogTokens.includes(t)) return false;
+  }
+  return true;
 }
 
 /**
