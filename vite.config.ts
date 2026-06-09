@@ -11,6 +11,11 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // @dnd-kit packages bring React in via peerDeps; without dedupe Vite's
+    // pre-bundle can resolve their React import to a separate copy, which
+    // breaks hooks ("resolveDispatcher is null") the first time a sensor
+    // is created in ConnectionsStep.
+    dedupe: ['react', 'react-dom'],
   },
   clearScreen: false,
   server: {

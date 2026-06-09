@@ -1,11 +1,19 @@
 /**
- * Save an in-memory string to a file the user picks.
+ * Save an in-memory string to a file the user picks, or open a text file
+ * the user picks.
  *
  * Under Tauri (desktop/mobile shell) we go through the official dialog + fs
- * plugins so the user gets a native save dialog and the file lands wherever
- * they choose. Under `pnpm dev` (browser) we fall back to a Blob URL + <a
- * download> click — that path works in any browser but is silently ignored
- * by WKWebView, which is why we need the Tauri branch.
+ * plugins so the user gets a native picker and the OS hands back a URI with
+ * proper read/write permission. Under `pnpm dev` (browser) save falls back
+ * to a Blob URL + <a download> click; open falls back to <input type="file">
+ * (handled by the caller — see `openTextFile`'s return contract).
+ *
+ * The Tauri branch is load-bearing on Android specifically: wry's
+ * `RustWebChromeClient.kt::showFilePicker` uses `ACTION_GET_CONTENT`, which
+ * returns content URIs without read permission for the Downloads provider.
+ * Picking a file from the Files app's "Downloads" shortcut yields a `File`
+ * with `size = 0` and empty reads (issue #81). Going through plugin-dialog
+ * uses `ACTION_OPEN_DOCUMENT`, which grants the URI permission.
  */
 
 function isTauri(): boolean {
@@ -53,6 +61,41 @@ export async function saveTextFile(
     opts.mimeType ?? 'application/json',
   );
   return { cancelled: false, path: null };
+}
+
+interface OpenTextFileOptions {
+  /** Dialog file-type filters. Honoured under Tauri only. */
+  filters?: { name: string; extensions: string[] }[];
+}
+
+export type OpenTextFileResult =
+  | { kind: 'opened'; text: string; path: string }
+  | { kind: 'cancelled' }
+  /** Tauri is unavailable; the caller should fall back to <input type="file">. */
+  | { kind: 'unavailable' };
+
+/**
+ * Prompt the user to pick a text file and return its contents.
+ *
+ * Under Tauri, returns `{kind: 'opened'}` on success, `{kind: 'cancelled'}`
+ * if the user dismissed the dialog. Under browser dev, returns
+ * `{kind: 'unavailable'}` — the caller should trigger a hidden
+ * `<input type="file">` instead.
+ */
+export async function openTextFile(
+  opts: OpenTextFileOptions = {},
+): Promise<OpenTextFileResult> {
+  if (!isTauri()) return { kind: 'unavailable' };
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const { readTextFile } = await import('@tauri-apps/plugin-fs');
+  const path = await open({
+    multiple: false,
+    directory: false,
+    ...(opts.filters ? { filters: opts.filters } : {}),
+  });
+  if (path === null) return { kind: 'cancelled' };
+  const text = await readTextFile(path);
+  return { kind: 'opened', text, path };
 }
 
 function downloadTextFileViaBlob(

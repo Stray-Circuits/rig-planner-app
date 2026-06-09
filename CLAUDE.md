@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|
 | Browser dev loop (no Tauri shell) | `pnpm dev` |
 | Tauri desktop dev loop | `pnpm tauri:dev` |
+| Wipe local Tauri app data (fresh-install state) | `pnpm tauri:clean` |
 | Run all gates before commit | `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:run` |
 | Watch tests | `pnpm test` |
 | One test file | `pnpm test:run tests/RigScreen.test.tsx` |
@@ -46,6 +47,8 @@ iOS / Android entry points (`pnpm tauri:ios:dev`, `pnpm tauri:android:dev`) requ
 **Threshold-tune slider uses synchronous `canvas.toDataURL`, not `canvas.toBlob` + FileReader.** `createChromaKeySession` in `bgRemoval.ts` caches the decoded source pixel buffer once on entry, then `.render(tolerance)` copies the buffer + chroma-keys + crops + sync-encodes per slider tick (~30–50 ms). The async toBlob+FileReader chain we used initially got starved by rapid slider input events — main-thread input handlers outrank setTimeout callbacks, so a render parked at `await toBlob` could take seconds to commit while the user kept dragging, producing the "image doesn't update" complaint. Sync encode blocks ~50–150 ms per tick but can't be starved; with a 50 ms debounce in the wizard, stop-to-preview is bounded at ~200 ms.
 
 **`vite.config.ts` `worker.format: 'es'` is load-bearing.** `@imgly/background-removal` dynamic-imports `onnxruntime-web` internally, which forces the worker bundle to be code-splittable. The default `iife` worker format can't split → `pnpm android:container:build` fails with `[vite:worker] Invalid value "iife" for option "worker.format"`. Combined with the safari15 build target (module workers added in Safari 15) this stays compatible with all Tauri WebViews we ship to.
+
+**`vite.config.ts` `resolve.dedupe: ['react', 'react-dom']` is also load-bearing.** Any new dep that declares React as a peer (e.g. `@dnd-kit/core`, most React component libraries) gets routed through Vite's optimizeDeps pre-bundle, and without dedupe that pre-bundled chunk resolves to a *separate* React copy than the host app — its hooks crash on first call with `TypeError: can't access property "useMemo", resolveDispatcher() is null`. pnpm's `node_modules` tree was singleton-React in both incidents we've hit, so the duplicate is purely Vite-side. If you add a React-peerDep package and the dev page goes blank, clear `node_modules/.vite` (or run `pnpm dev --force`) after confirming dedupe covers both packages.
 
 **`scripts/fetch-imgly-assets.mjs` builds a clean catalog from primitives — preserve every field the lib reads at runtime.** The script writes only validated fields (key from a constant allowlist, `chunk.name`/`hash` through a sha256 hex regex, `chunk.offsets` through `Number.isFinite`) to break CodeQL's network→file taint flow. **Don't drop `entry.size` or `entry.mime`** — the lib uses `entry.size` as the `total` arg to the `progress(key, current, total)` callback (`index.mjs:979`), whose Zod validator throws "expected number, received undefined" if missing, and uses `entry.mime` for the assembled Blob's content type. Both are caught by the cached-shape validation on the read path too, so a broken catalog is detected and re-fetched instead of being used.
 
@@ -103,6 +106,8 @@ Commit at phase + feature boundaries with all four gates green (typecheck, lint,
 ## Testing
 
 **Test fakes in `tests/setup.ts` must match the real DOM API signatures.** jsdom doesn't ship `ResizeObserver`, so `tests/setup.ts` assigns a `FakeResizeObserver` to `globalThis.ResizeObserver`. CodeQL does cross-file type analysis: it infers the constructor signature from the fake and applies it to every production `new ResizeObserver(cb)` call site. If the fake omits the constructor (so it defaults to 0-arg), CodeQL flags every production caller as "Superfluous trailing arguments" (PR #55 hit this). The fix is to declare the constructor explicitly with the real type, even when the fake never uses the callback. Same rule applies for any future jsdom-missing-API polyfills.
+
+**jsdom is missing more than just `ResizeObserver`.** `Element.prototype.scrollIntoView` is the other one we've hit (added in PR #93 for the wizard's port-picker auto-scroll). `tests/setup.ts` stubs it as a no-op. Same playbook for the next missing API: detect-and-polyfill with the real signature, in `tests/setup.ts`, gated on `typeof <api> === 'undefined'` so a future jsdom release that ships the API doesn't get shadowed.
 
 ## Security
 
