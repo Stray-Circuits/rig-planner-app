@@ -503,10 +503,14 @@ describe('extractPedalMetadata — OpenGraph fallback', () => {
     expect(outcome.metadata.name).toBe('Morning Glory');
   });
 
-  it('rejects article-prose og:title even when a known brand appears in it', async () => {
+  it('recovers a known model from article-prose og:title via the catalog', async () => {
     // Real failure from issue #73: Strymon's FAQ page has og:title
     // "What are the TimeLine pedal dimensions? - Strymon" — the brand
-    // is real but the rest is a question, not a model name.
+    // is real but the rest is article prose, not a model name.
+    // `splitByKnownBrand` strips it down to {brand: 'Strymon'} only,
+    // but the catalog-fallback then walks the raw title candidates
+    // and finds "Timeline" buried inside, adopting the canonical
+    // model name + the catalog dims.
     const html = wrap(`
       <meta property="og:title" content="What are the TimeLine pedal dimensions? - Strymon" />
     `);
@@ -516,7 +520,9 @@ describe('extractPedalMetadata — OpenGraph fallback', () => {
     expect(outcome.kind).toBe('ok');
     if (outcome.kind !== 'ok') throw new Error('expected ok');
     expect(outcome.metadata.brand).toBe('Strymon');
-    expect(outcome.metadata.name).toBeNull();
+    expect(outcome.metadata.name).toBe('Timeline');
+    expect(outcome.metadata.widthIn).toBe(6.75);
+    expect(outcome.metadata.depthIn).toBe(4.9);
   });
 
   it('routes raw og:title "Model – Brand" through the known-brand splitter', async () => {
@@ -626,6 +632,25 @@ describe('extractPedalMetadata — name cleaning', () => {
     if (outcome.kind !== 'ok') throw new Error('expected ok');
     expect(outcome.metadata.brand).toBe('Empress');
     expect(outcome.metadata.name).toBeNull();
+  });
+
+  it('consumes multi-word brand suffix tokens when stripping the brand prefix (#73 round 11)', async () => {
+    // "Empress Effects Reverb" with brand="Empress" used to leave
+    // "Effects Reverb" — the brand-prefix strip stopped after the
+    // single "Empress" token, and the trailing "Effects" strip only
+    // fired when "Effects" was at end-of-string. We now consume
+    // immediately-following company-suffix tokens after the brand
+    // prefix.
+    const html = wrap(
+      `<meta property="og:title" content="Empress Effects Reverb" /><meta property="product:brand" content="Empress" />`,
+    );
+    const outcome = await extractPedalMetadata('https://example.com/x', {
+      fetchImpl: fetchReturning(htmlResponse(html)),
+    });
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') throw new Error('expected ok');
+    expect(outcome.metadata.brand).toBe('Empress');
+    expect(outcome.metadata.name).toBe('Reverb');
   });
 
   it('strips redundant trailing "Pedals" when brand also says "Pedals"', async () => {

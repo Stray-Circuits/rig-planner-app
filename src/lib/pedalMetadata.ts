@@ -185,7 +185,21 @@ export async function extractPedalMetadata(
   // preserves the "complete pair or nothing" invariant. Catalog NEVER
   // overrides extracted dims — it only fills when both are still null.
   if (merged.widthIn === null && merged.depthIn === null) {
-    const catalogHit = findPedalInCatalog(merged.brand, merged.name);
+    let catalogHit = findPedalInCatalog(merged.brand, merged.name);
+    // If brand survived but name was rejected by `looksLikeArticleProse`
+    // (e.g. "What are the TimeLine pedal dimensions? - Strymon"), the
+    // catalog still has a chance: its matcher is token-subset, so the
+    // model text buried inside the rejected title can still pull a hit.
+    // When it does, adopt the canonical name as a bonus.
+    if (!catalogHit && merged.brand !== null && merged.name === null) {
+      for (const candidate of collectTitleCandidates(doc)) {
+        catalogHit = findPedalInCatalog(merged.brand, candidate);
+        if (catalogHit) {
+          merged.name = catalogHit.name;
+          break;
+        }
+      }
+    }
     if (catalogHit) {
       merged.widthIn = catalogHit.widthIn;
       merged.depthIn = catalogHit.depthIn;
@@ -518,10 +532,16 @@ function extractFromMeta(doc: Document): Partial<ExtractedPedalMetadata> {
  * article titles like "What are the TimeLine pedal dimensions?" as
  * model names on FAQ pages (issue #73).
  */
-function extractFromTitle(
-  doc: Document,
-  allowNoBrandFallback: boolean,
-): Partial<ExtractedPedalMetadata> {
+/**
+ * Collect the page's title-like strings in priority order:
+ * `og:title` → `twitter:title` → `<title>`. Whitespace-collapsed and
+ * empty entries dropped. Used both by the brand-split title heuristic
+ * and by the catalog-fallback path in `extractPedalMetadata` (the
+ * catalog can still match when the title was rejected as article
+ * prose, because token-subset matching finds the model name buried
+ * inside the surrounding sentence).
+ */
+function collectTitleCandidates(doc: Document): string[] {
   const candidates: string[] = [];
   const push = (s: string | null | undefined): void => {
     const v = s ? cleanString(s) : null;
@@ -532,6 +552,14 @@ function extractFromTitle(
     doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content'),
   );
   push(doc.querySelector('title')?.textContent);
+  return candidates;
+}
+
+function extractFromTitle(
+  doc: Document,
+  allowNoBrandFallback: boolean,
+): Partial<ExtractedPedalMetadata> {
+  const candidates = collectTitleCandidates(doc);
 
   for (const title of candidates) {
     const split = splitByKnownBrand(title);
@@ -616,16 +644,15 @@ const ARTICLE_WORDS = new Set([
 function looksLikeArticleProse(s: string): boolean {
   if (s.length > 60) return true;
   if (s.includes('?')) return true;
-  const first =
-    s
-      .split(/\s+/)[0]
-      ?.toLowerCase()
-      .replace(/[^a-z]/g, '') ?? '';
-  if (ARTICLE_WORDS.has(first)) return true;
+  // Single tokenization pass — was previously split twice (once with
+  // \s+ to grab the first word, once with [^a-z]+ over the full
+  // string). For a 10-word title this is one pass instead of two.
   const tokens = s
     .toLowerCase()
     .split(/[^a-z]+/)
     .filter(Boolean);
+  if (tokens.length === 0) return false;
+  if (ARTICLE_WORDS.has(tokens[0] ?? '')) return true;
   return tokens.some((t) => ARTICLE_WORDS.has(t));
 }
 
@@ -690,7 +717,21 @@ function cleanPedalName(
   s = trimEdges(s);
 
   // 3. Strip leading brand prefix, token-by-token, when the name starts
-  //    with the brand.
+  //    with the brand. After consuming the brand tokens, also consume
+  //    immediately-following company-suffix tokens — "Empress" the
+  //    brand vs. "Empress Effects" the marketing name; "Walrus" vs.
+  //    "Walrus Audio"; etc. Without this, "Empress Effects Reverb" with
+  //    brand "Empress" would clean to "Effects Reverb".
+  const COMPANY_SUFFIXES = new Set([
+    'effects',
+    'audio',
+    'pedals',
+    'electronics',
+    'devices',
+    'music',
+  ]);
+  const normToken = (t: string): string =>
+    t.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (brand !== null && brand.trim().length > 0) {
     const brandTokens = brand.trim().toLowerCase().split(/\s+/);
     const nameTokens = s.split(/\s+/);
@@ -698,8 +739,19 @@ function cleanPedalName(
     while (
       i < brandTokens.length &&
       i < nameTokens.length &&
-      (nameTokens[i] ?? '').toLowerCase().replace(/[^a-z0-9]/g, '') ===
-        (brandTokens[i] ?? '').replace(/[^a-z0-9]/g, '')
+      normToken(nameTokens[i] ?? '') === normToken(brandTokens[i] ?? '')
+    ) {
+      i++;
+    }
+    // Also consume immediately-following company-suffix tokens.
+    // Triggers whether or not the brand prefix matched on this pass —
+    // when `splitByKnownBrand` upstream already chopped "Empress" off
+    // the og:title, the residual that reaches us is "Effects Reverb",
+    // so the brand-prefix loop above didn't fire but the
+    // company-suffix-after-brand strip still applies.
+    while (
+      i < nameTokens.length &&
+      COMPANY_SUFFIXES.has(normToken(nameTokens[i] ?? ''))
     ) {
       i++;
     }
@@ -709,8 +761,13 @@ function cleanPedalName(
     }
   }
 
-  // 4. Trailing corporate suffixes.
-  s = s.replace(/\s+(?:Inc\.?|LLC\.?|Co\.?|Ltd\.?|Corp\.?)\s*$/i, '').trim();
+  // 4. Trailing corporate suffixes. The `(?:^|\s+)` anchor handles
+  //    both "Empress Inc." (whitespace-separated) and the bare "Inc."
+  //    that's left over after step 3 chews "Empress Effects" off the
+  //    front of "Empress Effects Inc.".
+  s = s
+    .replace(/(?:^|\s+)(?:Inc\.?|LLC\.?|Co\.?|Ltd\.?|Corp\.?)\s*$/i, '')
+    .trim();
 
   // 5. Redundant trailing "Pedal" / "Pedals" — always strip, since the
   //    extracted name is by definition for a pedal.
@@ -1036,12 +1093,13 @@ export async function findPedalDimensionsByQuery(
     if (merged.name === null && r.name !== null) merged.name = r.name;
   }
 
-  // Dimensions: take the first result that produced any dims at all —
-  // `extractPedalMetadata` now drops solo dims (issue #73 round 2), so
-  // every non-null pair came from a single page where both width and
-  // depth sat next to each other in the spec data. That's much higher
-  // confidence than stitching width from one page and depth from
-  // another, where each side could be unrelated noise.
+  // Dimensions: take the first result that produced a COMPLETE (width,
+  // depth) pair. `extractPedalMetadata`'s per-page solo-dim drop
+  // (issue #73 round 2) means production-path extractions can only be
+  // null/null or a complete pair — but the explicit check is load-
+  // bearing for stubbed callers (tests inject `pageWith({widthIn: 1,
+  // depthIn: null})` to exercise the cross-page filter), and for any
+  // future variant of `extract` that doesn't share the per-page drop.
   const withDims = extractions.find(
     (r): r is ExtractedPedalMetadata =>
       r?.widthIn != null && r.depthIn !== null,

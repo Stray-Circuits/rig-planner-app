@@ -74,21 +74,42 @@ function normalize(s: string): string {
     .trim();
 }
 
-function isBrandCompatible(catalogBrand: string, userBrand: string): boolean {
-  const a = normalize(catalogBrand);
-  const b = normalize(userBrand);
-  if (a.length === 0 || b.length === 0) return false;
-  if (a === b) return true;
-  // "JHS" should match user-typed "JHS Pedals" and vice versa.
-  return a.includes(b) || b.includes(a);
-}
-
 function isNameCompatible(
   catalogTokens: string[],
   userTokens: string[],
 ): boolean {
   if (catalogTokens.length === 0 || userTokens.length === 0) return false;
   return catalogTokens.every((t) => userTokens.includes(t));
+}
+
+/**
+ * Pre-tokenized view of the catalog. Computing `tokenize(entry.name)`
+ * per lookup is wasteful — the catalog is static, so we precompute
+ * the brand-normalized key and the token lists for the canonical name
+ * + each alias once on first lookup and reuse them thereafter. Lazy
+ * init (rather than module-load IIFE) keeps `PEDAL_CATALOG`'s source
+ * position free.
+ */
+interface IndexedEntry {
+  entry: PedalCatalogEntry;
+  brandNorm: string;
+  /** Tokens of `entry.name`, then each alias, in declaration order. */
+  variantTokens: readonly string[][];
+}
+
+let CATALOG_INDEX: readonly IndexedEntry[] | null = null;
+
+function getIndex(): readonly IndexedEntry[] {
+  if (CATALOG_INDEX !== null) return CATALOG_INDEX;
+  const out: IndexedEntry[] = [];
+  for (const entry of PEDAL_CATALOG) {
+    const variantTokens: string[][] = [tokenize(entry.name)];
+    for (const alias of entry.aliases ?? [])
+      variantTokens.push(tokenize(alias));
+    out.push({ entry, brandNorm: normalize(entry.brand), variantTokens });
+  }
+  CATALOG_INDEX = out;
+  return CATALOG_INDEX;
 }
 
 /**
@@ -105,28 +126,36 @@ export function findPedalInCatalog(
   name: string | null | undefined,
 ): PedalCatalogEntry | null {
   if (!brand || !name) return null;
-  const userBrand = brand;
+  const userBrandNorm = normalize(brand);
+  if (userBrandNorm.length === 0) return null;
   const userNameTokens = tokenize(name);
 
   let best: PedalCatalogEntry | null = null;
   let bestSpecificity = -1;
 
-  for (const entry of PEDAL_CATALOG) {
-    if (!isBrandCompatible(entry.brand, userBrand)) continue;
-    const nameVariants = [entry.name, ...(entry.aliases ?? [])];
-    let matched = false;
-    let specificity = 0;
-    for (const variant of nameVariants) {
-      const variantTokens = tokenize(variant);
-      if (isNameCompatible(variantTokens, userNameTokens)) {
-        matched = true;
-        specificity = Math.max(specificity, variantTokens.length);
+  for (const { entry, brandNorm, variantTokens } of getIndex()) {
+    if (
+      brandNorm !== userBrandNorm &&
+      !brandNorm.includes(userBrandNorm) &&
+      !userBrandNorm.includes(brandNorm)
+    ) {
+      continue;
+    }
+    // Walk variants in declaration order; the canonical name is first.
+    let bestSpecForEntry = 0;
+    let anyMatch = false;
+    for (const variantToks of variantTokens) {
+      if (isNameCompatible(variantToks, userNameTokens)) {
+        anyMatch = true;
+        if (variantToks.length > bestSpecForEntry) {
+          bestSpecForEntry = variantToks.length;
+        }
       }
     }
-    if (!matched) continue;
-    if (specificity > bestSpecificity) {
+    if (!anyMatch) continue;
+    if (bestSpecForEntry > bestSpecificity) {
       best = entry;
-      bestSpecificity = specificity;
+      bestSpecificity = bestSpecForEntry;
     }
   }
   return best;
@@ -146,7 +175,7 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: 'DS-1',
     widthIn: 2.87,
     depthIn: 5.08,
-    aliases: ['DS1', 'DS 1', 'DS-1 Distortion'],
+    aliases: ['DS1', 'DS-1 Distortion'],
   },
   {
     brand: 'Boss',
@@ -402,7 +431,7 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: 'ARP-87',
     widthIn: 2.72,
     depthIn: 4.95,
-    aliases: ['ARP 87', 'ARP87'],
+    aliases: ['ARP87'],
   },
   { brand: 'Walrus Audio', name: 'Polychrome', widthIn: 2.6, depthIn: 4.95 },
   {
@@ -422,7 +451,7 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: "Pulp 'N Peel",
     widthIn: 2.6,
     depthIn: 4.8,
-    aliases: ['Pulp N Peel', 'Pulp and Peel'],
+    aliases: ['Pulp and Peel'],
   },
   { brand: 'JHS Pedals', name: 'Muffuletta', widthIn: 2.6, depthIn: 4.8 },
   { brand: 'JHS Pedals', name: 'Bonsai', widthIn: 2.93, depthIn: 4.98 },
@@ -453,7 +482,6 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: 'Plexi-Drive Deluxe',
     widthIn: 3.5,
     depthIn: 4.68,
-    aliases: ['Plexi Drive Deluxe'],
   },
   { brand: 'Wampler', name: 'Ego Compressor', widthIn: 2.5, depthIn: 4.5 },
   { brand: 'Wampler', name: 'Velvet Fuzz', widthIn: 2.6, depthIn: 5 },
@@ -559,7 +587,6 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: 'Synth-1',
     widthIn: 3.84,
     depthIn: 4.9,
-    aliases: ['Synth 1'],
   },
   { brand: 'Keeley', name: 'Compressor Mini', widthIn: 1.85, depthIn: 3.74 },
   { brand: 'Keeley', name: 'Loomer', widthIn: 4.7, depthIn: 3.79 },
@@ -571,7 +598,6 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: 'Vibe-O-Verb',
     widthIn: 2.73,
     depthIn: 4.5,
-    aliases: ['Vibe O Verb'],
   },
 
   // ---- EarthQuaker Devices ---- (mostly 1590B, larger pedals use 1590BB)
@@ -741,7 +767,6 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: 'Aqua-Puss',
     widthIn: 3.84,
     depthIn: 5.04,
-    aliases: ['Aqua Puss'],
   },
   { brand: 'Way Huge', name: 'Saucy Box', widthIn: 3.26, depthIn: 5.04 },
   { brand: 'Way Huge', name: 'Swollen Pickle', widthIn: 2.37, depthIn: 4.39 },
@@ -754,7 +779,6 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: 'Smalls Aqua-Puss',
     widthIn: 2.4,
     depthIn: 4.09,
-    aliases: ['Smalls Aqua Puss'],
   },
 
   // ---- TC Electronic ---- (standard format = 2.83 × 5.40, mini = 1.50 × 3.65)
@@ -805,7 +829,7 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: "Sub 'N' Up",
     widthIn: 2.86,
     depthIn: 4.8,
-    aliases: ['Sub N Up', 'Sub Up Octaver'],
+    aliases: ['Sub Up Octaver'],
   },
   {
     brand: 'TC Electronic',
@@ -878,8 +902,8 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
   { brand: 'Mooer', name: 'Phaser Player', widthIn: 1.65, depthIn: 3.68 },
   { brand: 'Mooer', name: 'Mod Factory', widthIn: 1.65, depthIn: 3.68 },
 
-  // ---- ZVEX ---- (Vexter cast = 3.70 × 4.50)
-  // source: ZVEX Vexter spec.
+  // ---- ZVEX ---- (Vexter horizontal = 4.68 × 2.38)
+  // source: round-9 PedalPlayground bulk adoption.
   { brand: 'ZVEX', name: 'Fuzz Factory', widthIn: 4.68, depthIn: 2.38 },
   { brand: 'ZVEX', name: 'Fuzz Factory 7', widthIn: 3.64, depthIn: 4.8 },
   { brand: 'ZVEX', name: 'Box of Rock', widthIn: 4.68, depthIn: 2.38 },
@@ -898,14 +922,12 @@ export const PEDAL_CATALOG: readonly PedalCatalogEntry[] = [
     name: 'Lo-Fi Loop Junky',
     widthIn: 4.68,
     depthIn: 2.38,
-    aliases: ['Lo Fi Loop Junky'],
   },
   {
     brand: 'ZVEX',
     name: "'59 Sound",
     widthIn: 4.68,
     depthIn: 2.38,
-    aliases: ['59 Sound'],
   },
   { brand: 'ZVEX', name: 'Probe', widthIn: 4.7, depthIn: 7.5 },
 
