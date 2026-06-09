@@ -61,6 +61,7 @@ import {
   findPedalDimensionsByQuery,
   type ExtractedPedalMetadata,
 } from '../../lib/pedalMetadata';
+import { findPedalInCatalog } from '../../data/pedalCatalog';
 import { useBackHandler } from '../../lib/useBackHandler';
 import { portLayoutGroup } from '../../lib/geometry';
 import { Button, TextField, WizardShell } from '../../ui';
@@ -212,6 +213,13 @@ export function AddPedalWizard({
   // every subsequent step so the user knows it's still going, and
   // disables Submit on the Review step until the photo lands.
   const [imageProcessing, setImageProcessing] = useState(false);
+  // True while the brand/name/dim metadata pipeline is still resolving
+  // after a Brave image pick (extractPedalMetadata on the source page
+  // + findPedalDimensionsByQuery against the spec-host result set).
+  // Surfaces a banner on Name & Size so the user understands why the
+  // fields are still empty — and so they don't get spooked when the
+  // fields pop in 5-10 seconds later.
+  const [metadataProcessing, setMetadataProcessing] = useState(false);
   // True while ImageStep is in a sub-mode (web search panel open or
   // threshold tuning open). Combined with the dirty checks below to
   // decide whether a backdrop click can dismiss the wizard.
@@ -385,11 +393,18 @@ export function AddPedalWizard({
           we&apos;ll attach the photo as soon as it&apos;s ready.
         </div>
       ) : null}
+      {step > 0 && metadataProcessing ? (
+        <div className={styles.bgProcessingBanner} role="status">
+          <i className="ti ti-loader" aria-hidden /> Looking up the brand,
+          model, and dimensions… fields will fill in as soon as we find them.
+        </div>
+      ) : null}
       {step === 0 && (
         <ImageStep
           draft={draft}
           setDraft={setDraft}
           onProcessingChange={setImageProcessing}
+          onMetadataProcessingChange={setMetadataProcessing}
           onEngagementChange={setImageStepEngaged}
         />
       )}
@@ -525,6 +540,13 @@ interface ImageStepProps extends StepProps {
   /** Notifies the wizard when bg-removal is in flight so it can show a
    * banner on later steps and disable Submit on Review. */
   onProcessingChange: (active: boolean) => void;
+  /**
+   * Notifies the wizard when the brand/name/dim metadata pipeline is
+   * still resolving after a Brave image pick. Fires `true` when both
+   * promises are dispatched and `false` when they settle, so the
+   * banner on later steps explains why the fields haven't filled yet.
+   */
+  onMetadataProcessingChange: (active: boolean) => void;
   /**
    * Notifies the wizard when the user is in an Image-step sub-mode — search
    * panel open, threshold tuning open. The wizard combines this with its
@@ -797,6 +819,7 @@ function ImageStep({
   draft,
   setDraft,
   onProcessingChange,
+  onMetadataProcessingChange,
   onEngagementChange,
 }: ImageStepProps) {
   const setColor = (color: string) => setDraft((d) => ({ ...d, color }));
@@ -1187,6 +1210,7 @@ function ImageStep({
     // user-picked page wins per-field. The "only fill empty" guard
     // preserves anything the user has typed in the meantime AND keeps
     // the dim-search from clobbering source-page values.
+    onMetadataProcessingChange(true);
     void applyMetadataInOrder(
       extractPedalMetadata(result.sourceUrl).then((o) =>
         o.kind === 'ok' ? o.metadata : null,
@@ -1195,7 +1219,7 @@ function ImageStep({
         ? findPedalDimensionsByQuery(query)
         : Promise.resolve(null),
       setDraft,
-    );
+    ).finally(() => onMetadataProcessingChange(false));
   };
 
   // ---------- Rotate / straighten / crop editor ----------
@@ -1519,6 +1543,30 @@ function NameSizeStep({ draft, setDraft }: StepProps) {
       const value = e.target.value;
       setDraft((d) => ({ ...d, [key]: value }));
     };
+
+  // Debounced catalog lookup: as the user types brand + name, match
+  // against the built-in catalog and silently fill width/depth if both
+  // dim fields are still empty. Same "fill empty only" guard the
+  // metadata pipeline uses (see applyMetadataInOrder above) so we
+  // never trample anything the user has already typed.
+  const brandTrim = draft.brand.trim();
+  const nameTrim = draft.name.trim();
+  const widthEmpty = draft.widthIn.trim() === '';
+  const depthEmpty = draft.depthIn.trim() === '';
+  useEffect(() => {
+    if (brandTrim.length === 0 || nameTrim.length === 0) return;
+    if (!widthEmpty || !depthEmpty) return;
+    const handle = window.setTimeout(() => {
+      const hit = findPedalInCatalog(brandTrim, nameTrim);
+      if (!hit) return;
+      setDraft((d) => ({
+        ...d,
+        ...(d.widthIn.trim() === '' ? { widthIn: String(hit.widthIn) } : {}),
+        ...(d.depthIn.trim() === '' ? { depthIn: String(hit.depthIn) } : {}),
+      }));
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [brandTrim, nameTrim, widthEmpty, depthEmpty, setDraft]);
 
   return (
     <div className={styles.form}>

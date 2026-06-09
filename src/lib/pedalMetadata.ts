@@ -23,6 +23,7 @@
  */
 
 import { searchPedalWeb, type BraveWebResult } from './braveSearch';
+import { findPedalInCatalog } from '../data/pedalCatalog';
 
 let cachedTauriFetch: typeof fetch | null = null;
 
@@ -155,9 +156,59 @@ export async function extractPedalMetadata(
   const fromMeta = extractFromMeta(doc);
   mergeMetadata(merged, fromMeta);
 
-  // Low: page <title> heuristic against known brands.
-  const fromTitle = extractFromTitle(doc);
+  // Low: page <title> heuristic against known brands. Also folds in
+  // `og:title` / `twitter:title`. The no-brand fallback (using the
+  // title as a name when no known brand is found) only fires when a
+  // higher-confidence layer already produced a brand — that anchors
+  // the page as a real product listing rather than an article that
+  // happens to have a clean-looking title.
+  const fromTitle = extractFromTitle(doc, merged.brand !== null);
   mergeMetadata(merged, fromTitle);
+
+  // Solo-dimension extractions are wrong far more often than right —
+  // every bogus width reported in issue #73 (round 2: widthIn=16/18/20)
+  // was a partial result where the page had no companion depth value
+  // and our scraper picked up an unrelated number near the word "width"
+  // (a shipping box, an image-asset dim, a JSON-LD bare number). The
+  // "blank > wrong" rule the file's docstring leads with is decisive:
+  // a paired (width, depth) on the same page is dramatically more
+  // trustworthy than either alone, so we only surface dimensions when
+  // both are present.
+  if (merged.widthIn === null || merged.depthIn === null) {
+    merged.widthIn = null;
+    merged.depthIn = null;
+  }
+
+  // Last-resort: when the scrape gave us brand + name but no dims,
+  // consult the curated catalog. Catalog entries are complete pairs
+  // sourced from manufacturer specs / standard enclosures, so this
+  // preserves the "complete pair or nothing" invariant. Catalog NEVER
+  // overrides extracted dims — it only fills when both are still null.
+  if (merged.widthIn === null && merged.depthIn === null) {
+    let catalogHit = findPedalInCatalog(merged.brand, merged.name);
+    // If brand survived but name was rejected by `looksLikeArticleProse`
+    // (e.g. "What are the TimeLine pedal dimensions? - Strymon"), the
+    // catalog still has a chance: its matcher is token-subset, so the
+    // model text buried inside the rejected title can still pull a hit.
+    // When it does, adopt the canonical name as a bonus.
+    if (!catalogHit && merged.brand !== null && merged.name === null) {
+      for (const candidate of collectTitleCandidates(doc)) {
+        catalogHit = findPedalInCatalog(merged.brand, candidate);
+        if (catalogHit) {
+          merged.name = catalogHit.name;
+          break;
+        }
+      }
+    }
+    if (catalogHit) {
+      merged.widthIn = catalogHit.widthIn;
+      merged.depthIn = catalogHit.depthIn;
+    }
+  }
+
+  // Final pass: strip trademark cruft, redundant brand prefix, and
+  // descriptor tails so the model name reads as just the model.
+  merged.name = cleanPedalName(merged.name, merged.brand);
 
   const hasAnySignal =
     merged.brand !== null ||
@@ -314,7 +365,26 @@ function extractFromTextLabels(doc: Document): Partial<ExtractedPedalMetadata> {
     /\b(width|depth)\b.{0,60}?(\d+(?:\.\d+)?)\s*(inches|inch|in|"|″|”|mm|cm)(?![a-zA-Z])/gi;
   for (const m of text.matchAll(labelFirst)) {
     const label = (m[1] ?? '').toLowerCase() as 'width' | 'depth';
-    const value = parseDimension(`${m[2]} ${m[3]}`);
+    const unit = m[3] ?? '';
+    const matchEnd = (m.index ?? 0) + m[0].length;
+    // Contextual rejection for the two ambiguous units. Doing this in
+    // code rather than regex because the labelFirst pattern runs with
+    // the `i` flag (label can be Width/WIDTH/etc.), which would also
+    // case-fold any `[A-Z]` we tried to use as the sentence-boundary
+    // check on the `in` unit. The page text includes <script> content
+    // because Sweetwater puts spec data inside JSON blobs there, so
+    // both classes of noise are common:
+    //
+    //   * `"width":"854"` (JSON image dimensions on Amazon, etc.) was
+    //     matching 854 with the closing JSON string quote as the inch
+    //     glyph (issue #73).
+    //   * `16 in stock` / `16 in 2024` / `16 in 1 enclosure` were
+    //     matching 16 with `in` as the unit (issue #73).
+    if (unit === '"' && isJsonStringClose(text, matchEnd)) continue;
+    if (unit.toLowerCase() === 'in' && !isInchUnitTerminating(text, matchEnd)) {
+      continue;
+    }
+    const value = parseDimension(`${m[2]} ${unit}`);
     assign(label, value);
   }
 
@@ -332,6 +402,48 @@ function extractFromTextLabels(doc: Document): Partial<ExtractedPedalMetadata> {
     ...(widthIn !== null ? { widthIn } : {}),
     ...(depthIn !== null ? { depthIn } : {}),
   };
+}
+
+/**
+ * True iff the `"` at `pos` (the char right after our matched value+unit)
+ * is the closing quote of a JSON string value — i.e. immediately followed
+ * by a JSON value terminator. Used to reject `"width":"854"` shaped noise.
+ *
+ * Sweetwater's `"detail":"2.97\""` (escaped inch glyph inside a JSON
+ * string) passes through here because after the inch glyph is the
+ * *string's* closing `"` and only then a `,` — so the char at `pos` is
+ * another `"`, not a terminator.
+ */
+function isJsonStringClose(text: string, pos: number): boolean {
+  const next = text[pos];
+  return next === ',' || next === ']' || next === '}';
+}
+
+/**
+ * True iff the `in` we just matched genuinely terminates a clause —
+ * end-of-text, common punctuation, dimension separator (`x`/`×`), OR
+ * whitespace then a capital letter (the start of a new sentence or a
+ * new dimension label like `Depth`). Rejects continuations like
+ * "in stock", "in 2024", "in 1 enclosure".
+ */
+function isInchUnitTerminating(text: string, pos: number): boolean {
+  if (pos >= text.length) return true;
+  const next = text[pos];
+  if (next === undefined) return true;
+  if ('.,;:)]}/×'.includes(next)) return true;
+  if (!/\s/.test(next)) return false;
+  // Skip whitespace and look at the next non-whitespace char.
+  let i = pos;
+  while (i < text.length && /\s/.test(text[i] ?? '')) i++;
+  const after = text[i];
+  if (after === undefined) return true;
+  if (after === 'x' || after === '×') {
+    // Allow only when it's a standalone dimension separator (followed
+    // by whitespace or end), not the start of a word like "extras".
+    const following = text[i + 1];
+    return following === undefined || /\s/.test(following);
+  }
+  return after >= 'A' && after <= 'Z';
 }
 
 /**
@@ -378,6 +490,18 @@ function collectPageText(doc: Document): string {
 
 // ---------- OpenGraph / meta ----------
 
+/**
+ * Brand-only. Historically we also accepted `og:site_name` and used
+ * `og:title` as the model name, but in practice both produced systematic
+ * garbage (issue #73): on Walrus Audio pages `og:site_name` is "Walrus
+ * Audio" which is fine, but on ModularGrid it's "ModularGrid"; on the
+ * Strymon TimeLine FAQ page `og:title` is the article title "What are
+ * the TimeLine pedal dimensions? - Strymon", which we'd then ship as
+ * the model name.
+ *
+ * `og:title` is now folded into `extractFromTitleCandidates` below so
+ * it has to pass the known-brand split test before contributing a name.
+ */
 function extractFromMeta(doc: Document): Partial<ExtractedPedalMetadata> {
   const get = (selector: string): string | null => {
     const el = doc.querySelector(selector);
@@ -389,43 +513,147 @@ function extractFromMeta(doc: Document): Partial<ExtractedPedalMetadata> {
   const brand =
     get('meta[property="product:brand"]') ??
     get('meta[name="product:brand"]') ??
-    get('meta[property="og:brand"]') ??
-    get('meta[property="og:site_name"]');
+    get('meta[property="og:brand"]');
 
-  const name =
-    get('meta[property="og:title"]') ??
-    get('meta[name="twitter:title"]') ??
-    get('meta[property="product:name"]');
-
-  return {
-    ...(brand !== null ? { brand } : {}),
-    ...(name !== null ? { name } : {}),
-  };
+  return brand !== null ? { brand } : {};
 }
 
 // ---------- Title heuristic ----------
 
-function extractFromTitle(doc: Document): Partial<ExtractedPedalMetadata> {
-  const titleEl = doc.querySelector('title');
-  const raw = titleEl?.textContent;
-  if (!raw) return {};
-  const title = cleanString(raw);
-  if (!title) return {};
+/**
+ * Try a few title-shaped candidates in priority order and return the
+ * first one that contains a known brand. og:title and twitter:title are
+ * walked first because they're usually a cleaner version of the page
+ * title (no trailing site name, no `« Page 2 of 3` cruft); the actual
+ * `<title>` element is the fallback.
+ *
+ * Title candidates that don't contain a known brand contribute nothing
+ * — we used to ship raw `og:title` as a model name, which produced
+ * article titles like "What are the TimeLine pedal dimensions?" as
+ * model names on FAQ pages (issue #73).
+ */
+/**
+ * Collect the page's title-like strings in priority order:
+ * `og:title` → `twitter:title` → `<title>`. Whitespace-collapsed and
+ * empty entries dropped. Used both by the brand-split title heuristic
+ * and by the catalog-fallback path in `extractPedalMetadata` (the
+ * catalog can still match when the title was rejected as article
+ * prose, because token-subset matching finds the model name buried
+ * inside the surrounding sentence).
+ */
+function collectTitleCandidates(doc: Document): string[] {
+  const candidates: string[] = [];
+  const push = (s: string | null | undefined): void => {
+    const v = s ? cleanString(s) : null;
+    if (v) candidates.push(v);
+  };
+  push(doc.querySelector('meta[property="og:title"]')?.getAttribute('content'));
+  push(
+    doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content'),
+  );
+  push(doc.querySelector('title')?.textContent);
+  return candidates;
+}
 
+function extractFromTitle(
+  doc: Document,
+  allowNoBrandFallback: boolean,
+): Partial<ExtractedPedalMetadata> {
+  const candidates = collectTitleCandidates(doc);
+
+  for (const title of candidates) {
+    const split = splitByKnownBrand(title);
+    if (split) return split;
+  }
+
+  if (!allowNoBrandFallback) return {};
+
+  // No candidate carried a known brand, but a higher-confidence layer
+  // already produced one (so the page is anchored as a real product
+  // listing). Use the first candidate as a model-name fallback — many
+  // boutique pedals' og:title is just a clean "Slö Multi Texture
+  // Reverb" with no brand text in the title.
+  for (const title of candidates) {
+    const cleaned = trimTitleTail(title);
+    if (cleaned.length > 0 && !looksLikeArticleProse(cleaned)) {
+      return { name: cleaned };
+    }
+  }
+  return {};
+}
+
+/**
+ * Locate a known brand inside the title and pull a candidate model name
+ * out of whichever side has more text. Handles both `Brand Model | Site`
+ * (model is after) and `Model — Brand` (model is before).
+ *
+ * Returns null when no brand matches OR when the candidate model side
+ * looks like article prose (question marks, "review", "best", "what",
+ * etc.) — in that case the title isn't carrying product data, just SEO
+ * for an article that mentions the pedal.
+ */
+function splitByKnownBrand(
+  title: string,
+): Partial<ExtractedPedalMetadata> | null {
   const lower = title.toLowerCase();
   for (const brand of KNOWN_BRANDS) {
     const idx = lower.indexOf(brand.toLowerCase());
     if (idx < 0) continue;
-    // Slice the model out of whatever follows the brand. Strip common
-    // trailing fluff (" | Reverb", " - Sweetwater", "Distortion Pedal").
+    const before = title.slice(0, idx).trim();
     const after = title.slice(idx + brand.length).trim();
-    const model = trimTitleTail(after);
-    return {
-      brand,
-      ...(model.length > 0 ? { name: model } : {}),
-    };
+    // Model is usually the longer side. For `Brand Model | Site`, after
+    // wins; for `Model – Brand`, before wins.
+    const candidate = after.length >= before.length ? after : before;
+    const model = trimTitleTail(candidate);
+    if (model.length === 0 || looksLikeArticleProse(model)) {
+      return { brand };
+    }
+    return { brand, name: model };
   }
-  return {};
+  return null;
+}
+
+// Cheap article-prose detector. We reject titles like
+//   "What are the TimeLine pedal dimensions?"
+//   "Best overdrive pedals of 2024"
+//   "Boss DS-1 review"
+// where the brand match is incidental — the page is a blog post, not a
+// product listing, and the "model name" half is actually a sentence.
+const ARTICLE_WORDS = new Set([
+  'what',
+  'how',
+  'why',
+  'when',
+  'where',
+  'who',
+  'best',
+  'top',
+  'review',
+  'reviews',
+  'reviewed',
+  'vs',
+  'versus',
+  'compared',
+  'comparing',
+  'dimensions',
+  'specs',
+  'specifications',
+  'guide',
+]);
+
+function looksLikeArticleProse(s: string): boolean {
+  if (s.length > 60) return true;
+  if (s.includes('?')) return true;
+  // Single tokenization pass — was previously split twice (once with
+  // \s+ to grab the first word, once with [^a-z]+ over the full
+  // string). For a 10-word title this is one pass instead of two.
+  const tokens = s
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return false;
+  if (ARTICLE_WORDS.has(tokens[0] ?? '')) return true;
+  return tokens.some((t) => ARTICLE_WORDS.has(t));
 }
 
 // Padded dashes / pipes / bullets split the title tail; bare hyphens don't
@@ -436,14 +664,126 @@ function trimTitleTail(s: string): string {
   // Cut at the first separator (Reverb / Sweetwater pages do "Boss DS-1 | Reverb").
   const split = s.split(TITLE_SEPARATORS)[0]?.trim() ?? '';
   // Drop common descriptors so "DS-1 Distortion Pedal" -> "DS-1".
-  return split
+  return (
+    split
+      .replace(
+        /\b(distortion|overdrive|fuzz|delay|reverb|chorus|tremolo|phaser|compressor|boost|eq|wah|looper|tuner|octave|pitch|modulation)\s+pedal\b/i,
+        '',
+      )
+      .replace(/\bpedal\b/i, '')
+      .replace(/\s{2,}/g, ' ')
+      // Strip leading punctuation left over after splitting "Boss - DS-1" →
+      // " DS-1" which would otherwise read "- DS-1".
+      .replace(/^[-–—·:|\s]+/, '')
+      .replace(/[-–—·:|\s]+$/, '')
+      .trim()
+  );
+}
+
+// ---------- Name cleaning ----------
+
+/**
+ * Post-process an extracted model name so it reads as just the model.
+ * Targets the systematic ugliness seen in real og:title / JSON-LD names:
+ *
+ *   "® PHASE 90"                              -> "PHASE 90"
+ *   "Wampler Tumnus Overdrive Pedal" (Wampler) -> "Tumnus"
+ *   "H9 Max Harmonizer® Multi FX"             -> "H9 Max"
+ *   "Effects Inc."                            -> null (entirely cruft)
+ *   "Morning Glory Pedal" (JHS Pedals)        -> "Morning Glory"
+ *
+ * Strips, in order: trademark/copyright marks, leading/trailing
+ * punctuation, leading redundant brand prefix, trailing corporate
+ * suffixes ("Inc.", "LLC", "Co."), redundant trailing "Pedal"/"Pedals",
+ * and the same descriptor pass `trimTitleTail` uses.
+ */
+function cleanPedalName(
+  name: string | null,
+  brand: string | null,
+): string | null {
+  if (name === null) return null;
+  let s = name;
+
+  // 1. Trademark / copyright marks anywhere.
+  s = s.replace(/[®™©℠]/g, ' ');
+
+  // 2. Collapse whitespace and strip leading/trailing punctuation.
+  const trimEdges = (x: string): string =>
+    x
+      .replace(/\s+/g, ' ')
+      .replace(/^[-–—·:|\s]+/, '')
+      .replace(/[-–—·:|\s]+$/, '')
+      .trim();
+  s = trimEdges(s);
+
+  // 3. Strip leading brand prefix, token-by-token, when the name starts
+  //    with the brand. After consuming the brand tokens, also consume
+  //    immediately-following company-suffix tokens — "Empress" the
+  //    brand vs. "Empress Effects" the marketing name; "Walrus" vs.
+  //    "Walrus Audio"; etc. Without this, "Empress Effects Reverb" with
+  //    brand "Empress" would clean to "Effects Reverb".
+  const COMPANY_SUFFIXES = new Set([
+    'effects',
+    'audio',
+    'pedals',
+    'electronics',
+    'devices',
+    'music',
+  ]);
+  const normToken = (t: string): string =>
+    t.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (brand !== null && brand.trim().length > 0) {
+    const brandTokens = brand.trim().toLowerCase().split(/\s+/);
+    const nameTokens = s.split(/\s+/);
+    let i = 0;
+    while (
+      i < brandTokens.length &&
+      i < nameTokens.length &&
+      normToken(nameTokens[i] ?? '') === normToken(brandTokens[i] ?? '')
+    ) {
+      i++;
+    }
+    // Also consume immediately-following company-suffix tokens.
+    // Triggers whether or not the brand prefix matched on this pass —
+    // when `splitByKnownBrand` upstream already chopped "Empress" off
+    // the og:title, the residual that reaches us is "Effects Reverb",
+    // so the brand-prefix loop above didn't fire but the
+    // company-suffix-after-brand strip still applies.
+    while (
+      i < nameTokens.length &&
+      COMPANY_SUFFIXES.has(normToken(nameTokens[i] ?? ''))
+    ) {
+      i++;
+    }
+    if (i > 0) {
+      s = nameTokens.slice(i).join(' ');
+      s = trimEdges(s);
+    }
+  }
+
+  // 4. Trailing corporate suffixes. The `(?:^|\s+)` anchor handles
+  //    both "Empress Inc." (whitespace-separated) and the bare "Inc."
+  //    that's left over after step 3 chews "Empress Effects" off the
+  //    front of "Empress Effects Inc.".
+  s = s
+    .replace(/(?:^|\s+)(?:Inc\.?|LLC\.?|Co\.?|Ltd\.?|Corp\.?)\s*$/i, '')
+    .trim();
+
+  // 5. Redundant trailing "Pedal" / "Pedals" — always strip, since the
+  //    extracted name is by definition for a pedal.
+  s = s.replace(/\s+Pedals?\s*$/i, '').trim();
+
+  // 6. Descriptor pass shared with the title heuristic.
+  s = s
     .replace(
-      /\b(distortion|overdrive|fuzz|delay|reverb|chorus|tremolo|phaser|compressor|boost|eq|wah|looper|tuner|octave|pitch|modulation)\s+pedal\b/i,
+      /\b(distortion|overdrive|fuzz|delay|reverb|chorus|tremolo|phaser|compressor|boost|eq|wah|looper|tuner|octave|pitch|modulation|harmonizer|multi\s*fx|effects)\s+pedal\b/i,
       '',
     )
-    .replace(/\bpedal\b/i, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+    .replace(/(?:^|\s)Multi\s*FX\s*$/i, '')
+    .replace(/(?:^|\s)Effects\s*$/i, '');
+
+  s = trimEdges(s);
+  return s.length > 0 ? s : null;
 }
 
 // ---------- Dimension parsing ----------
@@ -647,6 +987,13 @@ const SOCIAL_DOMAINS: readonly string[] = [
   'ebay.com',
   'ebay.co.uk',
   'ebay.de',
+  // ModularGrid catalogs Eurorack modules in HP (horizontal pitch, ~0.2"
+  // per HP) — they reuse the spec page format for pedalboards, so a
+  // search for a stompbox lands on a page whose `width` value is HP, not
+  // inches, and the page's brand is "ModularGrid" via og:site_name
+  // (issue #73). Reject the whole domain — it never carries useful
+  // stompbox spec data.
+  'modulargrid.net',
 ];
 
 function normalizeHost(host: string | null): string {
@@ -746,34 +1093,20 @@ export async function findPedalDimensionsByQuery(
     if (merged.name === null && r.name !== null) merged.name = r.name;
   }
 
-  // Dimensions: prefer the first result that returned BOTH width and depth
-  // over a result that returned just one. The reason is asymmetric trust:
-  // when a page only surfaces ONE dimension, it often means the regex
-  // matched something incidental (e.g. "1 in/out" jacks count, an
-  // accessory's spec, a band-width spec) rather than the pedal's actual
-  // footprint. A result with BOTH width and depth almost always came from
-  // a real spec table where the two were sitting next to each other —
-  // much higher confidence. Concrete case: Wampler Mini Ego 76 was
-  // returning widthIn=1 with no depth from one page, while a different
-  // page had both correct values; the complete one should win wholesale.
-  const complete = extractions.find(
+  // Dimensions: take the first result that produced a COMPLETE (width,
+  // depth) pair. `extractPedalMetadata`'s per-page solo-dim drop
+  // (issue #73 round 2) means production-path extractions can only be
+  // null/null or a complete pair — but the explicit check is load-
+  // bearing for stubbed callers (tests inject `pageWith({widthIn: 1,
+  // depthIn: null})` to exercise the cross-page filter), and for any
+  // future variant of `extract` that doesn't share the per-page drop.
+  const withDims = extractions.find(
     (r): r is ExtractedPedalMetadata =>
       r?.widthIn != null && r.depthIn !== null,
   );
-  if (complete) {
-    merged.widthIn = complete.widthIn;
-    merged.depthIn = complete.depthIn;
-  } else {
-    // No source has both — fall back to per-field first-wins.
-    for (const r of extractions) {
-      if (!r) continue;
-      if (merged.widthIn === null && r.widthIn !== null) {
-        merged.widthIn = r.widthIn;
-      }
-      if (merged.depthIn === null && r.depthIn !== null) {
-        merged.depthIn = r.depthIn;
-      }
-    }
+  if (withDims) {
+    merged.widthIn = withDims.widthIn;
+    merged.depthIn = withDims.depthIn;
   }
 
   const hasAnySignal =
