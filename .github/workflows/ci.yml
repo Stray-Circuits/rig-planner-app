@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check Android container pins
+        run: node scripts/check-container-pins.mjs
+
       - name: Lint
         run: pnpm lint
 
