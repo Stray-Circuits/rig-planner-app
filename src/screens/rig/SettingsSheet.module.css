@@ -1,26 +1,24 @@
 .body {
-  padding: 14px 16px;
+  padding: 16px 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 22px;
 }
 
 .pickerBody {
   padding: 14px 16px;
-  max-height: 70dvh;
-  overflow-y: auto;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
 }
 
 .boardSummary {
@@ -141,22 +139,32 @@
 
 /* ---------- Floor picker ---------- */
 .floorChips {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
 .floorChip {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px 8px 8px;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
   background: var(--surface);
   color: var(--fg);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-pill);
   cursor: pointer;
   font-size: 13px;
+}
+
+.floorChipLabel {
+  line-height: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .floorChip:hover {
@@ -166,10 +174,6 @@
 .floorChipActive {
   border-color: var(--primary);
   background: var(--primary-bg, var(--surface-alt));
-}
-
-.floorChipLabel {
-  line-height: 1;
 }
 
 .floorSwatch {
@@ -210,14 +214,70 @@
     #bcbcb6;
 }
 
+/* Inline style on the swatch element overrides this fallback once the
+   user has picked a color; the fallback keeps the chip readable before
+   then. */
+.floorSwatch_custom .floorSwatch {
+  background: #8a8a8a;
+}
+
+.customFloorControls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--surface-alt);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.customFloorRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.customFloorRowLabel {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 56px;
+}
+
+.colorInput {
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.colorInput::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.colorInput::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.grainSlider {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--primary);
+}
+
 /* ---------- Jack size picker ---------- */
 .jackChips {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
 .jackChip {
+  flex: 1 1 0;
+  min-width: 0;
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
@@ -229,7 +289,6 @@
   border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 13px;
-  min-width: 110px;
   text-align: left;
 }
 
@@ -253,7 +312,7 @@
 }
 
 .jackHint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted-soft);
   line-height: 1.4;
   margin: 4px 0 0;
@@ -265,8 +324,19 @@
   gap: 8px;
 }
 
+/* Tinted-outline treatment so Export reads as a deliberate action without
+   competing with the sticky-footer Apply button. */
+.exportBtn {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.exportBtn:hover:not(:disabled) {
+  background: var(--primary-bg, var(--surface-alt));
+}
+
 .backupHint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted-soft);
   line-height: 1.4;
   margin: 0;
@@ -280,44 +350,38 @@
 }
 
 .error {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--danger-fg);
 }
 
-.actions {
+.footerGroup {
   display: flex;
-  justify-content: flex-end;
   gap: 8px;
-  margin-top: 4px;
 }
 
-.dangerZone {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 0.5px solid var(--border);
-  display: flex;
-  justify-content: flex-start;
-}
-
-.deleteRigBtn {
-  background: transparent;
-  border: none;
-  color: var(--danger-fg, var(--danger));
-  font-size: 13px;
-  font-weight: 500;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+/* Sits in the Sheet footer alongside Cancel/Apply. Danger-tinted ghost
+   styling so the destructive intent reads without competing with Apply. */
+.deleteAction {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  background: transparent;
+  border: 0.5px solid transparent;
+  color: var(--danger-fg, var(--danger));
+  font-size: 15px;
+  font-weight: 500;
+  padding: 13px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.deleteRigBtn:hover {
+.deleteAction:hover {
   background: var(--surface-alt);
 }
 
-.deleteRigBtn i {
+.deleteAction i {
   font-size: 16px;
 }
 

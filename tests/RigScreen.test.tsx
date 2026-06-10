@@ -457,7 +457,9 @@ describe('RigScreen', () => {
     const dialog = (await screen.findByText('Rig Settings')).closest(
       '[role="dialog"]',
     )!;
-    fireEvent.click(within(dialog as HTMLElement).getByText('Delete Rig'));
+    fireEvent.click(
+      within(dialog as HTMLElement).getByRole('button', { name: /Delete/ }),
+    );
 
     expect(await screen.findByText('Delete Rig?')).toBeInTheDocument();
     expect(
