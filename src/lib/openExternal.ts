@@ -12,9 +12,19 @@ function isTauri(): boolean {
 
 export async function openExternal(url: string): Promise<void> {
   if (isTauri()) {
-    const { open } = await import('@tauri-apps/plugin-shell');
-    await open(url);
-    return;
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell');
+      await open(url);
+      return;
+    } catch (err) {
+      // Debug aid: surface the failure inline so Android testers see
+      // what plugin-shell::open() is rejecting with. Removed once we
+      // know the cause.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[openExternal] plugin-shell open() failed', err);
+      alert(`Could not open link:\n${url}\n\n${msg}`);
+      throw err;
+    }
   }
   window.open(url, '_blank', 'noopener,noreferrer');
 }

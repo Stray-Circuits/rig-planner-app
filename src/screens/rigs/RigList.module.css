@@ -94,21 +94,22 @@
   bottom: 100px;
   width: min(58vw, 360px);
   aspect-ratio: 556 / 306;
-  background: var(--fg);
+  background: var(--border);
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: bottom;
   mask-position: bottom;
   -webkit-mask-size: contain;
   mask-size: contain;
-  opacity: 0.08;
+  opacity: 0.42;
   pointer-events: none;
   z-index: 0;
 }
 
 @media (prefers-color-scheme: dark) {
   .bottomCat {
-    opacity: 0.16;
+    background: var(--border);
+    opacity: 0.13;
   }
 }
 
