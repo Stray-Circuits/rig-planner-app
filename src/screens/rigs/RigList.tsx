@@ -10,7 +10,14 @@ import { RigThumb } from '../../canvas/RigThumb';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from '../rig/PedalLibrarySheet';
 import { useSignalChainStore } from '../../stores/signalChainStore';
-import { Button, Sheet, SheetItem, SpinnerOverlay, TextField } from '../../ui';
+import {
+  Button,
+  Sheet,
+  SheetItem,
+  SpinnerOverlay,
+  TextField,
+  Toast,
+} from '../../ui';
 import scBadgeUrl from '../../assets/brand/StrayCircuits-icon-only.svg';
 import catSilhouetteUrl from '../../assets/brand/cat-silhouette.svg';
 import styles from './RigList.module.css';
@@ -40,6 +47,33 @@ export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
 
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // Cat-silhouette easter egg: count taps within a single visit, fire a
+  // toast at 5 / 20 / 100, then reset after the discount fires.
+  const catTapsRef = useRef(0);
+  const [catToast, setCatToast] = useState<{
+    key: number;
+    message: string;
+    duration: number;
+  } | null>(null);
+
+  const handleCatTap = () => {
+    catTapsRef.current += 1;
+    const n = catTapsRef.current;
+    if (n === 5) {
+      setCatToast({ key: Date.now(), message: 'mew', duration: 2000 });
+    } else if (n === 20) {
+      setCatToast({ key: Date.now(), message: 'prrrrrrr', duration: 2500 });
+    } else if (n === 100) {
+      setCatToast({
+        key: Date.now(),
+        message: 'Meow! Discount code: allthepets',
+        duration: 5000,
+      });
+      catTapsRef.current = 0;
+    }
+  };
+
   const [importing, setImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<{
     exp: RigExport;
@@ -142,6 +176,7 @@ export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
       <span
         className={styles.bottomCat}
         aria-hidden
+        onClick={handleCatTap}
         style={{
           WebkitMaskImage: `url(${catSilhouetteUrl})`,
           maskImage: `url(${catSilhouetteUrl})`,
@@ -373,6 +408,15 @@ export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
             // pedal they just added (or edited) land in the list.
             setLibraryOpen(true);
           }}
+        />
+      ) : null}
+
+      {catToast ? (
+        <Toast
+          key={catToast.key}
+          message={catToast.message}
+          duration={catToast.duration}
+          onDismiss={() => setCatToast(null)}
         />
       ) : null}
     </div>

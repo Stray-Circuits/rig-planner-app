@@ -87,7 +87,7 @@
 
 /* Cat silhouette pinned just above the About card so it reads as perched
    on top of the card. Fixed so it stays anchored as the rig list scrolls
-   past; pointer-events:none so it never intercepts taps. */
+   past. */
 .bottomCat {
   position: fixed;
   right: 24px;
@@ -102,8 +102,8 @@
   -webkit-mask-size: contain;
   mask-size: contain;
   opacity: 0.42;
-  pointer-events: none;
   z-index: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @media (prefers-color-scheme: dark) {
