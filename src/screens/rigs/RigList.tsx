@@ -127,20 +127,26 @@ export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
 
   return (
     <div className={styles.screen}>
-      <div
-        className={styles.catWatermark}
+      <header className={styles.header}>
+        <div className={styles.headerInner}>
+          <span className={styles.brand}>Rig Planner</span>
+          <img
+            className={styles.headerLogo}
+            src={scBadgeUrl}
+            alt=""
+            aria-hidden
+            draggable={false}
+          />
+        </div>
+      </header>
+      <span
+        className={styles.bottomCat}
         aria-hidden
         style={{
           WebkitMaskImage: `url(${catSilhouetteUrl})`,
           maskImage: `url(${catSilhouetteUrl})`,
         }}
       />
-      <header className={styles.header}>
-        <div className={styles.headerInner}>
-          <i className="ti ti-circuit-board" aria-hidden />
-          <span className={styles.brand}>Rig Planner</span>
-        </div>
-      </header>
       <main className={styles.body}>
         <h1 className={styles.title}>Your Rigs</h1>
         {status === 'loading' ||
@@ -256,23 +262,20 @@ export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
           <footer className={styles.brandFooter}>
             <button
               type="button"
-              className={styles.brandCard}
+              className={styles.newRigCard}
               onClick={onOpenAbout}
               aria-label="About Stray Circuits"
             >
-              <img
-                className={styles.brandBadge}
-                src={scBadgeUrl}
-                alt=""
+              <span
+                className={`${styles.newRigThumb} ${styles.aboutThumb}`}
                 aria-hidden
-                draggable={false}
-              />
-              <span className={styles.brandText}>
-                <span className={styles.brandHeadline}>
-                  Rig Planner by Stray Circuits
-                </span>
-                <span className={styles.brandSub}>About &amp; links →</span>
+              >
+                <i className="ti ti-info-circle" />
               </span>
+              <div className={styles.newRigMeta}>
+                <div className={styles.newRigName}>About Stray Circuits</div>
+                <div className={styles.newRigSub}>Links &amp; info →</div>
+              </div>
             </button>
           </footer>
         ) : null}

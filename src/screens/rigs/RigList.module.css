@@ -5,46 +5,10 @@
   background: var(--bg);
 }
 
-/* Fixed cat silhouette watermark behind all content. pointer-events:none so
-   it never intercepts taps; opacity tuned to peek through gaps without
-   competing with rig cards. Themes via mask + currentColor-like fill. */
-.catWatermark {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: min(80vw, 600px);
-  aspect-ratio: 556 / 306;
-  background: var(--fg);
-  opacity: 0.06;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Dark mode loses more contrast at the same opacity — bump it so the cat
-   stays visible against the near-black background. */
-@media (prefers-color-scheme: dark) {
-  .catWatermark {
-    opacity: 0.12;
-  }
-}
-
-/* Lift real content above the watermark. */
-.header,
-.body {
-  position: relative;
-  z-index: 1;
-}
-
 .header {
   background: var(--surface);
   border-bottom: 0.5px solid var(--border);
-  padding: max(14px, env(safe-area-inset-top)) 18px 14px;
+  padding: max(14px, env(safe-area-inset-top)) 24px 14px;
   flex-shrink: 0;
 }
 
@@ -54,9 +18,25 @@
   gap: 12px;
 }
 
-.headerInner i {
-  font-size: 28px;
-  color: var(--primary);
+/* SC logo lives at the right edge of the header as a brand mark. Pure black
+   artwork; inverted in dark mode so it reads against the dark surface. */
+.headerLogo {
+  margin-left: auto;
+  height: 47px;
+  width: auto;
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  .headerLogo {
+    filter: invert(1);
+  }
+}
+
+@media (min-width: 720px) {
+  .headerLogo {
+    height: 56px;
+  }
 }
 
 /* Brand mark — Audiowide (Google Fonts) for a techy wordmark that
@@ -71,9 +51,6 @@
 }
 
 @media (min-width: 720px) {
-  .headerInner i {
-    font-size: 32px;
-  }
   .brand {
     font-size: 30px;
   }
@@ -81,6 +58,8 @@
 
 .body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   padding: 14px 14px max(14px, env(safe-area-inset-bottom));
   max-width: 720px;
   width: 100%;
@@ -104,6 +83,40 @@
     margin: 0 0 16px;
     color: var(--fg);
   }
+}
+
+/* Cat silhouette pinned just above the About card so it reads as perched
+   on top of the card. Fixed so it stays anchored as the rig list scrolls
+   past; pointer-events:none so it never intercepts taps. */
+.bottomCat {
+  position: fixed;
+  right: 24px;
+  bottom: 100px;
+  width: min(58vw, 360px);
+  aspect-ratio: 556 / 306;
+  background: var(--fg);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: bottom;
+  mask-position: bottom;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bottomCat {
+    opacity: 0.16;
+  }
+}
+
+/* Lift real content above the bottom cat. */
+.header,
+.body {
+  position: relative;
+  z-index: 1;
 }
 
 .empty {
@@ -329,6 +342,12 @@
   border: 0.5px solid var(--border-strong);
 }
 
+.aboutThumb {
+  background: var(--surface-alt);
+  color: var(--fg);
+  border: 0.5px solid var(--border-strong);
+}
+
 .importError {
   margin: 12px 0 0;
   color: var(--danger-fg);
@@ -354,82 +373,9 @@
   flex-shrink: 0;
 }
 
-/* Stray Circuits brand footer — single tap target opens the About screen.
-   Badge on the left, headline + sub in the middle, cat silhouette on the
-   right as a faint accent so the row reads as branded without crowding. */
+/* Stray Circuits brand footer — pushed to the bottom of the body so the
+   cat silhouette sits above it instead of overlapping. */
 .brandFooter {
-  margin-top: 28px;
+  margin-top: auto;
   padding-top: 20px;
-  border-top: 0.5px solid var(--border);
-}
-
-.brandCard {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font: inherit;
-  color: var(--fg);
-  text-align: left;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease;
-}
-
-.brandCard:hover {
-  background: var(--surface-alt);
-  border-color: var(--border-strong);
-}
-
-.brandCard:active {
-  transform: scale(0.99);
-}
-
-.brandBadge {
-  width: 56px;
-  height: 56px;
-  flex-shrink: 0;
-  display: block;
-}
-
-/* The icon-only logo ships as pure black artwork; invert it in dark mode
-   so it reads against the dark surface. */
-@media (prefers-color-scheme: dark) {
-  .brandBadge {
-    filter: invert(1);
-  }
-}
-
-.brandText {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.brandHeadline {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--fg);
-}
-
-.brandSub {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-@media (min-width: 720px) {
-  .brandBadge {
-    width: 64px;
-    height: 64px;
-  }
-  .brandHeadline {
-    font-size: 16px;
-  }
 }

@@ -29,6 +29,7 @@
         { "url": "https://*/*" },
         { "url": "http://*/*" }
       ]
-    }
+    },
+    "shell:default"
   ]
 }
