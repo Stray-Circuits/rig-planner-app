@@ -14,7 +14,12 @@ import {
   resolveBoardChoice,
   type BoardSelection,
 } from '../../components/boardPickerHelpers';
-import { FLOOR_STYLES, type FloorStyle } from '../../lib/floorStyle';
+import {
+  customFloorBackgroundStyle,
+  FLOOR_STYLES,
+  type CustomFloor,
+  type FloorStyle,
+} from '../../lib/floorStyle';
 import { Button, Sheet, TextField } from '../../ui';
 import styles from './SettingsSheet.module.css';
 
@@ -23,6 +28,7 @@ interface SettingsSheetProps {
   rig: Rig;
   placedCount: number;
   floorStyle: FloorStyle;
+  customFloor: CustomFloor;
   endpoints: ExternalEndpoint[];
   onClose: () => void;
   onRename: (name: string) => Promise<void>;
@@ -33,6 +39,7 @@ interface SettingsSheetProps {
     presetId: string | null,
   ) => Promise<void>;
   onChangeFloor: (style: FloorStyle) => void;
+  onChangeCustomFloor: (custom: CustomFloor) => void;
   onChangeJackSize: (jackSize: JackSize) => Promise<void>;
   onAddEndpoint: (kind: ExternalEndpointKind, label: string) => Promise<void>;
   onRemoveEndpoint: (endpointId: string) => Promise<void>;
@@ -82,11 +89,13 @@ export function SettingsSheet({
   rig,
   placedCount,
   floorStyle,
+  customFloor,
   endpoints,
   onClose,
   onRename,
   onChangeBoard,
   onChangeFloor,
+  onChangeCustomFloor,
   onChangeJackSize,
   onAddEndpoint,
   onRemoveEndpoint,
@@ -472,11 +481,54 @@ export function SettingsSheet({
                   }`}
                   onClick={() => onChangeFloor(f.id)}
                 >
-                  <span className={styles.floorSwatch} aria-hidden />
+                  <span
+                    className={styles.floorSwatch}
+                    aria-hidden
+                    {...(f.id === 'custom'
+                      ? { style: customFloorBackgroundStyle(customFloor) }
+                      : {})}
+                  />
                   <span className={styles.floorChipLabel}>{f.label}</span>
                 </button>
               ))}
             </div>
+            {floorStyle === 'custom' ? (
+              <div className={styles.customFloorControls}>
+                <label className={styles.customFloorRow}>
+                  <span className={styles.customFloorRowLabel}>Color</span>
+                  <input
+                    type="color"
+                    className={styles.colorInput}
+                    value={customFloor.color}
+                    onChange={(e) =>
+                      onChangeCustomFloor({
+                        ...customFloor,
+                        color: e.target.value,
+                      })
+                    }
+                    aria-label="Custom floor color"
+                  />
+                </label>
+                <label className={styles.customFloorRow}>
+                  <span className={styles.customFloorRowLabel}>Grain</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    className={styles.grainSlider}
+                    value={customFloor.grain}
+                    onChange={(e) =>
+                      onChangeCustomFloor({
+                        ...customFloor,
+                        grain: Number(e.target.value),
+                      })
+                    }
+                    aria-label="Custom floor grain"
+                  />
+                </label>
+              </div>
+            ) : null}
           </div>
 
           <div className={styles.field}>

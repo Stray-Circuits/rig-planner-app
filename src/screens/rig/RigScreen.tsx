@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import type { Pedal, PlacedPedal, Port, Rig } from '../../data/schema';
@@ -21,8 +22,12 @@ import {
   maxCablesForConnector,
 } from '../../lib/signalChainWarnings';
 import {
+  type CustomFloor,
+  customFloorBackgroundStyle,
   type FloorStyle,
+  readCustomFloor,
   readFloorStyle,
+  writeCustomFloor,
   writeFloorStyle,
 } from '../../lib/floorStyle';
 import type { Connection, ExternalEndpoint } from '../../data/schema';
@@ -98,9 +103,16 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const [floorStyle, setFloorStyle] = useState<FloorStyle>(() =>
     readFloorStyle(),
   );
+  const [customFloor, setCustomFloor] = useState<CustomFloor>(() =>
+    readCustomFloor(),
+  );
   const changeFloor = (next: FloorStyle) => {
     setFloorStyle(next);
     writeFloorStyle(next);
+  };
+  const changeCustomFloor = (next: CustomFloor) => {
+    setCustomFloor(next);
+    writeCustomFloor(next);
   };
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);
@@ -503,6 +515,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         placed={placed}
         pedalsById={pedalsById}
         floorStyle={floorStyle}
+        customFloor={customFloor}
         onDragMove={dragMove}
         onDragCommit={(id) => {
           void commitMove(id);
@@ -711,10 +724,12 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
         rig={rig}
         placedCount={placed.length}
         floorStyle={floorStyle}
+        customFloor={customFloor}
         endpoints={endpoints}
         onClose={() => setSettingsOpen(false)}
         onRename={(name) => renameRig(rig.id, name)}
         onChangeFloor={changeFloor}
+        onChangeCustomFloor={changeCustomFloor}
         onAddEndpoint={async (kind, label) => {
           await addEndpoint(rig.id, kind, label);
         }}
@@ -786,6 +801,7 @@ interface CanvasAreaProps {
   placed: PlacedPedal[];
   pedalsById: Map<string, Pedal>;
   floorStyle: FloorStyle;
+  customFloor: CustomFloor;
   onDragMove: (placedId: string, xIn: number, yIn: number) => void;
   onDragCommit: (placedId: string) => void;
   onRequestActions: (placedId: string) => void;
@@ -807,6 +823,7 @@ function CanvasArea({
   placed,
   pedalsById,
   floorStyle,
+  customFloor,
   onDragMove,
   onDragCommit,
   onRequestActions,
@@ -909,11 +926,16 @@ function CanvasArea({
           ? styles.floorCarpetBeige
           : floorStyle === 'wood'
             ? styles.floorWood
-            : styles.floorSidewalk;
+            : floorStyle === 'sidewalk'
+              ? styles.floorSidewalk
+              : '';
+  const floorInlineStyle: CSSProperties | null =
+    floorStyle === 'custom' ? customFloorBackgroundStyle(customFloor) : null;
 
   return (
     <div
-      className={`${styles.canvasArea} ${floorClass}`}
+      className={`${styles.canvasArea} ${floorClass}`.trim()}
+      {...(floorInlineStyle ? { style: floorInlineStyle } : {})}
       ref={wrapRefCallback}
       onPointerDown={pointerHandlers.onPointerDown}
       onPointerMove={pointerHandlers.onPointerMove}

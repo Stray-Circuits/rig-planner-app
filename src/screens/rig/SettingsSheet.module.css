@@ -214,6 +214,61 @@
     #bcbcb6;
 }
 
+/* Inline style on the swatch element overrides this fallback once the
+   user has picked a color; the fallback keeps the chip readable before
+   then. */
+.floorSwatch_custom .floorSwatch {
+  background: #8a8a8a;
+}
+
+.customFloorControls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--surface-alt);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.customFloorRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.customFloorRowLabel {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 56px;
+}
+
+.colorInput {
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.colorInput::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.colorInput::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.grainSlider {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--primary);
+}
+
 /* ---------- Jack size picker ---------- */
 .jackChips {
   display: flex;
