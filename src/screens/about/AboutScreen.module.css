@@ -84,8 +84,9 @@
 }
 
 /* Base sizing for the SC wordmark frame so the SVG <img> has a width to
-   resolve against in both light + dark mode. Light mode adds a dark
-   backing card so the light-on-transparent wordmark reads. */
+   resolve against in both light + dark mode. The wordmark ships as
+   light-on-transparent; in light mode we invert it so the lettering
+   reads on the light background without needing a backing card. */
 .logoFrame {
   width: min(100%, 360px);
   display: block;
@@ -98,11 +99,8 @@
 }
 
 @media (prefers-color-scheme: light) {
-  .logoFrame {
-    background: #1c1d22;
-    border-radius: var(--radius-md);
-    padding: 14px 18px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  .logo {
+    filter: invert(1);
   }
 }
 

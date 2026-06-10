@@ -1,10 +1,13 @@
 /**
  * Open an external URL in the user's default browser.
  *
- * Under Tauri, `target="_blank"` either no-ops or opens an in-app webview
- * depending on the platform. We route through `@tauri-apps/plugin-shell`'s
- * `open()` so links actually hand off to the OS. In `pnpm dev` (no Tauri)
- * we fall back to `window.open(url, '_blank')`.
+ * Routes through `@tauri-apps/plugin-opener` under Tauri so links hand
+ * off to the OS browser on every target; falls back to `window.open`
+ * in browser dev. Note: `tauri-plugin-shell`'s `open` was deprecated
+ * in 2.1.0 and its Rust command is not platform-gated, so on Android
+ * it tried to spawn `xdg-open` and failed with "Scoped shell IO error:
+ * No such file or directory". `tauri-plugin-opener` is the documented
+ * replacement and dispatches `Intent.ACTION_VIEW` natively on Android.
  */
 function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -12,19 +15,9 @@ function isTauri(): boolean {
 
 export async function openExternal(url: string): Promise<void> {
   if (isTauri()) {
-    try {
-      const { open } = await import('@tauri-apps/plugin-shell');
-      await open(url);
-      return;
-    } catch (err) {
-      // Debug aid: surface the failure inline so Android testers see
-      // what plugin-shell::open() is rejecting with. Removed once we
-      // know the cause.
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error('[openExternal] plugin-shell open() failed', err);
-      alert(`Could not open link:\n${url}\n\n${msg}`);
-      throw err;
-    }
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    await openUrl(url);
+    return;
   }
   window.open(url, '_blank', 'noopener,noreferrer');
 }

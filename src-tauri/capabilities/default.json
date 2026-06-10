@@ -30,6 +30,6 @@
         { "url": "http://*/*" }
       ]
     },
-    "shell:default"
+    "opener:default"
   ]
 }

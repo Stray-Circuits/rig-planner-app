@@ -3,9 +3,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Android 11+ requires apps to declare the implicit intents they
-         dispatch to other apps. plugin-shell::open() fires ACTION_VIEW
-         on http/https URLs, so without these queries the open() call
-         no-ops silently and the About-page links do nothing. -->
+         dispatch to other apps. plugin-opener::openUrl() fires
+         ACTION_VIEW on http/https URLs, so without these queries the
+         open call cannot resolve a target activity. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
