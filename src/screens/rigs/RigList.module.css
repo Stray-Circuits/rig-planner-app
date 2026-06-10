@@ -102,7 +102,11 @@
   -webkit-mask-size: contain;
   mask-size: contain;
   opacity: 0.42;
-  z-index: 0;
+  /* Lifted above the body's stacking context (z-index:1) so the
+     element actually receives pointer events; the cat geometrically
+     sits above the about card and outside the rig grid's range, so
+     it doesn't block anything else. */
+  z-index: 2;
   -webkit-tap-highlight-color: transparent;
 }
 
