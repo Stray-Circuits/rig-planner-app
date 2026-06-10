@@ -198,3 +198,9 @@ Chrome DevTools attaches to the in-app webview via
   share `src-tauri/target/`. Stop any container build / `pnpm tauri:dev`
   before launching `pnpm tauri:android:dev`.
 
+## Security
+
+CI runs cargo-deny, `pnpm audit`, license checks, and CodeQL on every PR (see `.github/workflows/security.yml` + `codeql.yml`). Details and the suppression playbook live in `CLAUDE.md` under "Security".
+
+**One open Dependabot alert is accepted, not actionable.** GHSA-wrw7-89jp-8q8g (glib `< 0.20` unsoundness) reaches us transitively through Tauri's Linux GTK backend (`tauri → wry/muda/webkit2gtk → gtk 0.18 → glib 0.18.5`). The gtk3-rs bindings are upstream-marked UNMAINTAINED and Tauri 2.x's Linux backend is still on that stack, so there's no patched path from our side. glib is Linux-only (`cfg(target_os = "linux")`); we ship macOS, iOS, and Android, none of which compile this code. **Re-check after every Tauri bump** — run `(cd src-tauri && cargo tree -i glib --target all)` and dismiss the alert if glib is now ≥ 0.20.
+

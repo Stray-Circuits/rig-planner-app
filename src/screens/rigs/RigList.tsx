@@ -10,7 +10,16 @@ import { RigThumb } from '../../canvas/RigThumb';
 import { AddPedalWizard } from '../add-pedal/AddPedalWizard';
 import { PedalLibrarySheet } from '../rig/PedalLibrarySheet';
 import { useSignalChainStore } from '../../stores/signalChainStore';
-import { Button, Sheet, SheetItem, SpinnerOverlay, TextField } from '../../ui';
+import {
+  Button,
+  Sheet,
+  SheetItem,
+  SpinnerOverlay,
+  TextField,
+  Toast,
+} from '../../ui';
+import scBadgeUrl from '../../assets/brand/StrayCircuits-icon-only.svg';
+import catSilhouetteUrl from '../../assets/brand/cat-silhouette.svg';
 import styles from './RigList.module.css';
 
 const EMPTY_PLACED: never[] = [];
@@ -18,9 +27,10 @@ const EMPTY_PLACED: never[] = [];
 interface RigListProps {
   onOpenRig: (rig: Rig) => void;
   onCreateRig: () => void;
+  onOpenAbout?: () => void;
 }
 
-export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
+export function RigList({ onOpenRig, onCreateRig, onOpenAbout }: RigListProps) {
   const rigs = useRigsStore((s) => s.rigs);
   const status = useRigsStore((s) => s.status);
   const loadRigs = useRigsStore((s) => s.loadRigs);
@@ -37,6 +47,33 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
 
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // Cat-silhouette easter egg: count taps within a single visit, fire a
+  // toast at 5 / 20 / 100, then reset after the discount fires.
+  const catTapsRef = useRef(0);
+  const [catToast, setCatToast] = useState<{
+    key: number;
+    message: string;
+    duration: number;
+  } | null>(null);
+
+  const handleCatTap = () => {
+    catTapsRef.current += 1;
+    const n = catTapsRef.current;
+    if (n === 5) {
+      setCatToast({ key: Date.now(), message: 'mew', duration: 2000 });
+    } else if (n === 20) {
+      setCatToast({ key: Date.now(), message: 'prrrrrrr', duration: 2500 });
+    } else if (n === 100) {
+      setCatToast({
+        key: Date.now(),
+        message: 'Meow! Discount code: allthepets',
+        duration: 5000,
+      });
+      catTapsRef.current = 0;
+    }
+  };
+
   const [importing, setImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<{
     exp: RigExport;
@@ -126,10 +163,25 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
     <div className={styles.screen}>
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <i className="ti ti-circuit-board" aria-hidden />
           <span className={styles.brand}>Rig Planner</span>
+          <img
+            className={styles.headerLogo}
+            src={scBadgeUrl}
+            alt=""
+            aria-hidden
+            draggable={false}
+          />
         </div>
       </header>
+      <span
+        className={styles.bottomCat}
+        aria-hidden
+        onClick={handleCatTap}
+        style={{
+          WebkitMaskImage: `url(${catSilhouetteUrl})`,
+          maskImage: `url(${catSilhouetteUrl})`,
+        }}
+      />
       <main className={styles.body}>
         <h1 className={styles.title}>Your Rigs</h1>
         {status === 'loading' ||
@@ -240,6 +292,28 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
             {importError}
           </p>
         ) : null}
+
+        {status === 'ready' && onOpenAbout ? (
+          <footer className={styles.brandFooter}>
+            <button
+              type="button"
+              className={styles.newRigCard}
+              onClick={onOpenAbout}
+              aria-label="About Stray Circuits"
+            >
+              <span
+                className={`${styles.newRigThumb} ${styles.aboutThumb}`}
+                aria-hidden
+              >
+                <i className="ti ti-info-circle" />
+              </span>
+              <div className={styles.newRigMeta}>
+                <div className={styles.newRigName}>About Stray Circuits</div>
+                <div className={styles.newRigSub}>Links &amp; info →</div>
+              </div>
+            </button>
+          </footer>
+        ) : null}
       </main>
 
       <Sheet
@@ -334,6 +408,15 @@ export function RigList({ onOpenRig, onCreateRig }: RigListProps) {
             // pedal they just added (or edited) land in the list.
             setLibraryOpen(true);
           }}
+        />
+      ) : null}
+
+      {catToast ? (
+        <Toast
+          key={catToast.key}
+          message={catToast.message}
+          duration={catToast.duration}
+          onDismiss={() => setCatToast(null)}
         />
       ) : null}
     </div>
