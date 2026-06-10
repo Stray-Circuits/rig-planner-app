@@ -2,14 +2,18 @@
 #
 # Layers the Tauri toolchain on top of Cirrus Labs' maintained Android SDK
 # image. The base provides JDK, the Android cmdline-tools, platform-tools,
-# platforms;android-34, build-tools;34.0.0, and an already-accepted license
+# platforms;android-36, build-tools;36.0.0, and an already-accepted license
 # bundle — none of which we have to reinstall. We add the NDK (not in the
 # base), Node + pnpm, and Rust + Android targets.
+#
+# scripts/check-container-pins.mjs enforces that the base image SDK level
+# matches src-tauri/gen/android/app/build.gradle.kts compileSdk, and that
+# NODE_VERSION / RUST_VERSION below satisfy the project's actual floors.
 #
 # The base image is multi-arch (linux/arm64 + linux/amd64) so this runs
 # native on both Apple silicon and Intel hosts.
 
-FROM ghcr.io/cirruslabs/android-sdk:34
+FROM ghcr.io/cirruslabs/android-sdk:36
 
 ARG NODE_VERSION=22.12.0
 ARG PNPM_VERSION=9.15.0
