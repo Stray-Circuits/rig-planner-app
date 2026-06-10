@@ -24,21 +24,25 @@ function cmp(a, b) {
 function satisfies(version, range) {
   const v = parseVersion(version);
   if (!v) throw new Error(`Cannot parse version "${version}"`);
-  return range.split('||').map((s) => s.trim()).some((clause) => {
-    if (clause.startsWith('>=')) {
-      const min = parseVersion(clause.slice(2).trim());
-      return min !== null && cmp(v, min) >= 0;
-    }
-    if (clause.startsWith('^')) {
-      const min = parseVersion(clause.slice(1).trim());
-      if (min === null) return false;
-      const upper = [min[0] + 1, 0, 0];
-      return cmp(v, min) >= 0 && cmp(v, upper) < 0;
-    }
-    const exact = parseVersion(clause);
-    if (exact === null) throw new Error(`Unsupported range clause "${clause}"`);
-    return cmp(v, exact) === 0;
-  });
+  return range
+    .split('||')
+    .map((s) => s.trim())
+    .some((clause) => {
+      if (clause.startsWith('>=')) {
+        const min = parseVersion(clause.slice(2).trim());
+        return min !== null && cmp(v, min) >= 0;
+      }
+      if (clause.startsWith('^')) {
+        const min = parseVersion(clause.slice(1).trim());
+        if (min === null) return false;
+        const upper = [min[0] + 1, 0, 0];
+        return cmp(v, min) >= 0 && cmp(v, upper) < 0;
+      }
+      const exact = parseVersion(clause);
+      if (exact === null)
+        throw new Error(`Unsupported range clause "${clause}"`);
+      return cmp(v, exact) === 0;
+    });
 }
 
 const dockerfile = read('scripts/android/Dockerfile');
@@ -48,25 +52,35 @@ const arg = (name) => {
   return m[1];
 };
 const baseImageSdk = (() => {
-  const m = dockerfile.match(/^FROM\s+ghcr\.io\/cirruslabs\/android-sdk:(\d+)/m);
-  if (!m) throw new Error('Cannot find FROM ghcr.io/cirruslabs/android-sdk:NN in Dockerfile');
+  const m = dockerfile.match(
+    /^FROM\s+ghcr\.io\/cirruslabs\/android-sdk:(\d+)/m,
+  );
+  if (!m)
+    throw new Error(
+      'Cannot find FROM ghcr.io/cirruslabs/android-sdk:NN in Dockerfile',
+    );
   return Number(m[1]);
 })();
 
 const containerNode = arg('NODE_VERSION');
 const containerRust = arg('RUST_VERSION');
 
-const viteEngines = JSON.parse(read('node_modules/vite/package.json')).engines?.node;
-if (!viteEngines) throw new Error('vite is not installed or declares no engines.node');
+const viteEngines = JSON.parse(read('node_modules/vite/package.json')).engines
+  ?.node;
+if (!viteEngines)
+  throw new Error('vite is not installed or declares no engines.node');
 
 const cargoToml = read('src-tauri/Cargo.toml');
 const cargoRustMin = cargoToml.match(/^rust-version\s*=\s*"([\d.]+)"/m)?.[1];
-if (!cargoRustMin) throw new Error('Cannot find rust-version in src-tauri/Cargo.toml');
+if (!cargoRustMin)
+  throw new Error('Cannot find rust-version in src-tauri/Cargo.toml');
 
 const appGradle = read('src-tauri/gen/android/app/build.gradle.kts');
 const compileSdk = Number(appGradle.match(/compileSdk\s*=\s*(\d+)/)?.[1]);
 if (!Number.isFinite(compileSdk)) {
-  throw new Error('Cannot find compileSdk in src-tauri/gen/android/app/build.gradle.kts');
+  throw new Error(
+    'Cannot find compileSdk in src-tauri/gen/android/app/build.gradle.kts',
+  );
 }
 
 const errors = [];
@@ -101,6 +115,10 @@ if (errors.length > 0) {
 }
 
 console.log('Android build container pins OK:');
-console.log(`  NODE_VERSION=${containerNode} satisfies vite engines.node="${viteEngines}"`);
-console.log(`  RUST_VERSION=${containerRust} satisfies Cargo.toml rust-version=${cargoRustMin}`);
+console.log(
+  `  NODE_VERSION=${containerNode} satisfies vite engines.node="${viteEngines}"`,
+);
+console.log(
+  `  RUST_VERSION=${containerRust} satisfies Cargo.toml rust-version=${cargoRustMin}`,
+);
 console.log(`  Base image SDK ${baseImageSdk} >= app compileSdk ${compileSdk}`);
