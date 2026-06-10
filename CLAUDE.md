@@ -134,3 +134,6 @@ Three layers, all defined under `.github/`:
 - Native secret scanning: dismiss false positives via the Security tab → Secret scanning alerts → "Close as" with a reason. For fixture strings that look secret-like, prefer rewriting the fixture over carrying a perpetual dismissal.
 
 **Repo-settings dependencies** (toggled in GitHub UI, not in this repo): secret scanning, push protection, Dependabot alerts, Dependabot security updates. These are required for the security model to hold; the workflows above complement them.
+
+**Known-accepted advisories** (left open intentionally; re-check when Tauri ships a new minor):
+- **GHSA-wrw7-89jp-8q8g / RUSTSEC-2024-0429** — unsoundness in `glib::VariantStrIter` (glib `< 0.20`). Pulled in transitively by `tauri → muda/wry/webkit2gtk → gtk 0.18 → glib 0.18.5`. The fix is in glib 0.20, but the gtk3-rs bindings (`gtk` crate) are upstream-marked UNMAINTAINED and Tauri 2.x's Linux backend is still on that stack — no patched path exists from our side. Risk is bounded because glib is Linux-only (`cfg(target_os = "linux")`) and we don't ship Linux binaries; macOS, iOS, and Android builds never compile this code. cargo-deny classifies it as `unsound` so CI stays green. **When bumping Tauri, re-run `cargo tree -i glib --target all` and dismiss the Dependabot alert if glib is now ≥ 0.20.**
