@@ -63,9 +63,9 @@ interface JackSizeOption {
  * keep-out rect was originally tuned for).
  */
 const JACK_SIZE_OPTIONS: readonly JackSizeOption[] = [
-  { id: 'small', label: 'Small', example: 'EBS / flat ribbon' },
-  { id: 'medium', label: 'Medium', example: 'Pancake / SC 228' },
-  { id: 'large', label: 'Large', example: 'Switchcraft 226' },
+  { id: 'small', label: 'Small', example: 'Flat ribbon' },
+  { id: 'medium', label: 'Medium', example: 'Pancake' },
+  { id: 'large', label: 'Large', example: 'Switchcraft' },
 ];
 
 /**
@@ -265,8 +265,55 @@ export function SettingsSheet({
     })();
   };
 
+  const footer =
+    view === 'main' ? (
+      <>
+        <button
+          type="button"
+          className={styles.deleteAction}
+          onClick={() => setView('confirmDelete')}
+        >
+          <i className="ti ti-trash" aria-hidden /> Delete
+        </button>
+        <div className={styles.footerGroup}>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleApply} disabled={saving}>
+            {saving ? 'Saving…' : 'Apply'}
+          </Button>
+        </div>
+      </>
+    ) : view === 'board' ? (
+      <>
+        <Button variant="ghost" onClick={() => setView('main')}>
+          Back
+        </Button>
+        <Button disabled={!pickerChoice} onClick={() => setView('main')}>
+          Use this board
+        </Button>
+      </>
+    ) : (
+      <>
+        <Button
+          variant="ghost"
+          onClick={() => setView('main')}
+          disabled={deleting}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          onClick={handleConfirmDelete}
+          disabled={deleting}
+        >
+          {deleting ? 'Deleting…' : 'Delete Rig'}
+        </Button>
+      </>
+    );
+
   return (
-    <Sheet open={open} onClose={onClose} title={sheetTitle}>
+    <Sheet open={open} onClose={onClose} title={sheetTitle} footer={footer}>
       {view === 'main' ? (
         <div className={styles.body}>
           <label className={styles.field}>
@@ -374,33 +421,11 @@ export function SettingsSheet({
             ) : (
               <Button
                 variant="secondary"
-                size="sm"
                 onClick={() => setShowAddEndpoint(true)}
               >
                 <i className="ti ti-plus" aria-hidden /> Add input or output
               </Button>
             )}
-          </div>
-
-          <div className={styles.field}>
-            <span className={styles.label}>Floor</span>
-            <div className={styles.floorChips} role="radiogroup">
-              {FLOOR_STYLES.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={floorStyle === f.id}
-                  className={`${styles.floorChip} ${styles[`floorSwatch_${f.id}`] ?? ''} ${
-                    floorStyle === f.id ? styles.floorChipActive : ''
-                  }`}
-                  onClick={() => onChangeFloor(f.id)}
-                >
-                  <span className={styles.floorSwatch} aria-hidden />
-                  <span className={styles.floorChipLabel}>{f.label}</span>
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className={styles.field}>
@@ -434,11 +459,33 @@ export function SettingsSheet({
           </div>
 
           <div className={styles.field}>
+            <span className={styles.label}>Floor</span>
+            <div className={styles.floorChips} role="radiogroup">
+              {FLOOR_STYLES.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={floorStyle === f.id}
+                  className={`${styles.floorChip} ${styles[`floorSwatch_${f.id}`] ?? ''} ${
+                    floorStyle === f.id ? styles.floorChipActive : ''
+                  }`}
+                  onClick={() => onChangeFloor(f.id)}
+                >
+                  <span className={styles.floorSwatch} aria-hidden />
+                  <span className={styles.floorChipLabel}>{f.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.field}>
             <span className={styles.label}>Backup &amp; Share</span>
             <div className={styles.backupRow}>
               <Button
                 variant="secondary"
-                size="sm"
+                fullWidth
+                className={styles.exportBtn}
                 onClick={handleExport}
                 disabled={exporting}
               >
@@ -454,25 +501,6 @@ export function SettingsSheet({
           </div>
 
           {error ? <p className={styles.error}>{error}</p> : null}
-
-          <div className={styles.actions}>
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleApply} disabled={saving}>
-              {saving ? 'Saving…' : 'Apply'}
-            </Button>
-          </div>
-
-          <div className={styles.dangerZone}>
-            <button
-              type="button"
-              className={styles.deleteRigBtn}
-              onClick={() => setView('confirmDelete')}
-            >
-              <i className="ti ti-trash" aria-hidden /> Delete Rig
-            </button>
-          </div>
         </div>
       ) : view === 'board' ? (
         <div className={styles.pickerBody}>
@@ -486,14 +514,6 @@ export function SettingsSheet({
             onCustomD={setCustomD}
             onCustomStyle={setCustomStyle}
           />
-          <div className={styles.actions}>
-            <Button variant="ghost" onClick={() => setView('main')}>
-              Back
-            </Button>
-            <Button disabled={!pickerChoice} onClick={() => setView('main')}>
-              Use this board
-            </Button>
-          </div>
         </div>
       ) : view === 'confirmDelete' ? (
         <div className={styles.body}>
@@ -509,22 +529,6 @@ export function SettingsSheet({
             </p>
           ) : null}
           {error ? <p className={styles.error}>{error}</p> : null}
-          <div className={styles.actions}>
-            <Button
-              variant="ghost"
-              onClick={() => setView('main')}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={handleConfirmDelete}
-              disabled={deleting}
-            >
-              {deleting ? 'Deleting…' : 'Delete Rig'}
-            </Button>
-          </div>
         </div>
       ) : null}
     </Sheet>

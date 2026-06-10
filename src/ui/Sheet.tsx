@@ -19,6 +19,12 @@ interface SheetProps {
    * stay anchored to the panel corner regardless of scroll position.
    */
   floatingActions?: ReactNode;
+  /**
+   * Action row pinned to the bottom of the panel below the scrolling body.
+   * Use for primary modal actions (Cancel / Apply / Delete) so they stay
+   * visible even when the body scrolls.
+   */
+  footer?: ReactNode;
   /** Hint for visual placement on desktop ("center" | "anchored") */
   desktopPlacement?: 'center' | 'anchored';
 }
@@ -29,6 +35,7 @@ export function Sheet({
   title,
   children,
   floatingActions,
+  footer,
   desktopPlacement = 'center',
 }: SheetProps) {
   const lastActive = useRef<Element | null>(null);
@@ -83,6 +90,7 @@ export function Sheet({
       >
         {title ? <div className={styles.title}>{title}</div> : null}
         <div className={styles.body}>{children}</div>
+        {footer ? <div className={styles.footer}>{footer}</div> : null}
         {floatingActions ? (
           <div className={styles.floatingActions}>{floatingActions}</div>
         ) : null}
