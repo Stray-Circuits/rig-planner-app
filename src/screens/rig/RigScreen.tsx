@@ -841,6 +841,7 @@ function CanvasArea({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<BoardCanvasHandle | null>(null);
   const [pxPerInch, setPxPerInch] = useState(18);
+  const [belowBoardSpacePx, setBelowBoardSpacePx] = useState(92);
   const [chipStripHeight, setChipStripHeight] = useState(0);
   const { viewport, pointerHandlers, attachWheel, reset, setScale } =
     useViewport({
@@ -867,7 +868,14 @@ function CanvasArea({
       const availH = el.clientHeight - vertReserve * 2;
       if (availW <= 0 || availH <= 0) return;
       const px = Math.min(availW / rig.widthIn, availH / rig.depthIn);
-      setPxPerInch(Math.max(6, Math.min(80, px)));
+      const clampedPx = Math.max(6, Math.min(80, px));
+      setPxPerInch(clampedPx);
+      // Actual empty floor below the board at zoom=1. The wrap is
+      // flex-centered in canvasArea, so it's (clientHeight - heightPx) / 2.
+      // Drives the easter-egg cat's vertical offset (she must sit past
+      // this much to stay off-screen at default zoom).
+      const heightPx = rig.depthIn * clampedPx;
+      setBelowBoardSpacePx(Math.max((el.clientHeight - heightPx) / 2, 0));
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -969,6 +977,7 @@ function CanvasArea({
           unconnectedRequired={unconnectedRequired}
           onPedalTap={onPedalTap}
           onEndpointTap={onEndpointTap}
+          bottomReservePx={belowBoardSpacePx}
         />
       </div>
       {viewport.scale !== 1 || viewport.panX !== 0 || viewport.panY !== 0 ? (
