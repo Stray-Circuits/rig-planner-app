@@ -140,6 +140,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     'library',
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [chainMode, setChainMode] = useState(false);
   const [armed, setArmed] = useState<Armed | null>(null);
   // Legacy aliases — `armedPort` is the pedal-port view, used by the
@@ -500,6 +501,47 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     closeActions();
   };
 
+  const handleShare = () => {
+    if (sharing) return;
+    setSharing(true);
+    void (async () => {
+      try {
+        const [{ composeRigSnapshot }, { saveBinaryFile }] = await Promise.all([
+          import('../../lib/rigSnapshot'),
+          import('../../lib/fileDownload'),
+        ]);
+        const { blob } = await composeRigSnapshot({
+          rig,
+          placed,
+          pedalsById,
+          connections,
+          endpoints,
+        });
+        const stem =
+          rig.name
+            .trim()
+            .replace(/[/\\:*?"<>|]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'rig';
+        const date = new Date().toISOString().slice(0, 10);
+        const result = await saveBinaryFile({
+          suggestedFilename: `${stem}-${date}.png`,
+          blob,
+          filters: [{ name: 'PNG image', extensions: ['png'] }],
+        });
+        if (!result.cancelled) setNotice('Rig image saved.');
+      } catch (err) {
+        setNotice(
+          err instanceof Error
+            ? `Share failed: ${err.message}`
+            : 'Share failed.',
+        );
+      } finally {
+        setSharing(false);
+      }
+    })();
+  };
+
   const showLoadingOverlay = pedalsStatus === 'loading' || !pedalImagesReady;
 
   return (
@@ -542,6 +584,18 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           </button>
         </div>
         <div className={styles.fabTopRight}>
+          <button
+            type="button"
+            className={styles.fab}
+            aria-label="Share rig as image"
+            onClick={handleShare}
+            disabled={sharing}
+          >
+            <i
+              className={sharing ? 'ti ti-loader-2' : 'ti ti-share'}
+              aria-hidden
+            />
+          </button>
           <button
             type="button"
             className={styles.fab}

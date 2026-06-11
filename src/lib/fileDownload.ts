@@ -104,6 +104,45 @@ function downloadTextFileViaBlob(
   mimeType: string,
 ): void {
   const blob = new Blob([text], { type: mimeType });
+  downloadBlob(filename, blob);
+}
+
+interface SaveBinaryFileOptions {
+  /** Suggested filename shown in the save dialog. */
+  suggestedFilename: string;
+  /** File contents. */
+  blob: Blob;
+  /** Dialog file-type filters. Honoured under Tauri only. */
+  filters?: { name: string; extensions: string[] }[];
+}
+
+/**
+ * Save a binary Blob to a file the user picks. Same routing as
+ * `saveTextFile` (Tauri plugin-dialog + plugin-fs writeFile under the
+ * shell; `<a download>` Blob URL fallback in the browser).
+ *
+ * Used by the rig Share PNG export — see src/lib/rigSnapshot.ts.
+ */
+export async function saveBinaryFile(
+  opts: SaveBinaryFileOptions,
+): Promise<SaveTextFileResult> {
+  if (isTauri()) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    const path = await save({
+      defaultPath: opts.suggestedFilename,
+      ...(opts.filters ? { filters: opts.filters } : {}),
+    });
+    if (path === null) return { cancelled: true, path: null };
+    const bytes = new Uint8Array(await opts.blob.arrayBuffer());
+    await writeFile(path, bytes);
+    return { cancelled: false, path };
+  }
+  downloadBlob(opts.suggestedFilename, opts.blob);
+  return { cancelled: false, path: null };
+}
+
+function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   try {
     const a = document.createElement('a');
