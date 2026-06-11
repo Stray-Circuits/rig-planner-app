@@ -28,6 +28,7 @@
     "android:container:image": "scripts/android/build.sh build-image",
     "android:container:init": "scripts/android/build.sh init",
     "android:container:build": "scripts/android/build.sh build",
+    "android:container:build:release": "scripts/android/build.sh build --release",
     "android:container:shell": "scripts/android/build.sh shell",
     "android:container:clean": "scripts/android/build.sh clean",
     "test": "vitest",

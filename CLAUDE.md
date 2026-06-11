@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Production web build | `pnpm build` |
 | Native installer (Tauri) | `pnpm tauri:build` |
 | Android debug APK (containerized, no host SDK) | `pnpm android:container:build` |
+| Android signed release APK + AAB (containerized) | `pnpm android:container:build:release` |
 | Android container shell (debug toolchain) | `pnpm android:container:shell` |
 | Rebuild Android container image | `pnpm android:container:image` |
 
@@ -88,6 +89,13 @@ iOS / Android entry points (`pnpm tauri:ios:dev`, `pnpm tauri:android:dev`) requ
 - The repo's `pnpm-workspace.yaml` has `packages: []` *intentionally* — it's not a real workspace, the file exists to carry `allowBuilds`/`storeDir`/`verifyDepsBeforeRun`. pnpm 9.15+ requires `packages:` to parse the file. Don't remove the line.
 
 **Tauri Android requires `version >= 0.0.1`** in `src-tauri/tauri.conf.json`. The default `0.0.0` is rejected at build time.
+
+**Android release signing.** `pnpm android:container:build:release` produces a signed APK + AAB. Two host artifacts must exist:
+
+- **Keystore** — PKCS12 file at `~/.android/keystores/rig-planner-release.p12` (override the directory via `RIG_PLANNER_ANDROID_KEYSTORE_DIR`). Generated out-of-band with `keytool -genkeypair` (RSA 4096, validity ≥ 2033 for Play Store). **Never commit.** Lose the file or its passwords and you can never publish an update under the same Play Store listing — back both up to a password manager.
+- **`src-tauri/gen/android/key.properties`** — gitignored. Holds `storeFile=/keystore/<name>.p12` (container path — `build.sh` bind-mounts `${KEYSTORE_DIR}` read-only at `/keystore` when `--release` is set), plus `storePassword`, `keyAlias`, `keyPassword`. Gradle (`src-tauri/gen/android/app/build.gradle.kts`) reads this file at configure time; absence makes the release variant build unsigned. The properties file references the keystore via its in-container path so it stays portable across hosts — only the mount target needs to match.
+
+AAB output lands at `src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab` — that's the file you upload to Play Console. The APK at `apk/universal/release/` is the sideload-friendly twin.
 
 ## Strict TS — what bites
 
