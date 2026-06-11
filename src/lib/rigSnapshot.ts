@@ -60,7 +60,7 @@ const CHIP_BORDER = '#d4d4d8';
 const WATERMARK_HEIGHT_PX = 72;
 const WATERMARK_TITLE_FONT_SIZE = 40;
 const WATERMARK_TITLE_FONT = `400 ${WATERMARK_TITLE_FONT_SIZE}px Audiowide, ui-rounded, "SF Pro Rounded", system-ui, sans-serif`;
-const WATERMARK_LOGO_HEIGHT_PX = 36;
+const WATERMARK_LOGO_HEIGHT_PX = WATERMARK_TITLE_FONT_SIZE;
 const WATERMARK_GAP_PX = 16;
 const WATERMARK_INSET_X_PX = 8;
 const WATERMARK_BASELINE_INSET_PX = 12;
@@ -743,9 +743,22 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/**
+ * Cap the wait on `document.fonts.load` so we don't hang the share flow
+ * if Google Fonts is slow or blocked. Anecdotally on the Android APK a
+ * cold-start share could sit for 10–30 s waiting on the Audiowide font
+ * fetch with no timeout. After the deadline the canvas falls back to the
+ * next family in the stack ("SF Pro Rounded" / system-ui).
+ */
+const FONT_LOAD_TIMEOUT_MS = 1200;
 async function ensureFontLoaded(font: string): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return;
-  await document.fonts.load(font);
+  await Promise.race([
+    document.fonts.load(font),
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, FONT_LOAD_TIMEOUT_MS);
+    }),
+  ]);
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {

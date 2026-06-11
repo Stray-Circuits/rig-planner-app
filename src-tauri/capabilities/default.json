@@ -34,6 +34,8 @@
         { "url": "http://*/*" }
       ]
     },
-    "opener:default"
+    "opener:default",
+    "sharekit:default",
+    "sharekit:allow-share-file"
   ]
 }

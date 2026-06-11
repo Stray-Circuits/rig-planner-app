@@ -152,18 +152,31 @@ interface ShareOrSaveBinaryFileOptions extends SaveBinaryFileOptions {
 }
 
 /**
- * Hand a binary file to the OS share sheet when supported (mobile WebViews
- * and Windows WebView2 expose `navigator.share` with file support), and
- * otherwise fall through to {@link saveBinaryFile} — Tauri's native save
- * dialog on desktop, `<a download>` Blob URL in browser dev.
+ * Hand a binary file to the OS share sheet, with platform-appropriate
+ * routing:
  *
- * The share path is what most mobile users expect (pick "Messages",
- * "Save to Files", AirDrop, etc.); on desktop a save dialog is the more
- * familiar pattern, which is what the fallback provides.
+ *  - Tauri (Android/iOS/macOS/Windows): write to app cache + invoke
+ *    `tauri-plugin-sharekit`'s native share action (ACTION_SEND chooser
+ *    on Android, UIActivityViewController on iOS, NSSharingServicePicker
+ *    on macOS, Windows DataTransferManager).
+ *  - Browser with file-capable `navigator.share`: use the Web Share API.
+ *  - Anything else (Tauri Linux, browser without share support): fall
+ *    through to {@link saveBinaryFile} so the user still gets the file.
+ *
+ * We can't rely on `navigator.share` inside the Tauri WebView — system
+ * WebViews on Android often expose it but report `canShare({ files })`
+ * as false, so the call short-circuits to the save path with no visible
+ * picker. The plugin route uses the native intent directly and avoids
+ * that ambiguity.
  */
 export async function shareOrSaveBinaryFile(
   opts: ShareOrSaveBinaryFileOptions,
 ): Promise<SaveTextFileResult> {
+  if (isTauri()) {
+    const shared = await tryShareViaSharekit(opts);
+    if (shared !== 'unsupported') return shared;
+    return saveBinaryFile(opts);
+  }
   if (typeof navigator !== 'undefined' && 'share' in navigator) {
     const file = new File([opts.blob], opts.suggestedFilename, {
       type: opts.mimeType ?? opts.blob.type,
@@ -178,8 +191,6 @@ export async function shareOrSaveBinaryFile(
         });
         return { cancelled: false, path: null };
       } catch (err) {
-        // The standard cancel/dismiss result is AbortError — treat as a
-        // user cancellation rather than an error.
         if (err instanceof Error && err.name === 'AbortError') {
           return { cancelled: true, path: null };
         }
@@ -190,6 +201,44 @@ export async function shareOrSaveBinaryFile(
     }
   }
   return saveBinaryFile(opts);
+}
+
+/**
+ * Save the blob to app cache and ask sharekit to share it. Returns
+ * `'unsupported'` if the plugin or platform isn't available (Linux
+ * desktop returns UnsupportedPlatform), so the caller can fall through
+ * to {@link saveBinaryFile}.
+ */
+async function tryShareViaSharekit(
+  opts: ShareOrSaveBinaryFileOptions,
+): Promise<SaveTextFileResult | 'unsupported'> {
+  try {
+    const { writeFile, mkdir } = await import('@tauri-apps/plugin-fs');
+    const { appCacheDir, join } = await import('@tauri-apps/api/path');
+    const { shareFile } =
+      await import('@choochmeque/tauri-plugin-sharekit-api');
+    const cacheDir = await appCacheDir();
+    // appCacheDir may not exist on a fresh install; create it so writeFile
+    // doesn't fail with a missing-parent error.
+    await mkdir(cacheDir, { recursive: true }).catch(() => undefined);
+    const path = await join(cacheDir, opts.suggestedFilename);
+    const bytes = new Uint8Array(await opts.blob.arrayBuffer());
+    await writeFile(path, bytes);
+    await shareFile(`file://${path}`, {
+      mimeType: opts.mimeType ?? opts.blob.type ?? 'application/octet-stream',
+      ...(opts.shareTitle !== undefined ? { title: opts.shareTitle } : {}),
+    });
+    return { cancelled: false, path };
+  } catch (err) {
+    // Both "user cancelled the chooser" and "Linux desktop has no share
+    // sheet" surface as errors here. Treat the cancel string as a real
+    // cancel; otherwise fall back so the user still gets the file via the
+    // save dialog.
+    if (err instanceof Error && /cancel/i.test(err.message)) {
+      return { cancelled: true, path: null };
+    }
+    return 'unsupported';
+  }
 }
 
 function downloadBlob(filename: string, blob: Blob): void {
