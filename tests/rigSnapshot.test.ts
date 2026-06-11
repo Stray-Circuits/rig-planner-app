@@ -71,6 +71,14 @@ describe('computeSnapshotLayout', () => {
     expect(layoutEps.hasEndpoints).toBe(true);
   });
 
+  it('omits the chip strip when chainMode is off, even with endpoints', () => {
+    const layout = computeSnapshotLayout(rig(), [endpoint()], false);
+    expect(layout.hasEndpoints).toBe(false);
+    expect(layout.boardOffsetY).toBe(
+      computeSnapshotLayout(rig(), [], true).boardOffsetY,
+    );
+  });
+
   it('places the watermark below the board with a gap', () => {
     const layout = computeSnapshotLayout(rig(), []);
     expect(layout.watermarkOffsetY).toBeGreaterThan(
@@ -127,6 +135,7 @@ describe('composeRigSnapshot', () => {
         endpoints: [endpoint()],
         floorStyle: 'concrete_grey',
         customFloor: DEFAULT_CUSTOM_FLOOR,
+        chainMode: true,
       });
       expect(result.blob.type).toBe('image/png');
       expect(result.widthPx).toBeGreaterThan(0);
@@ -158,6 +167,7 @@ describe('composeRigSnapshot', () => {
         endpoints: [],
         floorStyle: 'concrete_grey',
         customFloor: DEFAULT_CUSTOM_FLOOR,
+        chainMode: true,
       });
       expect(result.blob).toBeInstanceOf(Blob);
     } finally {

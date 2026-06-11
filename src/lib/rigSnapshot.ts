@@ -24,6 +24,7 @@ import type {
   Side,
 } from '../data/schema';
 import { resolveBoardImageSrc } from '../data/boardPresets';
+import { BOARD_DRAWERS, backgroundForStyle } from '../canvas/boardStyles';
 import { keepOutRect, placedFootprint, type ObstacleRect } from './geometry';
 import {
   decomposeBoard,
@@ -53,12 +54,16 @@ const CHIP_FONT = '500 14px ui-sans-serif, system-ui, sans-serif';
 const CHIP_BG = '#f4f4f5';
 const CHIP_FG = '#1f2937';
 const CHIP_BORDER = '#d4d4d8';
-/** Watermark area beneath the board: "Rig Planner" + SC horizontal logo. */
-const WATERMARK_HEIGHT_PX = 96;
-const WATERMARK_TITLE_FONT =
-  '400 36px Audiowide, ui-rounded, "SF Pro Rounded", system-ui, sans-serif';
-const WATERMARK_SUBTITLE_LOGO_HEIGHT_PX = 22;
-const WATERMARK_GAP_PX = 8;
+/** Watermark band beneath the board. "Rig Planner" in Audiowide on the
+ *  left, then the horizontal Stray Circuits lockup, both anchored to the
+ *  bottom-left of the band with a small inset. */
+const WATERMARK_HEIGHT_PX = 72;
+const WATERMARK_TITLE_FONT_SIZE = 40;
+const WATERMARK_TITLE_FONT = `400 ${WATERMARK_TITLE_FONT_SIZE}px Audiowide, ui-rounded, "SF Pro Rounded", system-ui, sans-serif`;
+const WATERMARK_LOGO_HEIGHT_PX = 36;
+const WATERMARK_GAP_PX = 16;
+const WATERMARK_INSET_X_PX = 8;
+const WATERMARK_BASELINE_INSET_PX = 12;
 const BOARD_FALLBACK_FILL = '#3d3d40';
 const PEDAL_LABEL_COLOR = 'rgba(255, 255, 255, 0.95)';
 const PEDAL_LABEL_OUTLINE = 'rgba(0, 0, 0, 0.7)';
@@ -88,6 +93,13 @@ export interface RigSnapshotInput {
   endpoints: ExternalEndpoint[];
   floorStyle: FloorStyle;
   customFloor: CustomFloor;
+  /**
+   * When true (the user is viewing the signal-chain overlay), the
+   * snapshot includes the endpoint chip strip and routed cables. When
+   * false, only the board + pedals are drawn — matching what the user
+   * was looking at when they tapped Share.
+   */
+  chainMode: boolean;
 }
 
 export interface RigSnapshotResult {
@@ -103,7 +115,11 @@ export interface RigSnapshotResult {
 export async function composeRigSnapshot(
   input: RigSnapshotInput,
 ): Promise<RigSnapshotResult> {
-  const layout = computeSnapshotLayout(input.rig, input.endpoints);
+  const layout = computeSnapshotLayout(
+    input.rig,
+    input.endpoints,
+    input.chainMode,
+  );
   const canvas = document.createElement('canvas');
   canvas.width = layout.canvasWidth;
   canvas.height = layout.canvasHeight;
@@ -114,9 +130,11 @@ export async function composeRigSnapshot(
   await drawFloorBackground(ctx, input.floorStyle, input.customFloor, layout);
 
   await drawBoard(ctx, input.rig, layout);
-  const chipPositions = drawEndpointChips(ctx, input.endpoints, layout);
+  const chipPositions = input.chainMode
+    ? drawEndpointChips(ctx, input.endpoints, layout)
+    : new Map<string, { xIn: number; yIn: number }>();
   await drawPedals(ctx, input, layout);
-  drawCables(ctx, input, layout, chipPositions);
+  if (input.chainMode) drawCables(ctx, input, layout, chipPositions);
   await drawWatermark(ctx, layout);
 
   const blob = await canvasToBlob(canvas);
@@ -139,11 +157,14 @@ interface SnapshotLayout {
 export function computeSnapshotLayout(
   rig: Rig,
   endpoints: ExternalEndpoint[],
+  chainMode = true,
 ): SnapshotLayout {
   const pxPerInch = SNAPSHOT_PX_PER_INCH;
   const boardWidthPx = rig.widthIn * pxPerInch;
   const boardHeightPx = rig.depthIn * pxPerInch;
-  const hasEndpoints = endpoints.length > 0;
+  // Chip strip only renders when chain mode is on AND the rig has any
+  // endpoints. Otherwise reclaim the vertical space.
+  const hasEndpoints = chainMode && endpoints.length > 0;
   const chipStripOffsetY = PAD_PX;
   const boardOffsetY = PAD_PX + (hasEndpoints ? CHIP_STRIP_PX : 0);
   const watermarkOffsetY = boardOffsetY + boardHeightPx + PAD_PX;
@@ -217,30 +238,59 @@ async function drawBoard(
   rig: Rig,
   layout: SnapshotLayout,
 ): Promise<void> {
-  // Fallback fill first so transparent PNG areas still read as a board.
-  ctx.fillStyle = BOARD_FALLBACK_FILL;
-  ctx.fillRect(
-    layout.boardOffsetX,
-    layout.boardOffsetY,
-    layout.boardWidthPx,
-    layout.boardHeightPx,
-  );
   const src = resolveBoardImageSrc({
     style: rig.style,
     presetId: rig.presetId,
     widthIn: rig.widthIn,
     depthIn: rig.depthIn,
   });
-  if (src === null) return;
-  const img = await loadImage(src).catch(() => null);
-  if (!img) return;
-  ctx.drawImage(
-    img,
-    layout.boardOffsetX,
-    layout.boardOffsetY,
-    layout.boardWidthPx,
-    layout.boardHeightPx,
-  );
+  if (src !== null) {
+    // Bundled board PNG path. The board PNG itself usually has a fallback
+    // shape on transparent; paint a neutral backdrop first so any
+    // transparent regions don't show the floor texture through them
+    // (the live canvas uses a CSS background for the same purpose).
+    ctx.fillStyle = BOARD_FALLBACK_FILL;
+    ctx.fillRect(
+      layout.boardOffsetX,
+      layout.boardOffsetY,
+      layout.boardWidthPx,
+      layout.boardHeightPx,
+    );
+    const img = await loadImage(src).catch(() => null);
+    if (img) {
+      ctx.drawImage(
+        img,
+        layout.boardOffsetX,
+        layout.boardOffsetY,
+        layout.boardWidthPx,
+        layout.boardHeightPx,
+      );
+    }
+    return;
+  }
+  // Procedural board style (rail / plain / holes / wood). Render onto an
+  // offscreen canvas so the drawer's internal clearRect doesn't punch a
+  // hole in the floor background underneath, then composite.
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, Math.round(layout.boardWidthPx));
+  off.height = Math.max(1, Math.round(layout.boardHeightPx));
+  const offCtx = off.getContext('2d');
+  if (!offCtx) return;
+  // Match the CSS-side backdrop for procedural styles (rail needs #888 so
+  // the rail frame reads; transparent for the rest).
+  const backdrop = backgroundForStyle(rig.style);
+  if (backdrop !== 'transparent') {
+    offCtx.fillStyle = backdrop;
+    offCtx.fillRect(0, 0, off.width, off.height);
+  }
+  BOARD_DRAWERS[rig.style]({
+    ctx: offCtx,
+    width: off.width,
+    height: off.height,
+    scale: 1,
+    widthIn: rig.widthIn,
+  });
+  ctx.drawImage(off, layout.boardOffsetX, layout.boardOffsetY);
 }
 
 async function drawPedals(
@@ -628,27 +678,38 @@ async function drawWatermark(
   // for it explicitly so the first share after page load uses the right
   // typeface — without this, canvas falls back to the system stack and
   // "Rig Planner" reads as a generic sans-serif.
-  await ensureFontLoaded('400 36px Audiowide').catch(() => {
-    // Font load failures degrade gracefully — canvas uses the next
-    // family in the stack ("SF Pro Rounded" / system-ui).
-  });
+  await ensureFontLoaded(`400 ${WATERMARK_TITLE_FONT_SIZE}px Audiowide`).catch(
+    () => {
+      // Font load failures degrade gracefully — canvas uses the next
+      // family in the stack ("SF Pro Rounded" / system-ui).
+    },
+  );
 
-  const centerX = layout.canvasWidth / 2;
-  const titleY = layout.watermarkOffsetY + 36;
+  // Anchor at the bottom-left of the canvas with a small inset, then lay
+  // "Rig Planner" + the SC horizontal lockup left-to-right on a shared
+  // baseline.
+  const baselineY =
+    layout.canvasHeight - WATERMARK_BASELINE_INSET_PX - PAD_PX / 2;
+  const xCursor = layout.boardOffsetX + WATERMARK_INSET_X_PX;
+  ctx.save();
   ctx.font = WATERMARK_TITLE_FONT;
-  ctx.textAlign = 'center';
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#1f2937';
-  ctx.fillText('Rig Planner', centerX, titleY);
+  ctx.fillText('Rig Planner', xCursor, baselineY);
+  const titleWidth = ctx.measureText('Rig Planner').width;
+  ctx.restore();
 
   const logo = await loadImage(processedLogoUrl()).catch(() => null);
   if (!logo) return;
-  const logoH = WATERMARK_SUBTITLE_LOGO_HEIGHT_PX;
+  const logoH = WATERMARK_LOGO_HEIGHT_PX;
   // The processed SVG carries explicit viewBox-derived dimensions, so
   // the aspect ratio is known up front.
   const logoW = logoH * (3400 / 720);
-  const logoX = centerX - logoW / 2;
-  const logoY = titleY + WATERMARK_GAP_PX;
+  const logoX = xCursor + titleWidth + WATERMARK_GAP_PX;
+  // Align the logo's vertical center with the title's optical center
+  // (roughly 30% above the alphabetic baseline for the chosen font).
+  const logoY = baselineY - WATERMARK_TITLE_FONT_SIZE * 0.7;
   ctx.drawImage(logo, logoX, logoY, logoW, logoH);
 }
 

@@ -142,6 +142,56 @@ export async function saveBinaryFile(
   return { cancelled: false, path: null };
 }
 
+interface ShareOrSaveBinaryFileOptions extends SaveBinaryFileOptions {
+  /** Mime type for the constructed File. Defaults to `opts.blob.type`. */
+  mimeType?: string;
+  /** Optional title surfaced to the OS share sheet (used by some targets). */
+  shareTitle?: string;
+  /** Optional accompanying text. */
+  shareText?: string;
+}
+
+/**
+ * Hand a binary file to the OS share sheet when supported (mobile WebViews
+ * and Windows WebView2 expose `navigator.share` with file support), and
+ * otherwise fall through to {@link saveBinaryFile} — Tauri's native save
+ * dialog on desktop, `<a download>` Blob URL in browser dev.
+ *
+ * The share path is what most mobile users expect (pick "Messages",
+ * "Save to Files", AirDrop, etc.); on desktop a save dialog is the more
+ * familiar pattern, which is what the fallback provides.
+ */
+export async function shareOrSaveBinaryFile(
+  opts: ShareOrSaveBinaryFileOptions,
+): Promise<SaveTextFileResult> {
+  if (typeof navigator !== 'undefined' && 'share' in navigator) {
+    const file = new File([opts.blob], opts.suggestedFilename, {
+      type: opts.mimeType ?? opts.blob.type,
+    });
+    const canShare = navigator.canShare?.bind(navigator);
+    if (canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          ...(opts.shareTitle !== undefined ? { title: opts.shareTitle } : {}),
+          ...(opts.shareText !== undefined ? { text: opts.shareText } : {}),
+        });
+        return { cancelled: false, path: null };
+      } catch (err) {
+        // The standard cancel/dismiss result is AbortError — treat as a
+        // user cancellation rather than an error.
+        if (err instanceof Error && err.name === 'AbortError') {
+          return { cancelled: true, path: null };
+        }
+        // Any other failure (NotAllowedError when the WebView lied about
+        // file support, etc.) falls through to the save path so the user
+        // still gets their file.
+      }
+    }
+  }
+  return saveBinaryFile(opts);
+}
+
 function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   try {

@@ -506,10 +506,11 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     setSharing(true);
     void (async () => {
       try {
-        const [{ composeRigSnapshot }, { saveBinaryFile }] = await Promise.all([
-          import('../../lib/rigSnapshot'),
-          import('../../lib/fileDownload'),
-        ]);
+        const [{ composeRigSnapshot }, { shareOrSaveBinaryFile }] =
+          await Promise.all([
+            import('../../lib/rigSnapshot'),
+            import('../../lib/fileDownload'),
+          ]);
         const { blob } = await composeRigSnapshot({
           rig,
           placed,
@@ -518,6 +519,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           endpoints,
           floorStyle,
           customFloor,
+          chainMode,
         });
         const stem =
           rig.name
@@ -526,12 +528,15 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             .replace(/\s+/g, '-')
             .replace(/^-+|-+$/g, '') || 'rig';
         const date = new Date().toISOString().slice(0, 10);
-        const result = await saveBinaryFile({
+        const result = await shareOrSaveBinaryFile({
           suggestedFilename: `${stem}-${date}.png`,
           blob,
+          mimeType: 'image/png',
+          shareTitle: rig.name,
+          shareText: `${rig.name} — from Rig Planner`,
           filters: [{ name: 'PNG image', extensions: ['png'] }],
         });
-        if (!result.cancelled) setNotice('Rig image saved.');
+        if (!result.cancelled) setNotice('Rig image ready to share.');
       } catch (err) {
         setNotice(
           err instanceof Error
