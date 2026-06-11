@@ -218,10 +218,17 @@ async function tryShareViaSharekit(
     const { shareFile } =
       await import('@choochmeque/tauri-plugin-sharekit-api');
     const cacheDir = await appCacheDir();
-    // appCacheDir may not exist on a fresh install; create it so writeFile
-    // doesn't fail with a missing-parent error.
-    await mkdir(cacheDir, { recursive: true }).catch(() => undefined);
-    const path = await join(cacheDir, opts.suggestedFilename);
+    // On Android, Tauri's appCacheDir resolves to the same path that
+    // sharekit's plugin uses as `activity.cacheDir`. The plugin copies
+    // the source file into `cacheDir/<basename>` before exposing it via
+    // FileProvider; if our write target is also `cacheDir/<basename>`,
+    // sharekit truncates the file (opens the output stream) before
+    // reading from input, leaving a 0-byte attachment. Receiving apps
+    // then show "Failed to add attachment". Writing into a subdirectory
+    // keeps source and destination paths distinct.
+    const shareDir = await join(cacheDir, 'rig-share');
+    await mkdir(shareDir, { recursive: true }).catch(() => undefined);
+    const path = await join(shareDir, opts.suggestedFilename);
     const bytes = new Uint8Array(await opts.blob.arrayBuffer());
     await writeFile(path, bytes);
     await shareFile(`file://${path}`, {

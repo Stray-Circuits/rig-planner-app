@@ -106,11 +106,22 @@ export interface RigSnapshotResult {
   blob: Blob;
   widthPx: number;
   heightPx: number;
+  /** Mime type the blob was encoded as (e.g. 'image/jpeg'). */
+  mimeType: string;
+  /** Sensible filename extension matching the mime type (e.g. 'jpg'). */
+  fileExtension: string;
 }
 
+/** JPEG quality for the output. Solid floor background means we don't
+ *  need alpha and JPEG encodes roughly 5–10× faster than PNG on the
+ *  Android WebView, which dominated share-button latency on the APK. */
+const SNAPSHOT_JPEG_QUALITY = 0.92;
+const SNAPSHOT_MIME_TYPE = 'image/jpeg';
+const SNAPSHOT_FILE_EXTENSION = 'jpg';
+
 /**
- * Compose a rig snapshot PNG. Resolves with the encoded Blob + the
- * canvas dimensions (handy for tests).
+ * Compose a rig snapshot image. Resolves with the encoded Blob plus the
+ * canvas dimensions, mime type, and an appropriate file extension.
  */
 export async function composeRigSnapshot(
   input: RigSnapshotInput,
@@ -138,7 +149,13 @@ export async function composeRigSnapshot(
   await drawWatermark(ctx, layout);
 
   const blob = await canvasToBlob(canvas);
-  return { blob, widthPx: layout.canvasWidth, heightPx: layout.canvasHeight };
+  return {
+    blob,
+    widthPx: layout.canvasWidth,
+    heightPx: layout.canvasHeight,
+    mimeType: SNAPSHOT_MIME_TYPE,
+    fileExtension: SNAPSHOT_FILE_EXTENSION,
+  };
 }
 
 interface SnapshotLayout {
@@ -763,9 +780,13 @@ async function ensureFontLoaded(font: string): Promise<void> {
 
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error('canvas.toBlob returned null'));
-    }, 'image/png');
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('canvas.toBlob returned null'));
+      },
+      SNAPSHOT_MIME_TYPE,
+      SNAPSHOT_JPEG_QUALITY,
+    );
   });
 }

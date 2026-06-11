@@ -511,7 +511,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             import('../../lib/rigSnapshot'),
             import('../../lib/fileDownload'),
           ]);
-        const { blob } = await composeRigSnapshot({
+        const { blob, mimeType, fileExtension } = await composeRigSnapshot({
           rig,
           placed,
           pedalsById,
@@ -529,12 +529,17 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             .replace(/^-+|-+$/g, '') || 'rig';
         const date = new Date().toISOString().slice(0, 10);
         const result = await shareOrSaveBinaryFile({
-          suggestedFilename: `${stem}-${date}.png`,
+          suggestedFilename: `${stem}-${date}.${fileExtension}`,
           blob,
-          mimeType: 'image/png',
+          mimeType,
           shareTitle: rig.name,
           shareText: `${rig.name} — from Rig Planner`,
-          filters: [{ name: 'PNG image', extensions: ['png'] }],
+          filters: [
+            {
+              name: `${fileExtension.toUpperCase()} image`,
+              extensions: [fileExtension],
+            },
+          ],
         });
         if (!result.cancelled) setNotice('Rig image ready to share.');
       } catch (err) {
