@@ -1,7 +1,7 @@
 {
   "name": "rig-planner-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "description": "Pedalboard planning app with signal-path overlay — desktop + mobile",
   "author": "Stray Circuits",
@@ -31,6 +31,7 @@
     "android:container:build:release": "scripts/android/build.sh build --release",
     "android:container:shell": "scripts/android/build.sh shell",
     "android:container:clean": "scripts/android/build.sh clean",
+    "version:set": "node scripts/version-set.mjs",
     "test": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",

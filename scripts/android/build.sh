@@ -183,6 +183,25 @@ cmd_build() {
             echo "  required for signed release builds — see CLAUDE.md security section." >&2
             exit 1
         fi
+        # Refuse to rebuild a version that's already been tagged. A tag is our
+        # marker for "this version shipped to Google Play", and the derived
+        # Android versionCode (MAJOR*10000+MINOR*100+PATCH) collides on re-use
+        # — Play Console rejects the upload anyway, so we fail fast here.
+        local current_version
+        current_version=$(grep -E '^[[:space:]]*"version":' "${REPO_ROOT}/package.json" \
+            | head -1 \
+            | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+        if [ -z "${current_version}" ]; then
+            echo "error: could not read version from package.json" >&2
+            exit 1
+        fi
+        local existing_tag
+        existing_tag=$(git -C "${REPO_ROOT}" tag -l "v${current_version}")
+        if [ -n "${existing_tag}" ]; then
+            echo "error: refusing to build — v${current_version} is already tagged in git." >&2
+            echo "  that version has shipped; bump first with: pnpm version:set <next-x.y.z>" >&2
+            exit 1
+        fi
         export MOUNT_KEYSTORE=1
     else
         export CARGO_PROFILE_DEV_STRIP="symbols"
