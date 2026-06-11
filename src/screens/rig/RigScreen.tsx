@@ -516,6 +516,8 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           pedalsById,
           connections,
           endpoints,
+          floorStyle,
+          customFloor,
         });
         const stem =
           rig.name

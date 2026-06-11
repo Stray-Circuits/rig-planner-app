@@ -6,6 +6,7 @@ import type {
   PlacedPedal,
   Rig,
 } from '../src/data/schema';
+import { DEFAULT_CUSTOM_FLOOR } from '../src/lib/floorStyle';
 import {
   composeRigSnapshot,
   computeSnapshotLayout,
@@ -124,6 +125,8 @@ describe('composeRigSnapshot', () => {
         pedalsById: new Map<string, Pedal>(),
         connections: [],
         endpoints: [endpoint()],
+        floorStyle: 'concrete_grey',
+        customFloor: DEFAULT_CUSTOM_FLOOR,
       });
       expect(result.blob.type).toBe('image/png');
       expect(result.widthPx).toBeGreaterThan(0);
@@ -153,6 +156,8 @@ describe('composeRigSnapshot', () => {
         pedalsById: new Map(pedals.map((p) => [p.id, p])),
         connections,
         endpoints: [],
+        floorStyle: 'concrete_grey',
+        customFloor: DEFAULT_CUSTOM_FLOOR,
       });
       expect(result.blob).toBeInstanceOf(Blob);
     } finally {
@@ -255,6 +260,8 @@ function makeFakeCtx(): CanvasRenderingContext2D {
     font: '',
     textAlign: 'start',
     textBaseline: 'alphabetic',
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
     save: noop,
     restore: noop,
     translate: noop,
@@ -274,6 +281,7 @@ function makeFakeCtx(): CanvasRenderingContext2D {
     fillText: noop,
     strokeText: noop,
     measureText: (text: string) => ({ width: text.length * 7 }),
+    createPattern: () => ({}) as CanvasPattern,
   };
   return ctx as unknown as CanvasRenderingContext2D;
 }

@@ -39,7 +39,8 @@ import {
   type ResolvedPort,
 } from '../canvas/cableRender';
 import { colorFromImagePath } from './pedalImage';
-import strayCircuitsLogoUrl from '../assets/brand/stray-circuits-horizontal-light.svg';
+import type { CustomFloor, FloorStyle } from './floorStyle';
+import strayCircuitsLogoRaw from '../assets/brand/stray-circuits-horizontal-light.svg?raw';
 
 /** Render scale for the snapshot. Higher = larger output, more memory. */
 export const SNAPSHOT_PX_PER_INCH = 100;
@@ -58,10 +59,26 @@ const WATERMARK_TITLE_FONT =
   '400 36px Audiowide, ui-rounded, "SF Pro Rounded", system-ui, sans-serif';
 const WATERMARK_SUBTITLE_LOGO_HEIGHT_PX = 22;
 const WATERMARK_GAP_PX = 8;
-const BACKGROUND_FILL = '#f8f9fb';
 const BOARD_FALLBACK_FILL = '#3d3d40';
 const PEDAL_LABEL_COLOR = 'rgba(255, 255, 255, 0.95)';
 const PEDAL_LABEL_OUTLINE = 'rgba(0, 0, 0, 0.7)';
+
+/** Tile sizes (CSS px) for each floor texture — mirrors the CSS in RigScreen.module.css. */
+const FLOOR_TEXTURE_TILE: Record<Exclude<FloorStyle, 'custom'>, number> = {
+  concrete_grey: 256,
+  stage_black: 320,
+  carpet_beige: 280,
+  wood: 360,
+  sidewalk: 300,
+};
+/** Solid fallback per floor if the texture asset fails to load. */
+const FLOOR_FALLBACK_FILL: Record<Exclude<FloorStyle, 'custom'>, string> = {
+  concrete_grey: '#8a8a8a',
+  stage_black: '#141416',
+  carpet_beige: '#c9b58a',
+  wood: '#6e4422',
+  sidewalk: '#bcbcb6',
+};
 
 export interface RigSnapshotInput {
   rig: Rig;
@@ -69,6 +86,8 @@ export interface RigSnapshotInput {
   pedalsById: Map<string, Pedal>;
   connections: Connection[];
   endpoints: ExternalEndpoint[];
+  floorStyle: FloorStyle;
+  customFloor: CustomFloor;
 }
 
 export interface RigSnapshotResult {
@@ -92,13 +111,12 @@ export async function composeRigSnapshot(
   if (!ctx) {
     throw new Error('Could not acquire 2D rendering context');
   }
-  ctx.fillStyle = BACKGROUND_FILL;
-  ctx.fillRect(0, 0, layout.canvasWidth, layout.canvasHeight);
+  await drawFloorBackground(ctx, input.floorStyle, input.customFloor, layout);
 
   await drawBoard(ctx, input.rig, layout);
-  drawEndpointChips(ctx, input.endpoints, layout);
+  const chipPositions = drawEndpointChips(ctx, input.endpoints, layout);
   await drawPedals(ctx, input, layout);
-  drawCables(ctx, input, layout);
+  drawCables(ctx, input, layout, chipPositions);
   await drawWatermark(ctx, layout);
 
   const blob = await canvasToBlob(canvas);
@@ -141,6 +159,57 @@ export function computeSnapshotLayout(
     chipStripOffsetY,
     hasEndpoints,
   };
+}
+
+async function drawFloorBackground(
+  ctx: CanvasRenderingContext2D,
+  style: FloorStyle,
+  custom: CustomFloor,
+  layout: SnapshotLayout,
+): Promise<void> {
+  if (style === 'custom') {
+    // Match customFloorBackgroundStyle: solid color underneath, concrete
+    // texture multiplied on top at intensity `grain`.
+    ctx.fillStyle = custom.color;
+    ctx.fillRect(0, 0, layout.canvasWidth, layout.canvasHeight);
+    if (custom.grain > 0) {
+      const tex = await loadImage('/textures/floors/concrete_grey.jpg').catch(
+        () => null,
+      );
+      if (tex) {
+        const pattern = ctx.createPattern(tex, 'repeat');
+        if (pattern) {
+          ctx.save();
+          ctx.globalAlpha = custom.grain;
+          ctx.globalCompositeOperation = 'multiply';
+          ctx.fillStyle = pattern;
+          ctx.fillRect(0, 0, layout.canvasWidth, layout.canvasHeight);
+          ctx.restore();
+        }
+      }
+    }
+    return;
+  }
+  ctx.fillStyle = FLOOR_FALLBACK_FILL[style];
+  ctx.fillRect(0, 0, layout.canvasWidth, layout.canvasHeight);
+  const tex = await loadImage(`/textures/floors/${style}.jpg`).catch(
+    () => null,
+  );
+  if (!tex) return;
+  // Tile size from CSS — scale the texture so the rendered tile matches
+  // what the user sees on the live canvas at 1x. The texture's natural
+  // pixel size is irrelevant; we resize via an offscreen canvas pattern.
+  const tile = FLOOR_TEXTURE_TILE[style];
+  const tileCanvas = document.createElement('canvas');
+  tileCanvas.width = tile;
+  tileCanvas.height = tile;
+  const tileCtx = tileCanvas.getContext('2d');
+  if (!tileCtx) return;
+  tileCtx.drawImage(tex, 0, 0, tile, tile);
+  const pattern = ctx.createPattern(tileCanvas, 'repeat');
+  if (!pattern) return;
+  ctx.fillStyle = pattern;
+  ctx.fillRect(0, 0, layout.canvasWidth, layout.canvasHeight);
 }
 
 async function drawBoard(
@@ -250,6 +319,7 @@ function drawCables(
   ctx: CanvasRenderingContext2D,
   input: RigSnapshotInput,
   layout: SnapshotLayout,
+  chipPositions: Map<string, { xIn: number; yIn: number }>,
 ): void {
   const { rig, placed, pedalsById, connections, endpoints } = input;
   if (connections.length === 0) return;
@@ -294,6 +364,7 @@ function drawCables(
       c.fromPortId,
       portIndex,
       endpointById,
+      chipPositions,
       rig,
       layout.pxPerInch,
     );
@@ -303,6 +374,7 @@ function drawCables(
       c.toPortId,
       portIndex,
       endpointById,
+      chipPositions,
       rig,
       layout.pxPerInch,
     );
@@ -396,6 +468,7 @@ function resolveEnd(
   portId: string | null,
   portIndex: Map<string, Map<string, ResolvedPort>>,
   endpointById: Map<string, ExternalEndpoint>,
+  chipPositions: Map<string, { xIn: number; yIn: number }>,
   rig: Rig,
   pxPerInch: number,
 ): {
@@ -419,15 +492,26 @@ function resolveEnd(
   }
   const ep = endpointById.get(nodeId);
   if (!ep) return null;
-  // Chip strip lives above the board top in the live view at ~8px above.
-  // Use the same fallback geometry so cables route naturally toward the
-  // labeled chip strip we draw in drawEndpointChips.
-  const yIn = -8 / pxPerInch;
+  // Each chip has a pre-measured bottom-center position in board inch
+  // coords (from drawEndpointChips). Use those so cables to multiple
+  // sinks/sources land on the correct chips rather than collapsing to
+  // a single cluster anchor.
+  const measured = chipPositions.get(nodeId);
+  if (measured) {
+    return {
+      xIn: measured.xIn,
+      yIn: measured.yIn,
+      side: 'bottom',
+      color: colorForSignal('instrument'),
+      isPedal: false,
+    };
+  }
+  // Fallback if chip rendering was skipped — matches the live overlay's
+  // pre-measurement default.
   const isLeft = isLeftClusterKind(ep.kind);
-  const xIn = isLeft ? 0.75 : rig.widthIn - 0.75;
   return {
-    xIn,
-    yIn,
+    xIn: isLeft ? 0.75 : rig.widthIn - 0.75,
+    yIn: -8 / pxPerInch,
     side: 'bottom',
     color: colorForSignal('instrument'),
     isPedal: false,
@@ -438,15 +522,19 @@ function drawEndpointChips(
   ctx: CanvasRenderingContext2D,
   endpoints: ExternalEndpoint[],
   layout: SnapshotLayout,
-): void {
-  if (!layout.hasEndpoints) return;
+): Map<string, { xIn: number; yIn: number }> {
+  const positions = new Map<string, { xIn: number; yIn: number }>();
+  if (!layout.hasEndpoints) return positions;
+  ctx.save();
   ctx.font = CHIP_FONT;
   ctx.textBaseline = 'middle';
   const lefts = endpoints.filter((e) => isLeftClusterKind(e.kind));
   const rights = endpoints.filter((e) => !isLeftClusterKind(e.kind));
   const stripY = layout.chipStripOffsetY + CHIP_STRIP_PX / 2;
-  drawChipCluster(ctx, lefts, 'left', layout, stripY);
-  drawChipCluster(ctx, rights, 'right', layout, stripY);
+  drawChipCluster(ctx, lefts, 'left', layout, stripY, positions);
+  drawChipCluster(ctx, rights, 'right', layout, stripY, positions);
+  ctx.restore();
+  return positions;
 }
 
 function drawChipCluster(
@@ -455,6 +543,7 @@ function drawChipCluster(
   side: 'left' | 'right',
   layout: SnapshotLayout,
   centerY: number,
+  positions: Map<string, { xIn: number; yIn: number }>,
 ): void {
   if (cluster.length === 0) return;
   const isLeft = side === 'left';
@@ -489,6 +578,15 @@ function drawChipCluster(
     );
     ctx.fillStyle = CHIP_FG;
     ctx.fillText(label, chipX + chipPadX, centerY);
+    // Record the chip's bottom-center in board inch coords so cable
+    // routing terminates at the right per-chip x rather than collapsing
+    // to one cluster anchor.
+    const chipCenterCanvasX = chipX + chipWidth / 2;
+    const chipBottomCanvasY = chipY + chipHeight;
+    positions.set(cluster[i]!.id, {
+      xIn: (chipCenterCanvasX - layout.boardOffsetX) / layout.pxPerInch,
+      yIn: (chipBottomCanvasY - layout.boardOffsetY) / layout.pxPerInch,
+    });
     cursorX = isLeft ? chipX + chipWidth + gap : chipX - gap;
   }
 }
@@ -543,17 +641,36 @@ async function drawWatermark(
   ctx.fillStyle = '#1f2937';
   ctx.fillText('Rig Planner', centerX, titleY);
 
-  const logo = await loadImage(strayCircuitsLogoUrl).catch(() => null);
+  const logo = await loadImage(processedLogoUrl()).catch(() => null);
   if (!logo) return;
-  const aspect =
-    logo.naturalWidth > 0 && logo.naturalHeight > 0
-      ? logo.naturalWidth / logo.naturalHeight
-      : 5;
   const logoH = WATERMARK_SUBTITLE_LOGO_HEIGHT_PX;
-  const logoW = logoH * aspect;
+  // The processed SVG carries explicit viewBox-derived dimensions, so
+  // the aspect ratio is known up front.
+  const logoW = logoH * (3400 / 720);
   const logoX = centerX - logoW / 2;
   const logoY = titleY + WATERMARK_GAP_PX;
   ctx.drawImage(logo, logoX, logoY, logoW, logoH);
+}
+
+let cachedProcessedLogoUrl: string | null = null;
+/**
+ * The bundled horizontal-light SVG has `width="100%" height="100%"` (no
+ * intrinsic pixel size, so `drawImage` falls back to 0×0 on Chrome and
+ * skips the draw entirely) and a near-white fill `rgb(226,236,239)` that
+ * would be invisible on the snapshot's light background.
+ *
+ * Patch both at module-init time: rewrite the dimensions from the viewBox
+ * and swap the white fill for a dark slate, then encode the result as a
+ * data URL we can hand to `Image.src`. The asset file on disk stays
+ * untouched — AboutScreen and RigList still use the original light SVG.
+ */
+function processedLogoUrl(): string {
+  if (cachedProcessedLogoUrl !== null) return cachedProcessedLogoUrl;
+  const patched = strayCircuitsLogoRaw
+    .replace('width="100%" height="100%"', 'width="3400" height="720"')
+    .replace(/rgb\(226,236,239\)/g, 'rgb(31,41,55)');
+  cachedProcessedLogoUrl = `data:image/svg+xml;utf8,${encodeURIComponent(patched)}`;
+  return cachedProcessedLogoUrl;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
