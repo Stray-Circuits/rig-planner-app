@@ -19,6 +19,11 @@
 // re-use the computed Android versionCode (MAJOR*10000+MINOR*100+PATCH) and
 // Play Console would reject the upload.
 //
+// Prerelease suffixes (e.g. -rc.1) are NOT accepted: the Android versionCode
+// formula strips them, so 1.2.3-rc.1 and 1.2.3 would map to the same code and
+// collide on Play Store. If we ever want a prerelease workflow, the formula
+// has to encode the suffix into the integer first.
+//
 // Leaves changes staged but uncommitted. Suggested next steps are printed.
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -29,7 +34,7 @@ import { dirname, resolve } from 'node:path';
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..');
 
-const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/;
+const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
 
 function die(msg) {
   console.error(`error: ${msg}`);
@@ -53,7 +58,10 @@ if (!version) die('usage: pnpm version:set <x.y.z>');
 
 const match = version.match(SEMVER_RE);
 if (!match)
-  die(`"${version}" is not valid semver (expected x.y.z or x.y.z-prerelease)`);
+  die(
+    `"${version}" is not valid semver (expected x.y.z; prereleases not supported — ` +
+      `they collide on the derived Android versionCode)`,
+  );
 const [, majorStr, minorStr, patchStr] = match;
 const [major, minor, patch] = [majorStr, minorStr, patchStr].map(Number);
 if (major > 99 || minor > 99 || patch > 99) {
