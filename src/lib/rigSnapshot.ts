@@ -64,23 +64,44 @@ const CHIP_BORDER = '#d4d4d8';
 /** Watermark band beneath the board. "Rig Planner" in Audiowide on the
  *  left, then the horizontal Stray Circuits lockup, both anchored to the
  *  bottom-left of the band with a small inset. */
-const WATERMARK_TITLE_FONT_SIZE = 44;
+const WATERMARK_TITLE_FONT_SIZE = 32;
 const WATERMARK_TITLE_FONT = `400 ${WATERMARK_TITLE_FONT_SIZE}px Audiowide, ui-rounded, "SF Pro Rounded", system-ui, sans-serif`;
-/** SC horizontal lockup — 2× title height, pinned to the canvas bottom-right. */
-const WATERMARK_LOGO_HEIGHT_PX = WATERMARK_TITLE_FONT_SIZE * 2;
+/** Connector tagline between the title and the SC lockup. Serif italic
+ *  renders visibly thinner than sans-italic at the same nominal weight
+ *  on the Android WebView, and reads as a quieter attribution that
+ *  doesn't compete with the Audiowide title or the SC lockup. */
+const WATERMARK_TAGLINE = 'made by';
+const WATERMARK_TAGLINE_FONT_SIZE = 15;
+const WATERMARK_TAGLINE_FONT = `italic 400 ${WATERMARK_TAGLINE_FONT_SIZE}px Georgia, "Times New Roman", ui-serif, serif`;
+/** Padding on either side of the tagline, between it and the title/logo. */
+const WATERMARK_TAGLINE_GAP_PX = 14;
+/** SC horizontal lockup — the dominant brand mark in the watermark
+ *  row, pinned to the canvas bottom-right. Sized in absolute px (not
+ *  derived from title size) so the title can shrink without dragging
+ *  the lockup down with it. */
+const WATERMARK_LOGO_HEIGHT_PX = 128;
 const WATERMARK_INSET_X_PX = 8;
 const WATERMARK_BASELINE_INSET_PX = 12;
-/** Bump the title baseline up enough that its optical center aligns with
- *  the logo's vertical center. Audiowide's cap height sits ~72% of font
- *  size above the alphabetic baseline, and the logo center sits at
- *  logoH/2 above its bottom — this nudge brings the title up to roughly
- *  that midpoint instead of sitting flush with the logo's baseline. */
-const WATERMARK_TITLE_BOTTOM_BUMP_PX = 24;
 /** Vertical gap between the bottom of the board and the watermark band. */
-const WATERMARK_TOP_GAP_PX = 12;
-/** Band height tracks the tallest watermark element (the logo) plus the inset. */
+const WATERMARK_TOP_GAP_PX = 0;
+/** The Stray Circuits SVG carries ~10% transparent padding at the top
+ *  (the cat group's translate-y in the viewBox). At the rendered logo
+ *  height that's ~13 px of empty space above the visible lockup; the
+ *  band would otherwise show that gap as wasted vertical space below
+ *  the board. Subtract it from the band height and shift the logo up
+ *  by the same amount so the visible content hugs the board edge. */
+const LOGO_SVG_TOP_PADDING_PX = 13;
+/** textBaseline='middle' centers text on the em-box, which sits a
+ *  hair above the optical center of cap-height glyphs — Audiowide and
+ *  Georgia italic both render 2 px high vs the logo's visual middle on
+ *  the Android WebView. Nudge text Y down to compensate. */
+const TEXT_OPTICAL_CENTER_NUDGE_PX = 2;
+/** Band height = logo flush at the top of the band + a small inset
+ *  beneath. No extra slack so the watermark hugs the board closely. */
 const WATERMARK_HEIGHT_PX =
-  WATERMARK_LOGO_HEIGHT_PX + WATERMARK_BASELINE_INSET_PX + 12;
+  WATERMARK_LOGO_HEIGHT_PX +
+  WATERMARK_BASELINE_INSET_PX -
+  LOGO_SVG_TOP_PADDING_PX;
 const PEDAL_LABEL_COLOR = 'rgba(255, 255, 255, 0.95)';
 const PEDAL_LABEL_OUTLINE = 'rgba(0, 0, 0, 0.7)';
 
@@ -209,7 +230,7 @@ export function computeSnapshotLayout(
   const watermarkOffsetY = boardOffsetY + boardHeightPx + WATERMARK_TOP_GAP_PX;
   return {
     canvasWidth: boardWidthPx + 2 * PAD_PX,
-    canvasHeight: watermarkOffsetY + WATERMARK_HEIGHT_PX + PAD_PX,
+    canvasHeight: watermarkOffsetY + WATERMARK_HEIGHT_PX,
     pxPerInch,
     boardOffsetX: PAD_PX,
     boardOffsetY,
@@ -785,46 +806,77 @@ async function drawWatermark(
     },
   );
 
-  // Title pinned bottom-left, SC lockup pinned bottom-right with matching
-  // insets. Logo bottom sits on `baselineY`; the title's baseline gets
-  // bumped up so its optical center is closer to the logo's center.
+  // All three elements (title, tagline, logo) center on the same Y so
+  // the row reads as a single horizontal lockup. Position by textBaseline
+  // 'middle' rather than trying to predict the title font's cap-height
+  // metrics — Audiowide via Google Fonts on Android WebView wasn't
+  // matching the math, leaving the title way off-center.
   const { fill, logoFill } = watermarkColorForFloor(floorStyle, customFloor);
-  const baselineY =
-    layout.canvasHeight - WATERMARK_BASELINE_INSET_PX - PAD_PX / 2;
+  const baselineY = layout.canvasHeight - WATERMARK_BASELINE_INSET_PX;
   const leftInset = layout.boardOffsetX + WATERMARK_INSET_X_PX;
   const rightInset =
     layout.boardOffsetX + layout.boardWidthPx - WATERMARK_INSET_X_PX;
 
-  ctx.save();
-  ctx.font = WATERMARK_TITLE_FONT;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  const titleWidth = ctx.measureText('Rig Planner').width;
-  ctx.fillStyle = fill;
-  ctx.fillText(
-    'Rig Planner',
-    leftInset,
-    baselineY - WATERMARK_TITLE_BOTTOM_BUMP_PX,
-  );
-  ctx.restore();
-
   const logo = await loadImage(processedLogoUrl(logoFill)).catch(() => null);
   if (!logo) return;
+
+  ctx.save();
+  ctx.font = WATERMARK_TITLE_FONT;
+  ctx.textBaseline = 'middle';
+  const titleWidth = ctx.measureText('Rig Planner').width;
+  ctx.font = WATERMARK_TAGLINE_FONT;
+  const taglineWidth = ctx.measureText(WATERMARK_TAGLINE).width;
+  ctx.restore();
+
   // Default logo size; shrink it if the canvas is too narrow to fit the
-  // title + a gap + the lockup side-by-side. Without this guard, the
+  // title + tagline + lockup side-by-side. Without this guard, the
   // title (left-anchored) and the logo (right-anchored) collide on
-  // narrow boards at low ppi — that was the overlap in the shared file.
-  const LOGO_MIN_GAP_PX = 20;
+  // narrow boards at low ppi.
   const wantedLogoW = WATERMARK_LOGO_HEIGHT_PX * (3400 / 720);
-  const availableLogoW =
-    rightInset - (leftInset + titleWidth + LOGO_MIN_GAP_PX);
+  const reservedForRow =
+    leftInset +
+    titleWidth +
+    WATERMARK_TAGLINE_GAP_PX +
+    taglineWidth +
+    WATERMARK_TAGLINE_GAP_PX;
+  const availableLogoW = rightInset - reservedForRow;
   const logoW = Math.max(0, Math.min(wantedLogoW, availableLogoW));
   if (logoW <= 0) return;
   const logoH = logoW * (720 / 3400);
   const logoX = rightInset - logoW;
-  // Logo bottom aligned with baselineY so it sits flush against the band.
-  const logoY = baselineY - logoH;
+  // Shift the logo up by LOGO_SVG_TOP_PADDING_PX so the visible artwork
+  // (which is itself offset down inside the SVG's viewBox) lines up
+  // with the top of the watermark band — the band height already
+  // subtracts the same amount, so the bottom alignment stays sane.
+  const logoY = baselineY - logoH - LOGO_SVG_TOP_PADDING_PX;
+  // Text center aligns with the visible optical middle of the logo
+  // (logoY + LOGO_SVG_TOP_PADDING_PX gets us to the visible artwork top),
+  // plus a small nudge to correct the textBaseline='middle' offset.
+  const rowCenterY =
+    logoY + LOGO_SVG_TOP_PADDING_PX + (logoH - LOGO_SVG_TOP_PADDING_PX) / 2;
+  const textY = rowCenterY + TEXT_OPTICAL_CENTER_NUDGE_PX;
   ctx.drawImage(logo, logoX, logoY, logoW, logoH);
+
+  // Title pinned bottom-left, vertically centered on the same Y as the
+  // logo's middle.
+  ctx.save();
+  ctx.font = WATERMARK_TITLE_FONT;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = fill;
+  ctx.fillText('Rig Planner', leftInset, textY);
+  ctx.restore();
+
+  // Tagline sits immediately to the left of the logo, centered on the
+  // same row.
+  const taglineX = logoX - WATERMARK_TAGLINE_GAP_PX;
+  ctx.save();
+  ctx.font = WATERMARK_TAGLINE_FONT;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = fill;
+  ctx.fillText(WATERMARK_TAGLINE, taglineX, textY);
+  ctx.restore();
 }
 
 const cachedProcessedLogoUrl = new Map<string, string>();

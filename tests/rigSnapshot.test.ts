@@ -79,9 +79,9 @@ describe('computeSnapshotLayout', () => {
     );
   });
 
-  it('places the watermark below the board with a gap', () => {
+  it('places the watermark band directly below the board', () => {
     const layout = computeSnapshotLayout(rig(), []);
-    expect(layout.watermarkOffsetY).toBeGreaterThan(
+    expect(layout.watermarkOffsetY).toBeGreaterThanOrEqual(
       layout.boardOffsetY + layout.boardHeightPx,
     );
   });
