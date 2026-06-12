@@ -8,6 +8,7 @@
 // Writes:
 //   - package.json                "version": "1.2.3"
 //   - src-tauri/Cargo.toml        version = "1.2.3"
+//   - src-tauri/Cargo.lock        (synced via `cargo update -p rig-planner-app`)
 //
 // Does NOT touch:
 //   - src-tauri/tauri.conf.json   reads version from "../package.json"
@@ -101,6 +102,21 @@ if (cargoUpdated === cargoRaw)
   die('failed to update Cargo.toml — version line not found');
 writeFileSync(cargoPath, cargoUpdated);
 
+// Cargo.lock: sync the lockfile so the freshly tagged commit isn't left with
+// a stale entry that the next `cargo build` would silently rewrite (dirtying
+// the working tree post-tag, or breaking any future --locked CI gate).
+try {
+  execSync('cargo update -p rig-planner-app --offline', {
+    cwd: resolve(REPO_ROOT, 'src-tauri'),
+    stdio: 'pipe',
+  });
+} catch (err) {
+  die(
+    `failed to sync Cargo.lock: ${err.message}\n` +
+      `  is cargo on PATH? you can re-run \`cd src-tauri && cargo update -p rig-planner-app --offline\` manually.`,
+  );
+}
+
 const androidVersionCode = major * 10000 + minor * 100 + patch;
 
 console.log(`version: ${version}`);
@@ -109,9 +125,10 @@ console.log();
 console.log('wrote:');
 console.log('  package.json');
 console.log('  src-tauri/Cargo.toml');
+console.log('  src-tauri/Cargo.lock');
 console.log();
 console.log('next:');
-console.log(`  git add package.json src-tauri/Cargo.toml`);
+console.log(`  git add package.json src-tauri/Cargo.toml src-tauri/Cargo.lock`);
 console.log(`  git commit -m "chore: release ${tag}"`);
 console.log(`  git tag -a ${tag} -m "Release ${tag}"`);
 console.log(`  git push && git push --tags`);

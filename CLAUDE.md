@@ -103,8 +103,8 @@ AAB output lands at `src-tauri/gen/android/app/build/outputs/bundle/universalRel
 Release flow:
 
 ```
-pnpm version:set 1.2.3                # writes package.json + Cargo.toml; refuses if v1.2.3 already tagged
-git add package.json src-tauri/Cargo.toml
+pnpm version:set 1.2.3                # writes package.json + Cargo.toml + syncs Cargo.lock; refuses if v1.2.3 already tagged
+git add package.json src-tauri/Cargo.toml src-tauri/Cargo.lock
 git commit -m "chore: release v1.2.3"
 git tag -a v1.2.3 -m "Release v1.2.3"
 git push && git push --tags
