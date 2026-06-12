@@ -5,19 +5,21 @@
 // Usage:
 //   pnpm version:set 1.2.3            # bump to 1.2.3, refuse if v1.2.3 tagged
 //   pnpm version:set --check-current  # exit non-zero if package.json's current
-//                                      version is already tagged (used by
-//                                      build.sh --release as a single-source
-//                                      tag check)
+//                                      version is invalid or already tagged
+//                                      (used by build.sh --release as a
+//                                      single-source tag check)
 //
 // Writes:
 //   - package.json                "version": "1.2.3"
 //   - src-tauri/Cargo.toml        version = "1.2.3"
-//   - src-tauri/Cargo.lock        (synced via `cargo update -p rig-planner-app`)
+//   - src-tauri/Cargo.lock        (best-effort via `cargo update -p
+//                                  rig-planner-app`; warns if cargo missing
+//                                  so Docker-only hosts still complete)
 //
 // Does NOT touch:
 //   - src-tauri/tauri.conf.json   reads version from "../package.json"
-//   - src-tauri/gen/android/...   versionName synced by Tauri, versionCode
-//                                 derived in build.gradle.kts from versionName
+//   - src-tauri/gen/android/...   versionName + versionCode read from
+//                                 package.json by build.gradle.kts
 //
 // Refuses if a git tag `v<x.y.z>` already exists — that tag is our marker for
 // "this version shipped to Google Play", so re-using the semver would also
@@ -32,7 +34,7 @@
 // Leaves changes staged but uncommitted. Suggested next steps are printed.
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -46,9 +48,36 @@ function die(msg) {
   process.exit(1);
 }
 
+// Validate a version string and return {major, minor, patch}. Returns null on
+// failure with the reason in `reason`. Called from both the bump path and the
+// --check-current path so the rules don't drift.
+function parseSemver(s) {
+  if (typeof s !== 'string' || s === '') {
+    return { ok: false, reason: 'version is missing or not a string' };
+  }
+  const m = s.match(SEMVER_RE);
+  if (!m) {
+    return {
+      ok: false,
+      reason: `"${s}" is not valid semver (expected x.y.z; prereleases not supported — they collide on the derived Android versionCode)`,
+    };
+  }
+  const [, ma, mi, pa] = m;
+  const [major, minor, patch] = [ma, mi, pa].map(Number);
+  if (major > 99 || minor > 99 || patch > 99) {
+    return {
+      ok: false,
+      reason: `"${s}" components must each be ≤ 99 (Android versionCode formula caps there)`,
+    };
+  }
+  return { ok: true, major, minor, patch };
+}
+
+// argv-array invocation, not shell — no interpolation of `tag` into a string
+// that's later parsed by the shell.
 function tagExists(tag) {
   try {
-    const out = execSync(`git tag -l ${tag}`, {
+    const out = execFileSync('git', ['tag', '-l', tag], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
     });
@@ -61,12 +90,21 @@ function tagExists(tag) {
 const arg = process.argv[2];
 if (!arg) die('usage: pnpm version:set <x.y.z> | --check-current');
 
-// --check-current: read the version from package.json, exit non-zero if
-// `v<version>` is already tagged. Used by scripts/android/build.sh --release
-// so the "refuse to rebuild a shipped version" rule lives in one place.
+// --check-current: read the version from package.json, validate it, exit
+// non-zero if `v<version>` is already tagged. Used by build.sh --release so
+// the "refuse to rebuild a shipped version" rule lives in one place.
 if (arg === '--check-current') {
   const pkgPath = resolve(REPO_ROOT, 'package.json');
-  const current = JSON.parse(readFileSync(pkgPath, 'utf8')).version;
+  let current;
+  try {
+    current = JSON.parse(readFileSync(pkgPath, 'utf8')).version;
+  } catch (err) {
+    die(`failed to read/parse package.json: ${err.message}`);
+  }
+  const parsed = parseSemver(current);
+  if (!parsed.ok) {
+    die(`package.json version is invalid: ${parsed.reason}`);
+  }
   const currentTag = `v${current}`;
   if (tagExists(currentTag)) {
     die(
@@ -78,20 +116,9 @@ if (arg === '--check-current') {
 }
 
 const version = arg;
-
-const match = version.match(SEMVER_RE);
-if (!match)
-  die(
-    `"${version}" is not valid semver (expected x.y.z; prereleases not supported — ` +
-      `they collide on the derived Android versionCode)`,
-  );
-const [, majorStr, minorStr, patchStr] = match;
-const [major, minor, patch] = [majorStr, minorStr, patchStr].map(Number);
-if (major > 99 || minor > 99 || patch > 99) {
-  die(
-    `each semver component must be ≤ 99 (Android versionCode formula caps there)`,
-  );
-}
+const parsed = parseSemver(version);
+if (!parsed.ok) die(parsed.reason);
+const { major, minor, patch } = parsed;
 
 const tag = `v${version}`;
 if (tagExists(tag)) {
@@ -112,8 +139,7 @@ writeFileSync(pkgPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
 // Cargo.toml: scope the version replacement to the [package] section so a
 // future [workspace.package] or other section's `version =` line can't be
-// mistaken for the package version (the previous "first version= line in
-// the file" rule would have flipped to writing the wrong section).
+// mistaken for the package version.
 const cargoPath = resolve(REPO_ROOT, 'src-tauri/Cargo.toml');
 const cargoRaw = readFileSync(cargoPath, 'utf8');
 const cargoSections = cargoRaw.split(/^(?=\[)/m);
@@ -133,32 +159,50 @@ cargoSections[packageSectionIdx] = newSection;
 writeFileSync(cargoPath, cargoSections.join(''));
 
 // Cargo.lock: sync the lockfile so the freshly tagged commit isn't left with
-// a stale entry that the next `cargo build` would silently rewrite (dirtying
-// the working tree post-tag, or breaking any future --locked CI gate).
+// a stale entry. Best-effort: if cargo is unavailable (Docker-only host) or
+// the run fails, warn instead of dying — the manifests are already bumped,
+// and the next containerized `cargo build` will sync Cargo.lock automatically.
+// Capture stderr so the warning surfaces the real cause instead of a generic
+// "is cargo on PATH?" guess.
+let cargoLockSynced = false;
 try {
-  execSync('cargo update -p rig-planner-app --offline', {
+  execFileSync('cargo', ['update', '-p', 'rig-planner-app', '--offline'], {
     cwd: resolve(REPO_ROOT, 'src-tauri'),
     stdio: 'pipe',
   });
+  cargoLockSynced = true;
 } catch (err) {
-  die(
-    `failed to sync Cargo.lock: ${err.message}\n` +
-      `  is cargo on PATH? you can re-run \`cd src-tauri && cargo update -p rig-planner-app --offline\` manually.`,
+  const stderr = (err.stderr || '').toString().trim();
+  const cause =
+    err.code === 'ENOENT'
+      ? 'cargo not on PATH (Docker-only hosts can ignore this)'
+      : stderr || err.message;
+  console.warn(
+    `warning: Cargo.lock not synced: ${cause}\n` +
+      `  the next containerized build will sync it; or run manually:\n` +
+      `    cd src-tauri && cargo update -p rig-planner-app --offline`,
   );
 }
 
-const androidVersionCode = major * 10000 + minor * 100 + patch;
-
 console.log(`version: ${version}`);
-console.log(`android versionCode (derived): ${androidVersionCode}`);
+// versionCode is authoritative in src-tauri/gen/android/app/build.gradle.kts.
+// We mirror the formula here for advisory printing — if you change the formula,
+// keep both sides in sync.
+const advisoryAndroidVersionCode = major * 10000 + minor * 100 + patch;
+console.log(
+  `android versionCode (advisory; Gradle computes): ${advisoryAndroidVersionCode}`,
+);
 console.log();
 console.log('wrote:');
 console.log('  package.json');
 console.log('  src-tauri/Cargo.toml');
-console.log('  src-tauri/Cargo.lock');
+if (cargoLockSynced) console.log('  src-tauri/Cargo.lock');
 console.log();
 console.log('next:');
-console.log(`  git add package.json src-tauri/Cargo.toml src-tauri/Cargo.lock`);
+const staged = cargoLockSynced
+  ? 'package.json src-tauri/Cargo.toml src-tauri/Cargo.lock'
+  : 'package.json src-tauri/Cargo.toml  # remember to also stage Cargo.lock after the next cargo build';
+console.log(`  git add ${staged}`);
 console.log(`  git commit -m "chore: release ${tag}"`);
 console.log(`  git tag -a ${tag} -m "Release ${tag}"`);
 console.log(`  git push && git push --tags`);
