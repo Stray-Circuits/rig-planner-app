@@ -48,3 +48,13 @@
 .pedalPos:active {
   cursor: grabbing;
 }
+
+/* Easter-egg cat positioned below the board — kept off-screen at zoom=1
+   by the canvasArea's overflow clip, and revealed naturally as the user
+   zooms out. */
+.cat {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}

@@ -26,7 +26,18 @@ import { BOARD_DRAWERS, backgroundForStyle } from './boardStyles';
 import { getCachedBoardImage, loadBoardImage } from './boardImageCache';
 import { PedalSprite } from './PedalSprite';
 import { ChainOverlay } from './ChainOverlay';
+import evieLookingUpUrl from '../assets/brand/evie-looking-up.png';
 import styles from './BoardCanvas.module.css';
+
+// Aspect ratio of evie-looking-up.png (207w × 305h native).
+const EVIE_ASPECT = 207 / 305;
+const EVIE_WIDTH_IN = 5;
+// Gap (in inches) between the board's bottom edge and the top of the cat.
+// Tuned so she sits beyond the fit-padding at zoom=1 — only revealed when
+// the user zooms out, no opacity trickery needed.
+const EVIE_GAP_IN = 4;
+// Horizontal inset (in inches) from the board's right edge to the cat's right edge.
+const EVIE_RIGHT_INSET_IN = 3;
 
 const EMPTY_WARNING_SET = new Set<string>();
 
@@ -62,6 +73,14 @@ interface BoardCanvasProps {
   armedEndpointId?: string | null;
   /** Set of "${placedId}:${portId}" keys to render as warnings. */
   unconnectedRequired?: Set<string>;
+  /**
+   * CSS pixels of empty floor between the board's bottom edge and the
+   * canvas-area's bottom edge at the default centered/unzoomed view.
+   * Used as a floor on the easter-egg cat's vertical offset so her top
+   * edge sits past the visible area at zoom=1, no matter how much
+   * empty space the board leaves below itself.
+   */
+  bottomReservePx?: number;
 }
 
 export interface BoardCanvasHandle {
@@ -120,6 +139,7 @@ function BoardCanvasInner(
     armedPort = null,
     armedEndpointId = null,
     unconnectedRequired,
+    bottomReservePx = 0,
   }: BoardCanvasProps,
   ref: ForwardedRef<BoardCanvasHandle>,
 ) {
@@ -363,6 +383,16 @@ function BoardCanvasInner(
     [onRequestActions],
   );
 
+  const catWidthPx = EVIE_WIDTH_IN * pxPerInch;
+  const catHeightPx = catWidthPx / EVIE_ASPECT;
+  // Take the larger of the inch-scaled gap and the canvas-area's bottom
+  // reserve (+ small safety buffer) so the cat is guaranteed off-screen at
+  // zoom=1 even when pxPerInch is small (wide boards / narrow viewports).
+  const catTopOffsetPx = Math.max(
+    EVIE_GAP_IN * pxPerInch,
+    bottomReservePx + 12,
+  );
+
   return (
     <div
       ref={wrapRef}
@@ -375,6 +405,18 @@ function BoardCanvasInner(
         className={styles.canvas}
         style={{
           background: imageSrc ? 'transparent' : backgroundForStyle(rig.style),
+        }}
+      />
+      <img
+        src={evieLookingUpUrl}
+        alt=""
+        aria-hidden
+        className={styles.cat}
+        style={{
+          left: widthPx - catWidthPx - EVIE_RIGHT_INSET_IN * pxPerInch,
+          top: heightPx + catTopOffsetPx,
+          width: catWidthPx,
+          height: catHeightPx,
         }}
       />
       <div className={styles.keepOutLayer} aria-hidden>
