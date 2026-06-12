@@ -79,28 +79,36 @@ if (tagExists(tag)) {
   );
 }
 
-// package.json: write only the version field, preserve the rest verbatim.
+// package.json: parse as JSON, mutate the version field, rewrite. Using a
+// real parser instead of a regex eliminates the fragility around formatting
+// (multi-line entries, prettier reflows, future nested "version" keys).
 const pkgPath = resolve(REPO_ROOT, 'package.json');
 const pkgRaw = readFileSync(pkgPath, 'utf8');
-const pkgUpdated = pkgRaw.replace(
-  /^(\s*"version":\s*")[^"]*(",?\s*)$/m,
-  (_m, prefix, suffix) => `${prefix}${version}${suffix}`,
-);
-if (pkgUpdated === pkgRaw)
-  die('failed to update package.json — version field not found');
-writeFileSync(pkgPath, pkgUpdated);
+const pkgJson = JSON.parse(pkgRaw);
+pkgJson.version = version;
+writeFileSync(pkgPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
-// Cargo.toml: write only the [package].version line; first `version = "..."`
-// in the file is the package version (Cargo TOML convention).
+// Cargo.toml: scope the version replacement to the [package] section so a
+// future [workspace.package] or other section's `version =` line can't be
+// mistaken for the package version (the previous "first version= line in
+// the file" rule would have flipped to writing the wrong section).
 const cargoPath = resolve(REPO_ROOT, 'src-tauri/Cargo.toml');
 const cargoRaw = readFileSync(cargoPath, 'utf8');
-const cargoUpdated = cargoRaw.replace(
+const cargoSections = cargoRaw.split(/^(?=\[)/m);
+const packageSectionIdx = cargoSections.findIndex((s) =>
+  s.startsWith('[package]'),
+);
+if (packageSectionIdx === -1)
+  die('failed to find [package] section in Cargo.toml');
+const oldSection = cargoSections[packageSectionIdx];
+const newSection = oldSection.replace(
   /^(version\s*=\s*")[^"]*(")/m,
   (_m, prefix, suffix) => `${prefix}${version}${suffix}`,
 );
-if (cargoUpdated === cargoRaw)
-  die('failed to update Cargo.toml — version line not found');
-writeFileSync(cargoPath, cargoUpdated);
+if (newSection === oldSection)
+  die('failed to update Cargo.toml — version line not found in [package]');
+cargoSections[packageSectionIdx] = newSection;
+writeFileSync(cargoPath, cargoSections.join(''));
 
 // Cargo.lock: sync the lockfile so the freshly tagged commit isn't left with
 // a stale entry that the next `cargo build` would silently rewrite (dirtying

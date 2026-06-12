@@ -188,9 +188,7 @@ cmd_build() {
         # Android versionCode (MAJOR*10000+MINOR*100+PATCH) collides on re-use
         # — Play Console rejects the upload anyway, so we fail fast here.
         local current_version
-        current_version=$(grep -E '^[[:space:]]*"version":' "${REPO_ROOT}/package.json" \
-            | head -1 \
-            | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+        current_version=$(node -p "require('${REPO_ROOT}/package.json').version" 2>/dev/null)
         if [ -z "${current_version}" ]; then
             echo "error: could not read version from package.json" >&2
             exit 1
