@@ -43,8 +43,14 @@ import { colorFromImagePath } from './pedalImage';
 import type { CustomFloor, FloorStyle } from './floorStyle';
 import strayCircuitsLogoRaw from '../assets/brand/stray-circuits-horizontal-light.svg?raw';
 
-/** Render scale for the snapshot. Higher = larger output, more memory. */
-export const SNAPSHOT_PX_PER_INCH = 100;
+/**
+ * Render scale for the snapshot. With WebP encoding (~210 ms for a
+ * 590×1035 canvas on the Android APK), 50 ppi is the sharp-detail tier
+ * we can afford without losing snappiness — encode budget extrapolates
+ * to ~600 ms at this resolution. The watermark is sized in absolute
+ * pixels so it stays legible at this output size.
+ */
+export const SNAPSHOT_PX_PER_INCH = 50;
 
 /** Outer padding around the board image in the snapshot, in CSS pixels. */
 const PAD_PX = 32;
@@ -57,13 +63,23 @@ const CHIP_BORDER = '#d4d4d8';
 /** Watermark band beneath the board. "Rig Planner" in Audiowide on the
  *  left, then the horizontal Stray Circuits lockup, both anchored to the
  *  bottom-left of the band with a small inset. */
-const WATERMARK_HEIGHT_PX = 72;
-const WATERMARK_TITLE_FONT_SIZE = 40;
+const WATERMARK_TITLE_FONT_SIZE = 44;
 const WATERMARK_TITLE_FONT = `400 ${WATERMARK_TITLE_FONT_SIZE}px Audiowide, ui-rounded, "SF Pro Rounded", system-ui, sans-serif`;
-const WATERMARK_LOGO_HEIGHT_PX = WATERMARK_TITLE_FONT_SIZE;
-const WATERMARK_GAP_PX = 16;
+/** SC horizontal lockup — 2× title height, pinned to the canvas bottom-right. */
+const WATERMARK_LOGO_HEIGHT_PX = WATERMARK_TITLE_FONT_SIZE * 2;
 const WATERMARK_INSET_X_PX = 8;
 const WATERMARK_BASELINE_INSET_PX = 12;
+/** Bump the title baseline up enough that its optical center aligns with
+ *  the logo's vertical center. Audiowide's cap height sits ~72% of font
+ *  size above the alphabetic baseline, and the logo center sits at
+ *  logoH/2 above its bottom — this nudge brings the title up to roughly
+ *  that midpoint instead of sitting flush with the logo's baseline. */
+const WATERMARK_TITLE_BOTTOM_BUMP_PX = 24;
+/** Vertical gap between the bottom of the board and the watermark band. */
+const WATERMARK_TOP_GAP_PX = 12;
+/** Band height tracks the tallest watermark element (the logo) plus the inset. */
+const WATERMARK_HEIGHT_PX =
+  WATERMARK_LOGO_HEIGHT_PX + WATERMARK_BASELINE_INSET_PX + 12;
 const BOARD_FALLBACK_FILL = '#3d3d40';
 const PEDAL_LABEL_COLOR = 'rgba(255, 255, 255, 0.95)';
 const PEDAL_LABEL_OUTLINE = 'rgba(0, 0, 0, 0.7)';
@@ -106,18 +122,18 @@ export interface RigSnapshotResult {
   blob: Blob;
   widthPx: number;
   heightPx: number;
-  /** Mime type the blob was encoded as (e.g. 'image/jpeg'). */
+  /** Mime type the blob was encoded as (e.g. 'image/webp'). */
   mimeType: string;
-  /** Sensible filename extension matching the mime type (e.g. 'jpg'). */
+  /** Sensible filename extension matching the mime type (e.g. 'webp'). */
   fileExtension: string;
 }
 
-/** JPEG quality for the output. Solid floor background means we don't
- *  need alpha and JPEG encodes roughly 5–10× faster than PNG on the
- *  Android WebView, which dominated share-button latency on the APK. */
-const SNAPSHOT_JPEG_QUALITY = 0.92;
-const SNAPSHOT_MIME_TYPE = 'image/jpeg';
-const SNAPSHOT_FILE_EXTENSION = 'jpg';
+/** WebP encoder quality. WebP is generally faster to encode than JPEG on
+ *  Chromium-based WebViews and produces smaller files at similar visual
+ *  quality. Solid floor background means we never need alpha. */
+const SNAPSHOT_ENCODE_QUALITY = 0.85;
+const SNAPSHOT_MIME_TYPE = 'image/webp';
+const SNAPSHOT_FILE_EXTENSION = 'webp';
 
 /**
  * Compose a rig snapshot image. Resolves with the encoded Blob plus the
@@ -134,19 +150,25 @@ export async function composeRigSnapshot(
   const canvas = document.createElement('canvas');
   canvas.width = layout.canvasWidth;
   canvas.height = layout.canvasHeight;
-  const ctx = canvas.getContext('2d');
+  // `willReadFrequently: true` keeps the canvas backing store in CPU
+  // memory instead of on the GPU. The default GPU-accelerated 2D context
+  // pays a GPU→CPU readback cost on every `toBlob`/`getImageData` call;
+  // measured on the Android APK that readback was ~13s regardless of
+  // canvas size (50 ppi vs 30 ppi made no difference to encode time).
+  // CPU-backed canvas makes draw ops a touch slower but `toBlob` cheap,
+  // which is the right tradeoff for a one-shot snapshot.
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) {
     throw new Error('Could not acquire 2D rendering context');
   }
   await drawFloorBackground(ctx, input.floorStyle, input.customFloor, layout);
-
   await drawBoard(ctx, input.rig, layout);
   const chipPositions = input.chainMode
     ? drawEndpointChips(ctx, input.endpoints, layout)
     : new Map<string, { xIn: number; yIn: number }>();
   await drawPedals(ctx, input, layout);
   if (input.chainMode) drawCables(ctx, input, layout, chipPositions);
-  await drawWatermark(ctx, layout);
+  await drawWatermark(ctx, layout, input.floorStyle, input.customFloor);
 
   const blob = await canvasToBlob(canvas);
   return {
@@ -184,7 +206,7 @@ export function computeSnapshotLayout(
   const hasEndpoints = chainMode && endpoints.length > 0;
   const chipStripOffsetY = PAD_PX;
   const boardOffsetY = PAD_PX + (hasEndpoints ? CHIP_STRIP_PX : 0);
-  const watermarkOffsetY = boardOffsetY + boardHeightPx + PAD_PX;
+  const watermarkOffsetY = boardOffsetY + boardHeightPx + WATERMARK_TOP_GAP_PX;
   return {
     canvasWidth: boardWidthPx + 2 * PAD_PX,
     canvasHeight: watermarkOffsetY + WATERMARK_HEIGHT_PX + PAD_PX,
@@ -687,9 +709,40 @@ function fillRoundedRect(
   ctx.stroke();
 }
 
+/** Pick a high-contrast watermark color (black or white) based on the
+ *  floor brightness. For 'custom' we run a YIQ luminance check on the
+ *  user's color; for the named presets we hardcode against the average
+ *  texture color (those are fixed assets, no point sampling at runtime). */
+function watermarkColorForFloor(
+  style: FloorStyle,
+  custom: CustomFloor,
+): { fill: string; logoFill: string } {
+  if (style === 'custom') {
+    const hex = custom.color.replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 140
+      ? { fill: '#000', logoFill: '#000' }
+      : { fill: '#fff', logoFill: '#fff' };
+  }
+  switch (style) {
+    case 'stage_black':
+    case 'wood':
+      return { fill: '#fff', logoFill: '#fff' };
+    case 'concrete_grey':
+    case 'carpet_beige':
+    case 'sidewalk':
+      return { fill: '#000', logoFill: '#000' };
+  }
+}
+
 async function drawWatermark(
   ctx: CanvasRenderingContext2D,
   layout: SnapshotLayout,
+  floorStyle: FloorStyle,
+  customFloor: CustomFloor,
 ): Promise<void> {
   // The Audiowide font is loaded by index.html via Google Fonts. Wait
   // for it explicitly so the first share after page load uses the right
@@ -702,35 +755,49 @@ async function drawWatermark(
     },
   );
 
-  // Anchor at the bottom-left of the canvas with a small inset, then lay
-  // "Rig Planner" + the SC horizontal lockup left-to-right on a shared
-  // baseline.
+  // Title pinned bottom-left, SC lockup pinned bottom-right with matching
+  // insets. Logo bottom sits on `baselineY`; the title's baseline gets
+  // bumped up so its optical center is closer to the logo's center.
+  const { fill, logoFill } = watermarkColorForFloor(floorStyle, customFloor);
   const baselineY =
     layout.canvasHeight - WATERMARK_BASELINE_INSET_PX - PAD_PX / 2;
-  const xCursor = layout.boardOffsetX + WATERMARK_INSET_X_PX;
+  const leftInset = layout.boardOffsetX + WATERMARK_INSET_X_PX;
+  const rightInset =
+    layout.boardOffsetX + layout.boardWidthPx - WATERMARK_INSET_X_PX;
+
   ctx.save();
   ctx.font = WATERMARK_TITLE_FONT;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#1f2937';
-  ctx.fillText('Rig Planner', xCursor, baselineY);
   const titleWidth = ctx.measureText('Rig Planner').width;
+  ctx.fillStyle = fill;
+  ctx.fillText(
+    'Rig Planner',
+    leftInset,
+    baselineY - WATERMARK_TITLE_BOTTOM_BUMP_PX,
+  );
   ctx.restore();
 
-  const logo = await loadImage(processedLogoUrl()).catch(() => null);
+  const logo = await loadImage(processedLogoUrl(logoFill)).catch(() => null);
   if (!logo) return;
-  const logoH = WATERMARK_LOGO_HEIGHT_PX;
-  // The processed SVG carries explicit viewBox-derived dimensions, so
-  // the aspect ratio is known up front.
-  const logoW = logoH * (3400 / 720);
-  const logoX = xCursor + titleWidth + WATERMARK_GAP_PX;
-  // Align the logo's vertical center with the title's optical center
-  // (roughly 30% above the alphabetic baseline for the chosen font).
-  const logoY = baselineY - WATERMARK_TITLE_FONT_SIZE * 0.7;
+  // Default logo size; shrink it if the canvas is too narrow to fit the
+  // title + a gap + the lockup side-by-side. Without this guard, the
+  // title (left-anchored) and the logo (right-anchored) collide on
+  // narrow boards at low ppi — that was the overlap in the shared file.
+  const LOGO_MIN_GAP_PX = 20;
+  const wantedLogoW = WATERMARK_LOGO_HEIGHT_PX * (3400 / 720);
+  const availableLogoW =
+    rightInset - (leftInset + titleWidth + LOGO_MIN_GAP_PX);
+  const logoW = Math.max(0, Math.min(wantedLogoW, availableLogoW));
+  if (logoW <= 0) return;
+  const logoH = logoW * (720 / 3400);
+  const logoX = rightInset - logoW;
+  // Logo bottom aligned with baselineY so it sits flush against the band.
+  const logoY = baselineY - logoH;
   ctx.drawImage(logo, logoX, logoY, logoW, logoH);
 }
 
-let cachedProcessedLogoUrl: string | null = null;
+const cachedProcessedLogoUrl = new Map<string, string>();
 /**
  * The bundled horizontal-light SVG has `width="100%" height="100%"` (no
  * intrinsic pixel size, so `drawImage` falls back to 0×0 on Chrome and
@@ -738,17 +805,22 @@ let cachedProcessedLogoUrl: string | null = null;
  * would be invisible on the snapshot's light background.
  *
  * Patch both at module-init time: rewrite the dimensions from the viewBox
- * and swap the white fill for a dark slate, then encode the result as a
- * data URL we can hand to `Image.src`. The asset file on disk stays
- * untouched — AboutScreen and RigList still use the original light SVG.
+ * and swap the white fill for whatever contrast color the snapshot needs
+ * (#000 on light floors, #fff on dark floors), then encode as a data URL
+ * we can hand to `Image.src`. The asset file on disk stays untouched —
+ * AboutScreen and RigList still use the original light SVG.
+ *
+ * Memoized per target fill so we don't re-encode on every share.
  */
-function processedLogoUrl(): string {
-  if (cachedProcessedLogoUrl !== null) return cachedProcessedLogoUrl;
+function processedLogoUrl(fill: string): string {
+  const cached = cachedProcessedLogoUrl.get(fill);
+  if (cached !== undefined) return cached;
   const patched = strayCircuitsLogoRaw
     .replace('width="100%" height="100%"', 'width="3400" height="720"')
-    .replace(/rgb\(226,236,239\)/g, 'rgb(31,41,55)');
-  cachedProcessedLogoUrl = `data:image/svg+xml;utf8,${encodeURIComponent(patched)}`;
-  return cachedProcessedLogoUrl;
+    .replace(/rgb\(226,236,239\)/g, fill);
+  const url = `data:image/svg+xml;utf8,${encodeURIComponent(patched)}`;
+  cachedProcessedLogoUrl.set(fill, url);
+  return url;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -786,7 +858,7 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
         else reject(new Error('canvas.toBlob returned null'));
       },
       SNAPSHOT_MIME_TYPE,
-      SNAPSHOT_JPEG_QUALITY,
+      SNAPSHOT_ENCODE_QUALITY,
     );
   });
 }

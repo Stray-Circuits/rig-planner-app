@@ -527,9 +527,17 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             .replace(/[/\\:*?"<>|]/g, '')
             .replace(/\s+/g, '-')
             .replace(/^-+|-+$/g, '') || 'rig';
-        const date = new Date().toISOString().slice(0, 10);
+        // Include time-of-day in the filename so back-to-back shares of
+        // the same rig in the same day produce distinct paths. Receiving
+        // apps (Messages, Gmail, etc.) cache thumbnails keyed by the
+        // FileProvider content URI; reusing `rig-2026-06-12.webp` would
+        // make the second share render a stale preview from the first
+        // even though the file content is fresh.
+        const now = new Date();
+        const date = now.toISOString().slice(0, 10);
+        const time = now.toTimeString().slice(0, 8).replace(/:/g, '');
         const result = await shareOrSaveBinaryFile({
-          suggestedFilename: `${stem}-${date}.${fileExtension}`,
+          suggestedFilename: `${stem}-${date}-${time}.${fileExtension}`,
           blob,
           mimeType,
           shareTitle: rig.name,

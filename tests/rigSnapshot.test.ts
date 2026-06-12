@@ -111,7 +111,7 @@ describe('composeRigSnapshot', () => {
     globalThis.Image = OriginalImage;
   });
 
-  it('produces a JPEG blob via canvas.toBlob and walks the draw path without throwing', async () => {
+  it('produces a WebP blob via canvas.toBlob and walks the draw path without throwing', async () => {
     const ctx = makeFakeCtx();
     const getContextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
@@ -137,9 +137,9 @@ describe('composeRigSnapshot', () => {
         customFloor: DEFAULT_CUSTOM_FLOOR,
         chainMode: true,
       });
-      expect(result.blob.type).toBe('image/jpeg');
-      expect(result.mimeType).toBe('image/jpeg');
-      expect(result.fileExtension).toBe('jpg');
+      expect(result.blob.type).toBe('image/webp');
+      expect(result.mimeType).toBe('image/webp');
+      expect(result.fileExtension).toBe('webp');
       expect(result.widthPx).toBeGreaterThan(0);
       expect(result.heightPx).toBeGreaterThan(0);
       expect(toBlobSpy).toHaveBeenCalled();

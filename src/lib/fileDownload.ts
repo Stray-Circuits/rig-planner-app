@@ -223,9 +223,8 @@ async function tryShareViaSharekit(
     // the source file into `cacheDir/<basename>` before exposing it via
     // FileProvider; if our write target is also `cacheDir/<basename>`,
     // sharekit truncates the file (opens the output stream) before
-    // reading from input, leaving a 0-byte attachment. Receiving apps
-    // then show "Failed to add attachment". Writing into a subdirectory
-    // keeps source and destination paths distinct.
+    // reading from input, leaving a 0-byte attachment. Writing into a
+    // subdirectory keeps source and destination paths distinct.
     const shareDir = await join(cacheDir, 'rig-share');
     await mkdir(shareDir, { recursive: true }).catch(() => undefined);
     const path = await join(shareDir, opts.suggestedFilename);
@@ -237,14 +236,18 @@ async function tryShareViaSharekit(
     });
     return { cancelled: false, path };
   } catch (err) {
-    // Both "user cancelled the chooser" and "Linux desktop has no share
-    // sheet" surface as errors here. Treat the cancel string as a real
-    // cancel; otherwise fall back so the user still gets the file via the
-    // save dialog.
-    if (err instanceof Error && /cancel/i.test(err.message)) {
-      return { cancelled: true, path: null };
+    const msg = err instanceof Error ? err.message : String(err);
+    // Only the specific UnsupportedPlatform variant should fall through
+    // to the save dialog — that's how Tauri Linux desktop reports "no
+    // share API available". Any OTHER error means we already showed the
+    // chooser; popping a save dialog afterward would be a duplicate
+    // post-share prompt. In particular the Android chooser quirkily
+    // returns RESULT_CANCELED via the plugin's reject path even on
+    // successful shares, and we don't want to treat that as "save it".
+    if (/not[ _]supported/i.test(msg)) {
+      return 'unsupported';
     }
-    return 'unsupported';
+    return { cancelled: true, path: null };
   }
 }
 
