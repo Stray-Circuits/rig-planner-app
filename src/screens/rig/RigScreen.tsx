@@ -21,6 +21,7 @@ import {
   isOutputRole,
   maxCablesForConnector,
 } from '../../lib/signalChainWarnings';
+import { isEndpointSource } from '../../lib/externalIo';
 import {
   type CustomFloor,
   customFloorBackgroundStyle,
@@ -369,7 +370,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
       setNotice(portFull);
       return false;
     }
-    const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
+    const endpointIsSource = isEndpointSource(ep.kind);
     // Reject backwards cables (two sources, or two sinks). The picker
     // sheet already disables the matching rows for the endpoint-first
     // flow, but tapping a chip directly while a port is armed skips
@@ -527,15 +528,18 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
             .replace(/[/\\:*?"<>|]/g, '')
             .replace(/\s+/g, '-')
             .replace(/^-+|-+$/g, '') || 'rig';
-        // Include time-of-day in the filename so back-to-back shares of
-        // the same rig in the same day produce distinct paths. Receiving
-        // apps (Messages, Gmail, etc.) cache thumbnails keyed by the
-        // FileProvider content URI; reusing `rig-2026-06-12.webp` would
-        // make the second share render a stale preview from the first
-        // even though the file content is fresh.
+        // Include time-of-day (down to ms) in the filename so back-to-back
+        // shares of the same rig produce distinct paths. Receiving apps
+        // (Messages, Gmail, etc.) cache thumbnails keyed by the
+        // FileProvider content URI; reusing `rig-2026-06-12.webp` makes
+        // the second share render a stale preview from the first even
+        // though the file content is fresh. Use locale-consistent date +
+        // time components (don't mix `toISOString` UTC date with
+        // `toTimeString` local clock — they disagree near midnight).
         const now = new Date();
-        const date = now.toISOString().slice(0, 10);
-        const time = now.toTimeString().slice(0, 8).replace(/:/g, '');
+        const pad2 = (n: number) => String(n).padStart(2, '0');
+        const date = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+        const time = `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}${String(now.getMilliseconds()).padStart(3, '0')}`;
         const result = await shareOrSaveBinaryFile({
           suggestedFilename: `${stem}-${date}-${time}.${fileExtension}`,
           blob,

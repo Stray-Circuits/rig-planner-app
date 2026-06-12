@@ -204,19 +204,27 @@ export async function shareOrSaveBinaryFile(
 }
 
 /**
- * Save the blob to app cache and ask sharekit to share it. Returns
- * `'unsupported'` if the plugin or platform isn't available (Linux
- * desktop returns UnsupportedPlatform), so the caller can fall through
- * to {@link saveBinaryFile}.
+ * Save the blob to app cache and ask sharekit to share it. Splits the
+ * pipeline into the staging phase (resolve cache dir, write the file)
+ * and the share-launch phase, so errors before the chooser appears can
+ * be surfaced to the caller while post-launch errors (notably Android's
+ * RESULT_CANCELED-on-success quirk via sharekit's reject path) are
+ * treated as user cancellation. Returns `'unsupported'` only for the
+ * specific UnsupportedPlatform variant (Linux desktop), so the caller
+ * can fall through to {@link saveBinaryFile}.
  */
 async function tryShareViaSharekit(
   opts: ShareOrSaveBinaryFileOptions,
 ): Promise<SaveTextFileResult | 'unsupported'> {
+  let path: string;
+  let shareFile: (
+    url: string,
+    options: { mimeType?: string; title?: string },
+  ) => Promise<void>;
   try {
     const { writeFile, mkdir } = await import('@tauri-apps/plugin-fs');
     const { appCacheDir, join } = await import('@tauri-apps/api/path');
-    const { shareFile } =
-      await import('@choochmeque/tauri-plugin-sharekit-api');
+    ({ shareFile } = await import('@choochmeque/tauri-plugin-sharekit-api'));
     const cacheDir = await appCacheDir();
     // On Android, Tauri's appCacheDir resolves to the same path that
     // sharekit's plugin uses as `activity.cacheDir`. The plugin copies
@@ -227,9 +235,17 @@ async function tryShareViaSharekit(
     // subdirectory keeps source and destination paths distinct.
     const shareDir = await join(cacheDir, 'rig-share');
     await mkdir(shareDir, { recursive: true }).catch(() => undefined);
-    const path = await join(shareDir, opts.suggestedFilename);
+    path = await join(shareDir, opts.suggestedFilename);
     const bytes = new Uint8Array(await opts.blob.arrayBuffer());
     await writeFile(path, bytes);
+  } catch (err) {
+    // Anything that fails before the chooser opens is a real error the
+    // caller should hear about. Re-throw so handleShare's outer catch
+    // surfaces it as a 'Share failed: …' notice instead of falsely
+    // looking like a user cancellation.
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+  try {
     await shareFile(`file://${path}`, {
       mimeType: opts.mimeType ?? opts.blob.type ?? 'application/octet-stream',
       ...(opts.shareTitle !== undefined ? { title: opts.shareTitle } : {}),
@@ -237,16 +253,12 @@ async function tryShareViaSharekit(
     return { cancelled: false, path };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Only the specific UnsupportedPlatform variant should fall through
-    // to the save dialog — that's how Tauri Linux desktop reports "no
-    // share API available". Any OTHER error means we already showed the
-    // chooser; popping a save dialog afterward would be a duplicate
-    // post-share prompt. In particular the Android chooser quirkily
-    // returns RESULT_CANCELED via the plugin's reject path even on
-    // successful shares, and we don't want to treat that as "save it".
-    if (/not[ _]supported/i.test(msg)) {
-      return 'unsupported';
-    }
+    // UnsupportedPlatform = Tauri Linux desktop; fall through to save
+    // dialog. Anything else here means the chooser was already shown —
+    // the Android chooser quirkily rejects with RESULT_CANCELED even on
+    // successful shares, so treat post-launch errors as user cancel
+    // rather than triggering a duplicate save prompt.
+    if (/not[ _]supported/i.test(msg)) return 'unsupported';
     return { cancelled: true, path: null };
   }
 }

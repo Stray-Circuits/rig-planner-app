@@ -17,7 +17,6 @@
 import type {
   Connection,
   ExternalEndpoint,
-  ExternalEndpointKind,
   Pedal,
   PlacedPedal,
   Rig,
@@ -25,6 +24,7 @@ import type {
 } from '../data/schema';
 import { resolveBoardImageSrc } from '../data/boardPresets';
 import { BOARD_DRAWERS, backgroundForStyle } from '../canvas/boardStyles';
+import { loadBoardImage } from '../canvas/boardImageCache';
 import { keepOutRect, placedFootprint, type ObstacleRect } from './geometry';
 import {
   decomposeBoard,
@@ -40,6 +40,7 @@ import {
   type ResolvedPort,
 } from '../canvas/cableRender';
 import { colorFromImagePath } from './pedalImage';
+import { isEndpointSink } from './externalIo';
 import type { CustomFloor, FloorStyle } from './floorStyle';
 import strayCircuitsLogoRaw from '../assets/brand/stray-circuits-horizontal-light.svg?raw';
 
@@ -295,7 +296,10 @@ async function drawBoard(
       layout.boardWidthPx,
       layout.boardHeightPx,
     );
-    const img = await loadImage(src).catch(() => null);
+    // Route board images through the shared cache so the snapshot reuses
+    // the already-decoded image the live BoardCanvas pinned in memory
+    // — saves a redecode per share.
+    const img = await loadBoardImage(src).catch(() => null);
     if (img) {
       ctx.drawImage(
         img,
@@ -315,13 +319,6 @@ async function drawBoard(
   off.height = Math.max(1, Math.round(layout.boardHeightPx));
   const offCtx = off.getContext('2d');
   if (!offCtx) return;
-  // Match the CSS-side backdrop for procedural styles (rail needs #888 so
-  // the rail frame reads; transparent for the rest).
-  const backdrop = backgroundForStyle(rig.style);
-  if (backdrop !== 'transparent') {
-    offCtx.fillStyle = backdrop;
-    offCtx.fillRect(0, 0, off.width, off.height);
-  }
   BOARD_DRAWERS[rig.style]({
     ctx: offCtx,
     width: off.width,
@@ -329,6 +326,19 @@ async function drawBoard(
     scale: 1,
     widthIn: rig.widthIn,
   });
+  // Backdrop is painted AFTER the drawer so it fills the gaps the drawer
+  // left transparent (rail bars sit on a #888 frame; holes punch through
+  // to floor). Using destination-over slips the fill underneath the
+  // drawer's pixels without overwriting them — painting the backdrop
+  // first would just be wiped by the drawer's leading clearRect.
+  const backdrop = backgroundForStyle(rig.style);
+  if (backdrop !== 'transparent') {
+    offCtx.save();
+    offCtx.globalCompositeOperation = 'destination-over';
+    offCtx.fillStyle = backdrop;
+    offCtx.fillRect(0, 0, off.width, off.height);
+    offCtx.restore();
+  }
   ctx.drawImage(off, layout.boardOffsetX, layout.boardOffsetY);
 }
 
@@ -376,13 +386,34 @@ async function drawPedals(
     if (img) {
       ctx.drawImage(img, bodyX, bodyY, widthPx, heightPx);
     } else {
-      const color = colorFromImagePath(pedal.imagePath) ?? '#444';
+      // Explicit `color:#hex` placeholders honour their stored color.
+      // Pedals with a real image that failed to load (offline, stale
+      // cache) fall back to a name-derived color instead of a uniform
+      // grey, so the shared snapshot stays visually distinguishable
+      // instead of collapsing every failed-photo pedal into the same
+      // rectangle.
+      const color =
+        colorFromImagePath(pedal.imagePath) ?? fallbackPedalColor(pedal.name);
       ctx.fillStyle = color;
       ctx.fillRect(bodyX, bodyY, widthPx, heightPx);
       drawPedalLabel(ctx, pedal.name, widthPx, heightPx);
     }
     ctx.restore();
   }
+}
+
+/** Deterministic dark color derived from a pedal name, used when a
+ *  photo-pedal's image fails to load (offline, stale cache). Keeps each
+ *  fallback pedal visually distinct instead of every one rendering as
+ *  the same grey rectangle. Hues stay in the upper third of the wheel
+ *  away from the bright signal-color palette so they read as muted. */
+function fallbackPedalColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 22%, 32%)`;
 }
 
 function drawPedalLabel(
@@ -514,7 +545,16 @@ function drawCables(
   for (const m of metas) {
     const path = pathById.get(m.id);
     if (!path || path.length < 2) continue;
-    ctx.strokeStyle = m.from.color;
+    // Prefer the pedal-side color so endpoint-originated cables (e.g.
+    // amp_fx_send → first pedal) inherit the signal type from the pedal
+    // port instead of always rendering as the endpoint's instrument
+    // default. Matches the live overlay's per-port coloring more
+    // closely.
+    ctx.strokeStyle = m.from.isPedal
+      ? m.from.color
+      : m.to.isPedal
+        ? m.to.color
+        : m.from.color;
     ctx.beginPath();
     for (let i = 0; i < path.length; i += 1) {
       const pt = path[i]!;
@@ -545,10 +585,6 @@ function drawCableCap(
     2 * Math.PI,
   );
   ctx.fill();
-}
-
-function isLeftClusterKind(kind: ExternalEndpointKind): boolean {
-  return kind === 'amp_in' || kind === 'amp_fx_return';
 }
 
 function resolveEnd(
@@ -597,7 +633,7 @@ function resolveEnd(
   }
   // Fallback if chip rendering was skipped — matches the live overlay's
   // pre-measurement default.
-  const isLeft = isLeftClusterKind(ep.kind);
+  const isLeft = isEndpointSink(ep.kind);
   return {
     xIn: isLeft ? 0.75 : rig.widthIn - 0.75,
     yIn: -8 / pxPerInch,
@@ -617,8 +653,8 @@ function drawEndpointChips(
   ctx.save();
   ctx.font = CHIP_FONT;
   ctx.textBaseline = 'middle';
-  const lefts = endpoints.filter((e) => isLeftClusterKind(e.kind));
-  const rights = endpoints.filter((e) => !isLeftClusterKind(e.kind));
+  const lefts = endpoints.filter((e) => isEndpointSink(e.kind));
+  const rights = endpoints.filter((e) => !isEndpointSink(e.kind));
   const stripY = layout.chipStripOffsetY + CHIP_STRIP_PX / 2;
   drawChipCluster(ctx, lefts, 'left', layout, stripY, positions);
   drawChipCluster(ctx, rights, 'right', layout, stripY, positions);
@@ -799,25 +835,30 @@ async function drawWatermark(
 
 const cachedProcessedLogoUrl = new Map<string, string>();
 /**
- * The bundled horizontal-light SVG has `width="100%" height="100%"` (no
- * intrinsic pixel size, so `drawImage` falls back to 0×0 on Chrome and
- * skips the draw entirely) and a near-white fill `rgb(226,236,239)` that
- * would be invisible on the snapshot's light background.
- *
- * Patch both at module-init time: rewrite the dimensions from the viewBox
- * and swap the white fill for whatever contrast color the snapshot needs
- * (#000 on light floors, #fff on dark floors), then encode as a data URL
- * we can hand to `Image.src`. The asset file on disk stays untouched —
- * AboutScreen and RigList still use the original light SVG.
+ * The bundled horizontal-light SVG renders white-on-transparent — fine
+ * for AboutScreen (dark background) but invisible on the snapshot's
+ * light watermark area. Swap the fill to the snapshot's chosen contrast
+ * color and encode as a data URL we can hand to `Image.src`. The asset
+ * itself stays the original light-fill SVG so AboutScreen / RigList are
+ * unaffected.
  *
  * Memoized per target fill so we don't re-encode on every share.
  */
+const SVG_SOURCE_FILL = /rgb\(226,236,239\)/g;
 function processedLogoUrl(fill: string): string {
   const cached = cachedProcessedLogoUrl.get(fill);
   if (cached !== undefined) return cached;
-  const patched = strayCircuitsLogoRaw
-    .replace('width="100%" height="100%"', 'width="3400" height="720"')
-    .replace(/rgb\(226,236,239\)/g, fill);
+  if (!SVG_SOURCE_FILL.test(strayCircuitsLogoRaw)) {
+    // Asset's source fill literal changed and our patch no longer matches
+    // — log so a regression surfaces in dev, then fall through to the
+    // unpatched SVG (better than a silent no-show).
+    console.warn(
+      '[rigSnapshot] SC logo fill literal changed; watermark will use asset default color',
+    );
+  }
+  // RegExp objects with /g track lastIndex; reset before reuse.
+  SVG_SOURCE_FILL.lastIndex = 0;
+  const patched = strayCircuitsLogoRaw.replace(SVG_SOURCE_FILL, fill);
   const url = `data:image/svg+xml;utf8,${encodeURIComponent(patched)}`;
   cachedProcessedLogoUrl.set(fill, url);
   return url;

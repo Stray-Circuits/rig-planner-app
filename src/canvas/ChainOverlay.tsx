@@ -21,6 +21,7 @@ import {
   STEREO_STRAND_COLORS,
 } from '../lib/signalColors';
 import { sortConnectionsForRender } from '../lib/signalChainWarnings';
+import { isEndpointSink, isEndpointSource } from '../lib/externalIo';
 import {
   buildPortIndex,
   computeLeaderLengths,
@@ -720,7 +721,7 @@ export function ChainOverlay({
       >
         <div className={styles.endpointsCluster}>
           {endpoints
-            .filter((ep) => ep.kind === 'amp_in' || ep.kind === 'amp_fx_return')
+            .filter((ep) => isEndpointSink(ep.kind))
             .map((ep) => (
               <EndpointChip
                 key={ep.id}
@@ -737,7 +738,7 @@ export function ChainOverlay({
         </div>
         <div className={styles.endpointsCluster}>
           {endpoints
-            .filter((ep) => ep.kind === 'guitar' || ep.kind === 'amp_fx_send')
+            .filter((ep) => isEndpointSource(ep.kind))
             .map((ep) => (
               <EndpointChip
                 key={ep.id}
@@ -887,7 +888,6 @@ function lookupConnectionEnd(
     };
   }
   const yIn = -ENDPOINT_TIP_FALLBACK_PX / pxPerInch;
-  const isLeftCluster = ep.kind === 'amp_in' || ep.kind === 'amp_fx_return';
-  const xIn = isLeftCluster ? 0.75 : rig.widthIn - 0.75;
+  const xIn = isEndpointSink(ep.kind) ? 0.75 : rig.widthIn - 0.75;
   return { xIn, yIn, side: 'bottom' };
 }
