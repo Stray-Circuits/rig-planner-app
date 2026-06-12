@@ -47,12 +47,70 @@ fun loadProjectVersion(): ProjectVersion {
 val projectVersion = loadProjectVersion()
 
 // Release signing config — loaded from key.properties at the android gen root.
-// File is gitignored; absence is fine for debug builds. Release builds are
-// gated separately in buildTypes.release (throws GradleException if missing).
-val keystoreProperties = Properties().apply {
+// File is gitignored. Absent: debug builds work, release builds fail at
+// task-graph-ready time with an actionable message (see gradle.taskGraph
+// hookup below). Present-but-partial: throws here at configure time so a
+// typo'd field name doesn't surface as an opaque keystore exception deep
+// in the assembleRelease task.
+data class KeystoreConfig(
+    val storeFile: java.io.File,
+    val storePassword: String,
+    val keyAlias: String,
+    val keyPassword: String,
+)
+
+fun loadKeystoreConfig(): KeystoreConfig? {
     val propFile = rootProject.file("key.properties")
-    if (propFile.exists()) {
+    if (!propFile.exists()) return null
+    val props = Properties().apply {
         propFile.inputStream().use { load(it) }
+    }
+    val required = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    val missing = required.filter { props.getProperty(it).isNullOrBlank() }
+    if (missing.isNotEmpty()) {
+        throw GradleException(
+            "key.properties at ${propFile.absolutePath} is missing required field(s): " +
+                "${missing.joinToString(", ")}. All four (storeFile, storePassword, " +
+                "keyAlias, keyPassword) must be set."
+        )
+    }
+    val storeFile = file(props.getProperty("storeFile"))
+    if (!storeFile.exists()) {
+        throw GradleException(
+            "key.properties storeFile '${storeFile.absolutePath}' does not exist. " +
+                "For containerized release builds the path should be the in-container " +
+                "form (e.g. /keystore/rig-planner-release.p12) — the build wrapper " +
+                "bind-mounts \$KEYSTORE_DIR at /keystore."
+        )
+    }
+    return KeystoreConfig(
+        storeFile,
+        props.getProperty("storePassword"),
+        props.getProperty("keyAlias"),
+        props.getProperty("keyPassword"),
+    )
+}
+
+val keystoreConfig = loadKeystoreConfig()
+
+// Fail any release-variant build that isn't going to be signed, regardless of
+// which entry point invoked Gradle (build.sh, `gradlew` in the container
+// shell, Android Studio). Without this, an unsigned APK/AAB would be produced
+// with only a buried Gradle warning, and only Play Console would reject it.
+gradle.taskGraph.whenReady {
+    if (keystoreConfig != null) return@whenReady
+    val releaseTask = allTasks.firstOrNull { task ->
+        val n = task.name
+        (n.startsWith("assemble") || n.startsWith("bundle") || n.startsWith("package")) &&
+            n.contains("Release")
+    }
+    if (releaseTask != null) {
+        throw GradleException(
+            "Release task ${releaseTask.path} requires a signing config, but " +
+                "${rootProject.file("key.properties").absolutePath} is missing. " +
+                "Use `pnpm android:container:build:release` (which sets this up) " +
+                "or create key.properties manually — see CLAUDE.md."
+        )
     }
 }
 
@@ -69,12 +127,11 @@ android {
     }
     signingConfigs {
         create("release") {
-            val storeFilePath = keystoreProperties.getProperty("storeFile")
-            if (storeFilePath != null) {
-                storeFile = file(storeFilePath)
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
+            keystoreConfig?.let {
+                storeFile = it.storeFile
+                storePassword = it.storePassword
+                keyAlias = it.keyAlias
+                keyPassword = it.keyPassword
             }
         }
     }
@@ -83,7 +140,7 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         getByName("release") {
-            if (keystoreProperties.getProperty("storeFile") != null) {
+            if (keystoreConfig != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
             isMinifyEnabled = true
