@@ -1,12 +1,23 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 
 // Tauri exposes env vars at compile time
 const host = process.env.TAURI_DEV_HOST;
 
+// Bake the package.json version into the bundle as __APP_VERSION__ so the
+// About screen can display it. package.json is the single source of truth for
+// the release version; see CLAUDE.md "Release version is one number".
+const pkg = JSON.parse(readFileSync('./package.json', 'utf8')) as {
+  version: string;
+};
+
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
