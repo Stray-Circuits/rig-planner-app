@@ -3,7 +3,11 @@
 // Set the project's release version across every source-of-truth file.
 //
 // Usage:
-//   pnpm version:set 1.2.3
+//   pnpm version:set 1.2.3            # bump to 1.2.3, refuse if v1.2.3 tagged
+//   pnpm version:set --check-current  # exit non-zero if package.json's current
+//                                      version is already tagged (used by
+//                                      build.sh --release as a single-source
+//                                      tag check)
 //
 // Writes:
 //   - package.json                "version": "1.2.3"
@@ -54,8 +58,26 @@ function tagExists(tag) {
   }
 }
 
-const version = process.argv[2];
-if (!version) die('usage: pnpm version:set <x.y.z>');
+const arg = process.argv[2];
+if (!arg) die('usage: pnpm version:set <x.y.z> | --check-current');
+
+// --check-current: read the version from package.json, exit non-zero if
+// `v<version>` is already tagged. Used by scripts/android/build.sh --release
+// so the "refuse to rebuild a shipped version" rule lives in one place.
+if (arg === '--check-current') {
+  const pkgPath = resolve(REPO_ROOT, 'package.json');
+  const current = JSON.parse(readFileSync(pkgPath, 'utf8')).version;
+  const currentTag = `v${current}`;
+  if (tagExists(currentTag)) {
+    die(
+      `refusing to proceed — ${currentTag} is already tagged in git.\n` +
+        `  that version has shipped; bump first with: pnpm version:set <next-x.y.z>`,
+    );
+  }
+  process.exit(0);
+}
+
+const version = arg;
 
 const match = version.match(SEMVER_RE);
 if (!match)
