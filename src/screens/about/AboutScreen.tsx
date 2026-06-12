@@ -130,6 +130,8 @@ export function AboutScreen({ onBack }: AboutScreenProps) {
         <p className={styles.colophon}>
           ❤️ Powered by cat snuggles and purrs 🐾
         </p>
+
+        <p className={styles.version}>v{__APP_VERSION__}</p>
       </main>
     </div>
   );

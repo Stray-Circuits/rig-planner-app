@@ -9,7 +9,7 @@
 # Subcommands:
 #   build-image           Build (or rebuild) the container image
 #   init                  Run `tauri android init` inside the container
-#   build [--release]     Build a debug (default) or release APK
+#   build [--release]     Build a debug APK (default) or signed release APK+AAB
 #   shell                 Drop into an interactive shell in the container
 #   clean                 Remove the gradle + cargo caches we own
 #
@@ -43,6 +43,13 @@ VOL_ANDROID="rig-planner-android"
 # enough for our compile workload. Override only if you know what you're
 # doing.
 PLATFORM="${RIG_PLANNER_ANDROID_PLATFORM:-linux/amd64}"
+
+# Host directory holding the release keystore(s). Mounted read-only into the
+# container at /keystore for release builds. The key.properties file (under
+# src-tauri/gen/android/) references the keystore via its in-container path
+# (storeFile=/keystore/<name>.p12), so this default keeps the properties file
+# portable across machines.
+KEYSTORE_DIR="${RIG_PLANNER_ANDROID_KEYSTORE_DIR:-${HOME}/.android/keystores}"
 
 usage() {
     sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'
@@ -97,6 +104,9 @@ ensure_image() {
 #   - The host yaml's macOS-specific `storeDir` doesn't override our
 #     PNPM_STORE_DIR env, so the mounted pnpm cache volume gets used.
 # The host file is untouched — the override only exists inside the container.
+#
+# If MOUNT_KEYSTORE=1, also bind-mounts ${KEYSTORE_DIR} read-only at /keystore
+# so Gradle can read the signing key referenced by key.properties.
 exec_in_container() {
     ensure_image
     local args=(
@@ -119,6 +129,14 @@ exec_in_container() {
 	-v "${VOL_ANDROID}:/root/.android"
         -w /workspace
     )
+    if [ "${MOUNT_KEYSTORE:-0}" = "1" ]; then
+        if [ ! -d "${KEYSTORE_DIR}" ]; then
+            echo "error: keystore directory not found: ${KEYSTORE_DIR}" >&2
+            echo "  set RIG_PLANNER_ANDROID_KEYSTORE_DIR or create the default path." >&2
+            exit 1
+        fi
+        args+=( -v "${KEYSTORE_DIR}:/keystore:ro" )
+    fi
     if [ -n "${PLATFORM}" ]; then
         args+=( --platform "${PLATFORM}" )
     fi
@@ -149,21 +167,40 @@ cmd_build() {
     # CARGO_PROFILE_DEV_STRIP env override) so the single .so lands at
     # ~15MB instead of ~190MB. Release stays universal (all 4 ABIs, no env
     # override — release already strips well).
+    # Tauri's `android build` defaults to release; `--debug` is the opt-in.
+    # The debug path also restricts to arm64-v8a to keep the .so single-ABI
+    # (see comment below on cargo dev profile + symbol strip).
     local mode="--debug --target aarch64"
+    # Release emits both APK (sideload-friendly) and AAB (Play Store-required);
+    # the AAB step is a cheap extra Gradle task off the same compile.
+    local outputs="--apk"
     if [ "${1:-}" = "--release" ]; then
-        mode="--release"
+        mode=""
+        outputs="--apk --aab"
         unset CARGO_PROFILE_DEV_STRIP
+        if [ ! -f "${REPO_ROOT}/src-tauri/gen/android/key.properties" ]; then
+            echo "error: src-tauri/gen/android/key.properties not found" >&2
+            echo "  required for signed release builds — see CLAUDE.md security section." >&2
+            exit 1
+        fi
+        # Delegate the "is this version already tagged?" check to version-set.mjs
+        # so the rule lives in exactly one place (the bump-time and build-time
+        # checks otherwise drift). A tagged version means "shipped to Play"
+        # and the derived versionCode would collide on re-upload.
+        node "${REPO_ROOT}/scripts/version-set.mjs" --check-current || exit 1
+        export MOUNT_KEYSTORE=1
     else
         export CARGO_PROFILE_DEV_STRIP="symbols"
     fi
-    echo ">> Building Android APK (${mode})"
+    local label="${mode:-release} ${outputs}"
+    echo ">> Building Android (${label})"
     exec_in_container bash -lc "
         set -euo pipefail
         pnpm install --frozen-lockfile --ignore-workspace
-        pnpm --ignore-workspace tauri android build ${mode} --apk
+        pnpm --ignore-workspace tauri android build ${mode} ${outputs}
         echo
-        echo '>> APK output:'
-        find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -print
+        echo '>> Build outputs:'
+        find src-tauri/gen/android/app/build/outputs \\( -name '*.apk' -o -name '*.aab' \\) -print
     "
 }
 
