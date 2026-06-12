@@ -81,7 +81,6 @@ const WATERMARK_TOP_GAP_PX = 12;
 /** Band height tracks the tallest watermark element (the logo) plus the inset. */
 const WATERMARK_HEIGHT_PX =
   WATERMARK_LOGO_HEIGHT_PX + WATERMARK_BASELINE_INSET_PX + 12;
-const BOARD_FALLBACK_FILL = '#3d3d40';
 const PEDAL_LABEL_COLOR = 'rgba(255, 255, 255, 0.95)';
 const PEDAL_LABEL_OUTLINE = 'rgba(0, 0, 0, 0.7)';
 
@@ -285,17 +284,12 @@ async function drawBoard(
     depthIn: rig.depthIn,
   });
   if (src !== null) {
-    // Bundled board PNG path. The board PNG itself usually has a fallback
-    // shape on transparent; paint a neutral backdrop first so any
-    // transparent regions don't show the floor texture through them
-    // (the live canvas uses a CSS background for the same purpose).
-    ctx.fillStyle = BOARD_FALLBACK_FILL;
-    ctx.fillRect(
-      layout.boardOffsetX,
-      layout.boardOffsetY,
-      layout.boardWidthPx,
-      layout.boardHeightPx,
-    );
+    // Bundled board PNG path. The live BoardCanvas keeps its canvas
+    // background TRANSPARENT when an image is loaded (BoardCanvas.tsx
+    // line 377: `background: imageSrc ? 'transparent' : ...`), so the
+    // floor underneath shows through wherever the PNG is transparent —
+    // between Pedaltrain rails, around Mono board edges, etc. Don't
+    // paint a backdrop here; just drop the PNG onto the floor.
     // Route board images through the shared cache so the snapshot reuses
     // the already-decoded image the live BoardCanvas pinned in memory
     // — saves a redecode per share.
