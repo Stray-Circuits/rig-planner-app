@@ -64,7 +64,7 @@ const CHIP_BORDER = '#d4d4d8';
 /** Watermark band beneath the board. "Rig Planner" in Audiowide on the
  *  left, then the horizontal Stray Circuits lockup, both anchored to the
  *  bottom-left of the band with a small inset. */
-const WATERMARK_TITLE_FONT_SIZE = 32;
+const WATERMARK_TITLE_FONT_SIZE = 36;
 const WATERMARK_TITLE_FONT = `400 ${WATERMARK_TITLE_FONT_SIZE}px Audiowide, ui-rounded, "SF Pro Rounded", system-ui, sans-serif`;
 /** Connector tagline between the title and the SC lockup. Serif italic
  *  renders visibly thinner than sans-italic at the same nominal weight
@@ -73,24 +73,29 @@ const WATERMARK_TITLE_FONT = `400 ${WATERMARK_TITLE_FONT_SIZE}px Audiowide, ui-r
 const WATERMARK_TAGLINE = 'made by';
 const WATERMARK_TAGLINE_FONT_SIZE = 15;
 const WATERMARK_TAGLINE_FONT = `italic 400 ${WATERMARK_TAGLINE_FONT_SIZE}px Georgia, "Times New Roman", ui-serif, serif`;
-/** Padding on either side of the tagline, between it and the title/logo. */
-const WATERMARK_TAGLINE_GAP_PX = 14;
+/** Padding on either side of the tagline, between it and the title/logo.
+ *  The logo gap is measured to the SVG's bounding box, but the SC SVG
+ *  carries ~1.3% transparent left-padding; at full-size lockups the
+ *  visible artwork still sits ~7 px inside the box, so this constant
+ *  reads slightly tighter than its numeric value. */
+const WATERMARK_TAGLINE_GAP_PX = 22;
 /** SC horizontal lockup — the dominant brand mark in the watermark
  *  row, pinned to the canvas bottom-right. Sized in absolute px (not
  *  derived from title size) so the title can shrink without dragging
  *  the lockup down with it. */
-const WATERMARK_LOGO_HEIGHT_PX = 128;
+const WATERMARK_LOGO_HEIGHT_PX = 108;
 const WATERMARK_INSET_X_PX = 8;
 const WATERMARK_BASELINE_INSET_PX = 12;
 /** Vertical gap between the bottom of the board and the watermark band. */
-const WATERMARK_TOP_GAP_PX = 0;
+const WATERMARK_TOP_GAP_PX = 18;
 /** The Stray Circuits SVG carries ~10% transparent padding at the top
- *  (the cat group's translate-y in the viewBox). At the rendered logo
- *  height that's ~13 px of empty space above the visible lockup; the
- *  band would otherwise show that gap as wasted vertical space below
- *  the board. Subtract it from the band height and shift the logo up
- *  by the same amount so the visible content hugs the board edge. */
-const LOGO_SVG_TOP_PADDING_PX = 13;
+ *  of its viewBox (the cat group's translate-y of 71.3 in a 720-unit
+ *  viewBox). The band would otherwise show that gap as wasted space
+ *  above the visible lockup. Subtract it from the band height so the
+ *  band hugs the visible artwork rather than the SVG's bounding box. */
+const LOGO_SVG_TOP_PADDING_PX = Math.round(
+  WATERMARK_LOGO_HEIGHT_PX * (71.3 / 720),
+);
 /** textBaseline='middle' centers text on the em-box, which sits a
  *  hair above the optical center of cap-height glyphs — Audiowide and
  *  Georgia italic both render 2 px high vs the logo's visual middle on
@@ -828,54 +833,59 @@ async function drawWatermark(
   const taglineWidth = ctx.measureText(WATERMARK_TAGLINE).width;
   ctx.restore();
 
-  // Default logo size; shrink it if the canvas is too narrow to fit the
-  // title + tagline + lockup side-by-side. Without this guard, the
-  // title (left-anchored) and the logo (right-anchored) collide on
-  // narrow boards at low ppi.
+  // Pack title + tagline + logo into a single horizontal block with
+  // fixed gaps, then center the block on the canvas. On wide boards
+  // this reads as a compact, balanced watermark instead of three
+  // elements spread to opposite edges; on narrow boards the logo
+  // shrinks to fit, the block still centers.
   const wantedLogoW = WATERMARK_LOGO_HEIGHT_PX * (3400 / 720);
-  const reservedForRow =
-    leftInset +
+  const availableRowWidth = rightInset - leftInset;
+  const nonLogoRowWidth =
     titleWidth +
     WATERMARK_TAGLINE_GAP_PX +
     taglineWidth +
     WATERMARK_TAGLINE_GAP_PX;
-  const availableLogoW = rightInset - reservedForRow;
-  const logoW = Math.max(0, Math.min(wantedLogoW, availableLogoW));
+  const logoW = Math.max(
+    0,
+    Math.min(wantedLogoW, availableRowWidth - nonLogoRowWidth),
+  );
   if (logoW <= 0) return;
   const logoH = logoW * (720 / 3400);
-  const logoX = rightInset - logoW;
-  // Shift the logo up by LOGO_SVG_TOP_PADDING_PX so the visible artwork
-  // (which is itself offset down inside the SVG's viewBox) lines up
-  // with the top of the watermark band — the band height already
-  // subtracts the same amount, so the bottom alignment stays sane.
-  const logoY = baselineY - logoH - LOGO_SVG_TOP_PADDING_PX;
-  // Text center aligns with the visible optical middle of the logo
-  // (logoY + LOGO_SVG_TOP_PADDING_PX gets us to the visible artwork top),
-  // plus a small nudge to correct the textBaseline='middle' offset.
-  const rowCenterY =
-    logoY + LOGO_SVG_TOP_PADDING_PX + (logoH - LOGO_SVG_TOP_PADDING_PX) / 2;
+  const blockWidth = nonLogoRowWidth + logoW;
+  const blockStartX = (layout.canvasWidth - blockWidth) / 2;
+  const titleX = blockStartX;
+  const titleRightEdge = titleX + titleWidth;
+  const taglineCenterX =
+    titleRightEdge + WATERMARK_TAGLINE_GAP_PX + taglineWidth / 2;
+  const logoX = titleRightEdge + nonLogoRowWidth - titleWidth;
+
+  // Logo bottom sits on the baseline. The band height already subtracts
+  // LOGO_SVG_TOP_PADDING_PX so `baselineY - logoH` places the logo such
+  // that its visible artwork (offset down by SVG_PAD inside the viewBox)
+  // starts exactly at the top of the band.
+  const logoY = baselineY - logoH;
+  // Visible artwork center = logo geometric center when SVG padding is
+  // roughly symmetric. Nudge text Y to compensate for
+  // textBaseline='middle' rendering a couple px above the visible-glyph
+  // optical center.
+  const rowCenterY = logoY + logoH / 2;
   const textY = rowCenterY + TEXT_OPTICAL_CENTER_NUDGE_PX;
   ctx.drawImage(logo, logoX, logoY, logoW, logoH);
 
-  // Title pinned bottom-left, vertically centered on the same Y as the
-  // logo's middle.
   ctx.save();
   ctx.font = WATERMARK_TITLE_FONT;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = fill;
-  ctx.fillText('Rig Planner', leftInset, textY);
+  ctx.fillText('Rig Planner', titleX, textY);
   ctx.restore();
 
-  // Tagline sits immediately to the left of the logo, centered on the
-  // same row.
-  const taglineX = logoX - WATERMARK_TAGLINE_GAP_PX;
   ctx.save();
   ctx.font = WATERMARK_TAGLINE_FONT;
-  ctx.textAlign = 'right';
+  ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = fill;
-  ctx.fillText(WATERMARK_TAGLINE, taglineX, textY);
+  ctx.fillText(WATERMARK_TAGLINE, taglineCenterX, textY);
   ctx.restore();
 }
 
