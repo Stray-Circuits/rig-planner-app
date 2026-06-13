@@ -81,9 +81,24 @@ function clearLegacyFromStorage(): void {
 
 /**
  * Run the backfill if it hasn't already. Safe to call on every boot; the
- * `app_state` flag short-circuits subsequent runs.
+ * `app_state` flag short-circuits subsequent runs, and the in-flight
+ * promise guard short-circuits concurrent calls within a single boot
+ * (React StrictMode runs the boot effect twice in dev, which used to
+ * race two backfills into a UNIQUE-constraint failure on the flag INSERT).
  */
-export async function ensureLegacyFloorBackfill(): Promise<void> {
+let inFlight: Promise<void> | null = null;
+
+export function ensureLegacyFloorBackfill(): Promise<void> {
+  if (inFlight) return inFlight;
+  inFlight = runBackfill().catch((err: unknown) => {
+    // Don't pin a failed attempt — the next boot should try again.
+    inFlight = null;
+    throw err;
+  });
+  return inFlight;
+}
+
+async function runBackfill(): Promise<void> {
   const db = await getDb();
   const flagRows = await db.select<{ value: string | null | undefined }>(
     `SELECT value FROM app_state WHERE key = ?`,
@@ -97,8 +112,11 @@ export async function ensureLegacyFloorBackfill(): Promise<void> {
   if (legacy.hadAny) {
     const rigRows = await db.select<{ id: string }>('SELECT id FROM rigs');
     for (const row of rigRows) {
+      // Intentionally NOT bumping `updated_at` — the rig list orders by it,
+      // so touching every row would collapse the user's recent-use sort
+      // into a single timestamp on first launch post-upgrade.
       await db.execute(
-        `UPDATE rigs SET floor_style = ?, custom_floor_color = ?, custom_floor_grain = ?, updated_at = datetime('now')
+        `UPDATE rigs SET floor_style = ?, custom_floor_color = ?, custom_floor_grain = ?
          WHERE id = ?`,
         [
           legacy.floorStyle,

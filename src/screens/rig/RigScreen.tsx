@@ -84,7 +84,8 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const updateBoard = useRigsStore((s) => s.updateBoard);
   const updateJackSize = useRigsStore((s) => s.updateJackSize);
   const updateFloorStyle = useRigsStore((s) => s.updateFloorStyle);
-  const updateCustomFloor = useRigsStore((s) => s.updateCustomFloor);
+  const setCustomFloorLocal = useRigsStore((s) => s.setCustomFloorLocal);
+  const commitCustomFloor = useRigsStore((s) => s.commitCustomFloor);
   const deleteRig = useRigsStore((s) => s.deleteRig);
 
   const connections = useSignalChainStore(
@@ -104,8 +105,36 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const changeFloor = (next: FloorStyle) => {
     void updateFloorStyle(rig.id, next);
   };
+  // Custom-floor color + grain are bound to a native color picker + range
+  // slider whose onChange fires per drag tick. We want each tick to update
+  // the canvas immediately (optimistic in-memory write) but coalesce the
+  // SQL persistence to a trailing-edge commit so we don't queue 100+ DB
+  // writes per drag through the Tauri SQL IPC.
+  const customFloorCommitTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const pendingCustomFloorRef = useRef<CustomFloor | null>(null);
+  const flushCustomFloorCommit = useCallback(() => {
+    if (customFloorCommitTimerRef.current !== null) {
+      clearTimeout(customFloorCommitTimerRef.current);
+      customFloorCommitTimerRef.current = null;
+    }
+    const pending = pendingCustomFloorRef.current;
+    if (pending) {
+      pendingCustomFloorRef.current = null;
+      void commitCustomFloor(rig.id, pending);
+    }
+  }, [rig.id, commitCustomFloor]);
+  // Flush on unmount + when rig.id changes so a pending value isn't lost
+  // if the user navigates away mid-drag.
+  useEffect(() => flushCustomFloorCommit, [flushCustomFloorCommit]);
   const changeCustomFloor = (next: CustomFloor) => {
-    void updateCustomFloor(rig.id, next);
+    setCustomFloorLocal(rig.id, next);
+    pendingCustomFloorRef.current = next;
+    if (customFloorCommitTimerRef.current !== null) {
+      clearTimeout(customFloorCommitTimerRef.current);
+    }
+    customFloorCommitTimerRef.current = setTimeout(flushCustomFloorCommit, 150);
   };
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);

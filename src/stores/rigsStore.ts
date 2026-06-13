@@ -48,7 +48,15 @@ interface RigsState {
   ) => Promise<void>;
   updateJackSize: (id: string, jackSize: JackSize) => Promise<void>;
   updateFloorStyle: (id: string, floorStyle: FloorStyle) => Promise<void>;
-  updateCustomFloor: (id: string, customFloor: CustomFloor) => Promise<void>;
+  /**
+   * Optimistically set the rig's customFloor in memory without touching
+   * the DB. Used for slider/color-picker drags so the canvas tracks the
+   * gesture without queueing a SQL write per onChange tick — pair with
+   * a trailing-edge {@link commitCustomFloor} for persistence.
+   */
+  setCustomFloorLocal: (id: string, customFloor: CustomFloor) => void;
+  /** Persist a customFloor value to the DB. Doesn't touch in-memory state. */
+  commitCustomFloor: (id: string, customFloor: CustomFloor) => Promise<void>;
   duplicateRig: (id: string) => Promise<Rig>;
   deleteRig: (id: string) => Promise<void>;
   openRig: (id: string) => Promise<void>;
@@ -129,11 +137,14 @@ export const useRigsStore = create<RigsState>((set, get) => ({
     });
   },
 
-  updateCustomFloor: async (id, customFloor) => {
-    await repoUpdateCustomFloor(id, customFloor);
+  setCustomFloorLocal: (id, customFloor) => {
     set({
       rigs: get().rigs.map((r) => (r.id === id ? { ...r, customFloor } : r)),
     });
+  },
+
+  commitCustomFloor: async (id, customFloor) => {
+    await repoUpdateCustomFloor(id, customFloor);
   },
 
   duplicateRig: async (id) => {
