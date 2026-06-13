@@ -12,11 +12,18 @@
  */
 import type {
   Connection,
+  CustomFloor,
   ExternalEndpoint,
   Pedal,
   PlacedPedal,
   Rig,
 } from '../data/schema';
+import {
+  DEFAULT_CUSTOM_FLOOR,
+  DEFAULT_FLOOR_STYLE,
+  isFloorStyle,
+  isValidHexColor,
+} from './floorStyle';
 
 export const RIG_EXPORT_KIND = 'rig-planner-export' as const;
 export const RIG_EXPORT_VERSION = 1 as const;
@@ -163,7 +170,31 @@ export function parseRigExport(text: string): RigExport {
     jackSizeRaw === 'large'
       ? jackSizeRaw
       : 'large';
-  const rig = { ...rigObj, presetId, jackSize } as unknown as Rig;
+  // floorStyle + customFloor weren't carried by exports built before #114
+  // — fall back to the canvas default so older files load cleanly.
+  const floorStyleRaw = rigObj.floorStyle;
+  const floorStyle = isFloorStyle(floorStyleRaw)
+    ? floorStyleRaw
+    : DEFAULT_FLOOR_STYLE;
+  const customFloorRaw = rigObj.customFloor;
+  let customFloor: CustomFloor = DEFAULT_CUSTOM_FLOOR;
+  if (customFloorRaw && typeof customFloorRaw === 'object') {
+    const cf = customFloorRaw as Record<string, unknown>;
+    customFloor = {
+      color: isValidHexColor(cf.color) ? cf.color : DEFAULT_CUSTOM_FLOOR.color,
+      grain:
+        typeof cf.grain === 'number' && cf.grain >= 0 && cf.grain <= 1
+          ? cf.grain
+          : DEFAULT_CUSTOM_FLOOR.grain,
+    };
+  }
+  const rig = {
+    ...rigObj,
+    presetId,
+    jackSize,
+    floorStyle,
+    customFloor,
+  } as unknown as Rig;
 
   const pedals = requireArray(raw, 'pedals') as Pedal[];
   const placedPedals = requireArray(raw, 'placedPedals') as PlacedPedal[];

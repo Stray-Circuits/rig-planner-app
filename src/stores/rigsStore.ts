@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { JackSize, Rig } from '../data/schema';
+import type { CustomFloor, FloorStyle, JackSize, Rig } from '../data/schema';
 import {
   createRig as repoCreate,
   deleteRig as repoDelete,
@@ -8,10 +8,13 @@ import {
   renameRig as repoRename,
   touchRig as repoTouch,
   updateRigBoard as repoUpdateBoard,
+  updateRigCustomFloor as repoUpdateCustomFloor,
   updateRigDimensions as repoUpdateDimensions,
+  updateRigFloorStyle as repoUpdateFloorStyle,
   updateRigJackSize as repoUpdateJackSize,
   updateRigStyle as repoUpdateStyle,
 } from '../data/rigsRepo';
+import { ensureLegacyFloorBackfill } from '../data/legacyFloorBackfill';
 import { useUiStore } from './uiStore';
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -44,6 +47,8 @@ interface RigsState {
     presetId: string | null,
   ) => Promise<void>;
   updateJackSize: (id: string, jackSize: JackSize) => Promise<void>;
+  updateFloorStyle: (id: string, floorStyle: FloorStyle) => Promise<void>;
+  updateCustomFloor: (id: string, customFloor: CustomFloor) => Promise<void>;
   duplicateRig: (id: string) => Promise<Rig>;
   deleteRig: (id: string) => Promise<void>;
   openRig: (id: string) => Promise<void>;
@@ -61,6 +66,7 @@ export const useRigsStore = create<RigsState>((set, get) => ({
   loadRigs: async () => {
     set({ status: 'loading', error: null });
     try {
+      await ensureLegacyFloorBackfill();
       const rigs = await listRigs();
       set({ rigs, status: 'ready' });
     } catch (err) {
@@ -113,6 +119,20 @@ export const useRigsStore = create<RigsState>((set, get) => ({
     await repoUpdateJackSize(id, jackSize);
     set({
       rigs: get().rigs.map((r) => (r.id === id ? { ...r, jackSize } : r)),
+    });
+  },
+
+  updateFloorStyle: async (id, floorStyle) => {
+    await repoUpdateFloorStyle(id, floorStyle);
+    set({
+      rigs: get().rigs.map((r) => (r.id === id ? { ...r, floorStyle } : r)),
+    });
+  },
+
+  updateCustomFloor: async (id, customFloor) => {
+    await repoUpdateCustomFloor(id, customFloor);
+    set({
+      rigs: get().rigs.map((r) => (r.id === id ? { ...r, customFloor } : r)),
     });
   },
 

@@ -26,10 +26,6 @@ import {
   type CustomFloor,
   customFloorBackgroundStyle,
   type FloorStyle,
-  readCustomFloor,
-  readFloorStyle,
-  writeCustomFloor,
-  writeFloorStyle,
 } from '../../lib/floorStyle';
 import type { Connection, ExternalEndpoint } from '../../data/schema';
 import { usePedalsStore } from '../../stores/pedalsStore';
@@ -87,6 +83,8 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const renameRig = useRigsStore((s) => s.renameRig);
   const updateBoard = useRigsStore((s) => s.updateBoard);
   const updateJackSize = useRigsStore((s) => s.updateJackSize);
+  const updateFloorStyle = useRigsStore((s) => s.updateFloorStyle);
+  const updateCustomFloor = useRigsStore((s) => s.updateCustomFloor);
   const deleteRig = useRigsStore((s) => s.deleteRig);
 
   const connections = useSignalChainStore(
@@ -101,19 +99,13 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
   const addEndpoint = useSignalChainStore((s) => s.addEndpoint);
   const removeEndpoint = useSignalChainStore((s) => s.removeEndpoint);
 
-  const [floorStyle, setFloorStyle] = useState<FloorStyle>(() =>
-    readFloorStyle(),
-  );
-  const [customFloor, setCustomFloor] = useState<CustomFloor>(() =>
-    readCustomFloor(),
-  );
+  const floorStyle = rig.floorStyle;
+  const customFloor = rig.customFloor;
   const changeFloor = (next: FloorStyle) => {
-    setFloorStyle(next);
-    writeFloorStyle(next);
+    void updateFloorStyle(rig.id, next);
   };
   const changeCustomFloor = (next: CustomFloor) => {
-    setCustomFloor(next);
-    writeCustomFloor(next);
+    void updateCustomFloor(rig.id, next);
   };
 
   const [actionsFor, setActionsFor] = useState<string | null>(null);

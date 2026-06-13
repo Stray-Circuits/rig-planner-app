@@ -1,19 +1,14 @@
 /**
- * Floor style — the background behind the pedalboard on the rig screen.
- * Stored as a global UI preference in localStorage; not per-rig and not
- * synced through the DB. If/when this becomes a per-rig setting we can
- * migrate it into the rigs table.
+ * Floor style — the background painted behind the pedalboard on the rig
+ * screen. Stored per-rig in the `rigs` table (see migration 0005); this
+ * module owns the catalog of styles and the CSS recipe for the 'custom'
+ * style. Was a global localStorage preference until issue #114.
  */
 
 import type { CSSProperties } from 'react';
+import type { CustomFloor, FloorStyle } from '../data/schema';
 
-export type FloorStyle =
-  | 'concrete_grey'
-  | 'stage_black'
-  | 'carpet_beige'
-  | 'wood'
-  | 'sidewalk'
-  | 'custom';
+export type { CustomFloor, FloorStyle } from '../data/schema';
 
 export const FLOOR_STYLES: { id: FloorStyle; label: string }[] = [
   { id: 'concrete_grey', label: 'Concrete' },
@@ -24,79 +19,18 @@ export const FLOOR_STYLES: { id: FloorStyle; label: string }[] = [
   { id: 'custom', label: 'Custom' },
 ];
 
-/** User-chosen color + grain overlay strength for the 'custom' floor. */
-export interface CustomFloor {
-  /** Hex color string in #rrggbb form. */
-  color: string;
-  /** Texture overlay intensity, 0 (solid color) to 1 (full grain). */
-  grain: number;
-}
-
-const STORAGE_KEY = 'rig-planner:floorStyle';
-const CUSTOM_STORAGE_KEY = 'rig-planner:customFloor';
-const DEFAULT: FloorStyle = 'concrete_grey';
+export const DEFAULT_FLOOR_STYLE: FloorStyle = 'concrete_grey';
 export const DEFAULT_CUSTOM_FLOOR: CustomFloor = {
   color: '#8a8a8a',
   grain: 0.4,
 };
 
-function isFloorStyle(s: string): s is FloorStyle {
-  return FLOOR_STYLES.some((f) => f.id === s);
+export function isFloorStyle(s: unknown): s is FloorStyle {
+  return typeof s === 'string' && FLOOR_STYLES.some((f) => f.id === s);
 }
 
-export function readFloorStyle(): FloorStyle {
-  if (typeof window === 'undefined') return DEFAULT;
-  try {
-    const v = window.localStorage.getItem(STORAGE_KEY);
-    return v && isFloorStyle(v) ? v : DEFAULT;
-  } catch {
-    return DEFAULT;
-  }
-}
-
-export function writeFloorStyle(style: FloorStyle): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, style);
-  } catch {
-    // Quota or private-mode failure — silent; the runtime falls back to
-    // the default style on next load.
-  }
-}
-
-function isValidHex(s: string): boolean {
-  return /^#[0-9a-f]{6}$/i.test(s.trim());
-}
-
-export function readCustomFloor(): CustomFloor {
-  if (typeof window === 'undefined') return DEFAULT_CUSTOM_FLOOR;
-  try {
-    const raw = window.localStorage.getItem(CUSTOM_STORAGE_KEY);
-    if (!raw) return DEFAULT_CUSTOM_FLOOR;
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return DEFAULT_CUSTOM_FLOOR;
-    const obj = parsed as Record<string, unknown>;
-    const color =
-      typeof obj.color === 'string' && isValidHex(obj.color)
-        ? obj.color
-        : DEFAULT_CUSTOM_FLOOR.color;
-    const grain =
-      typeof obj.grain === 'number' && obj.grain >= 0 && obj.grain <= 1
-        ? obj.grain
-        : DEFAULT_CUSTOM_FLOOR.grain;
-    return { color, grain };
-  } catch {
-    return DEFAULT_CUSTOM_FLOOR;
-  }
-}
-
-export function writeCustomFloor(custom: CustomFloor): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(custom));
-  } catch {
-    // Same fallback behavior as writeFloorStyle.
-  }
+export function isValidHexColor(s: unknown): s is string {
+  return typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s.trim());
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -126,3 +60,11 @@ export function customFloorBackgroundStyle(custom: CustomFloor): CSSProperties {
     backgroundBlendMode: 'normal, multiply, normal',
   };
 }
+
+/**
+ * Legacy localStorage keys for the pre-#114 global floor preference. Read
+ * once at app boot by the backfill in `legacyFloorBackfill.ts` and then
+ * cleared. Exported so tests can introspect them.
+ */
+export const LEGACY_FLOOR_STORAGE_KEY = 'rig-planner:floorStyle';
+export const LEGACY_CUSTOM_FLOOR_STORAGE_KEY = 'rig-planner:customFloor';

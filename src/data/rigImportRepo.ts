@@ -159,7 +159,7 @@ export async function importRig(exp: RigExport): Promise<ImportRigResult> {
   if (existing) {
     await clearRigChildren(exp.rig.id);
     await db.execute(
-      `UPDATE rigs SET name = ?, width_in = ?, depth_in = ?, style = ?, preset_id = ?, jack_size = ?, updated_at = datetime('now')
+      `UPDATE rigs SET name = ?, width_in = ?, depth_in = ?, style = ?, preset_id = ?, jack_size = ?, floor_style = ?, custom_floor_color = ?, custom_floor_grain = ?, updated_at = datetime('now')
        WHERE id = ?`,
       [
         exp.rig.name,
@@ -168,13 +168,16 @@ export async function importRig(exp: RigExport): Promise<ImportRigResult> {
         exp.rig.style,
         exp.rig.presetId ?? null,
         exp.rig.jackSize,
+        exp.rig.floorStyle,
+        exp.rig.customFloor.color,
+        exp.rig.customFloor.grain,
         exp.rig.id,
       ],
     );
   } else {
     await db.execute(
-      `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size, floor_style, custom_floor_color, custom_floor_grain)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         exp.rig.id,
         exp.rig.name,
@@ -183,6 +186,9 @@ export async function importRig(exp: RigExport): Promise<ImportRigResult> {
         exp.rig.style,
         exp.rig.presetId ?? null,
         exp.rig.jackSize,
+        exp.rig.floorStyle,
+        exp.rig.customFloor.color,
+        exp.rig.customFloor.grain,
       ],
     );
   }
