@@ -1,6 +1,22 @@
 import type { ExternalEndpointKind } from '../data/schema';
 
 /**
+ * Source/sink classification for external endpoint kinds. Signal flows
+ * OUT of sources (right cluster on the live overlay; chips read
+ * "From …") and INTO sinks (left cluster; chips read "To …"). Single
+ * source of truth so the chip layout, connection-creation logic, and
+ * snapshot routing all agree — CLAUDE.md cites issue #29 as a bug from
+ * hand-rolled copies of this check drifting out of sync.
+ */
+export function isEndpointSource(kind: ExternalEndpointKind): boolean {
+  return kind === 'guitar' || kind === 'amp_fx_send';
+}
+
+export function isEndpointSink(kind: ExternalEndpointKind): boolean {
+  return kind === 'amp_in' || kind === 'amp_fx_return';
+}
+
+/**
  * Wizard-friendly model for the external rig I/O. Translates the user's
  * "I have one guitar, one stereo amp with FX loop"-style choices into a
  * flat list of ExternalEndpoint specs the rig should seed on create.

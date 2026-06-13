@@ -104,6 +104,166 @@ function downloadTextFileViaBlob(
   mimeType: string,
 ): void {
   const blob = new Blob([text], { type: mimeType });
+  downloadBlob(filename, blob);
+}
+
+interface SaveBinaryFileOptions {
+  /** Suggested filename shown in the save dialog. */
+  suggestedFilename: string;
+  /** File contents. */
+  blob: Blob;
+  /** Dialog file-type filters. Honoured under Tauri only. */
+  filters?: { name: string; extensions: string[] }[];
+}
+
+/**
+ * Save a binary Blob to a file the user picks. Same routing as
+ * `saveTextFile` (Tauri plugin-dialog + plugin-fs writeFile under the
+ * shell; `<a download>` Blob URL fallback in the browser).
+ *
+ * Used by the rig Share PNG export — see src/lib/rigSnapshot.ts.
+ */
+export async function saveBinaryFile(
+  opts: SaveBinaryFileOptions,
+): Promise<SaveTextFileResult> {
+  if (isTauri()) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    const path = await save({
+      defaultPath: opts.suggestedFilename,
+      ...(opts.filters ? { filters: opts.filters } : {}),
+    });
+    if (path === null) return { cancelled: true, path: null };
+    const bytes = new Uint8Array(await opts.blob.arrayBuffer());
+    await writeFile(path, bytes);
+    return { cancelled: false, path };
+  }
+  downloadBlob(opts.suggestedFilename, opts.blob);
+  return { cancelled: false, path: null };
+}
+
+interface ShareOrSaveBinaryFileOptions extends SaveBinaryFileOptions {
+  /** Mime type for the constructed File. Defaults to `opts.blob.type`. */
+  mimeType?: string;
+  /** Optional title surfaced to the OS share sheet (used by some targets). */
+  shareTitle?: string;
+  /** Optional accompanying text. */
+  shareText?: string;
+}
+
+/**
+ * Hand a binary file to the OS share sheet, with platform-appropriate
+ * routing:
+ *
+ *  - Tauri (Android/iOS/macOS/Windows): write to app cache + invoke
+ *    `tauri-plugin-sharekit`'s native share action (ACTION_SEND chooser
+ *    on Android, UIActivityViewController on iOS, NSSharingServicePicker
+ *    on macOS, Windows DataTransferManager).
+ *  - Browser with file-capable `navigator.share`: use the Web Share API.
+ *  - Anything else (Tauri Linux, browser without share support): fall
+ *    through to {@link saveBinaryFile} so the user still gets the file.
+ *
+ * We can't rely on `navigator.share` inside the Tauri WebView — system
+ * WebViews on Android often expose it but report `canShare({ files })`
+ * as false, so the call short-circuits to the save path with no visible
+ * picker. The plugin route uses the native intent directly and avoids
+ * that ambiguity.
+ */
+export async function shareOrSaveBinaryFile(
+  opts: ShareOrSaveBinaryFileOptions,
+): Promise<SaveTextFileResult> {
+  if (isTauri()) {
+    const shared = await tryShareViaSharekit(opts);
+    if (shared !== 'unsupported') return shared;
+    return saveBinaryFile(opts);
+  }
+  if (typeof navigator !== 'undefined' && 'share' in navigator) {
+    const file = new File([opts.blob], opts.suggestedFilename, {
+      type: opts.mimeType ?? opts.blob.type,
+    });
+    const canShare = navigator.canShare?.bind(navigator);
+    if (canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          ...(opts.shareTitle !== undefined ? { title: opts.shareTitle } : {}),
+          ...(opts.shareText !== undefined ? { text: opts.shareText } : {}),
+        });
+        return { cancelled: false, path: null };
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return { cancelled: true, path: null };
+        }
+        // Any other failure (NotAllowedError when the WebView lied about
+        // file support, etc.) falls through to the save path so the user
+        // still gets their file.
+      }
+    }
+  }
+  return saveBinaryFile(opts);
+}
+
+/**
+ * Save the blob to app cache and ask sharekit to share it. Splits the
+ * pipeline into the staging phase (resolve cache dir, write the file)
+ * and the share-launch phase, so errors before the chooser appears can
+ * be surfaced to the caller while post-launch errors (notably Android's
+ * RESULT_CANCELED-on-success quirk via sharekit's reject path) are
+ * treated as user cancellation. Returns `'unsupported'` only for the
+ * specific UnsupportedPlatform variant (Linux desktop), so the caller
+ * can fall through to {@link saveBinaryFile}.
+ */
+async function tryShareViaSharekit(
+  opts: ShareOrSaveBinaryFileOptions,
+): Promise<SaveTextFileResult | 'unsupported'> {
+  let path: string;
+  let shareFile: (
+    url: string,
+    options: { mimeType?: string; title?: string },
+  ) => Promise<void>;
+  try {
+    const { writeFile, mkdir } = await import('@tauri-apps/plugin-fs');
+    const { appCacheDir, join } = await import('@tauri-apps/api/path');
+    ({ shareFile } = await import('@choochmeque/tauri-plugin-sharekit-api'));
+    const cacheDir = await appCacheDir();
+    // On Android, Tauri's appCacheDir resolves to the same path that
+    // sharekit's plugin uses as `activity.cacheDir`. The plugin copies
+    // the source file into `cacheDir/<basename>` before exposing it via
+    // FileProvider; if our write target is also `cacheDir/<basename>`,
+    // sharekit truncates the file (opens the output stream) before
+    // reading from input, leaving a 0-byte attachment. Writing into a
+    // subdirectory keeps source and destination paths distinct.
+    const shareDir = await join(cacheDir, 'rig-share');
+    await mkdir(shareDir, { recursive: true }).catch(() => undefined);
+    path = await join(shareDir, opts.suggestedFilename);
+    const bytes = new Uint8Array(await opts.blob.arrayBuffer());
+    await writeFile(path, bytes);
+  } catch (err) {
+    // Anything that fails before the chooser opens is a real error the
+    // caller should hear about. Re-throw so handleShare's outer catch
+    // surfaces it as a 'Share failed: …' notice instead of falsely
+    // looking like a user cancellation.
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+  try {
+    await shareFile(`file://${path}`, {
+      mimeType: opts.mimeType ?? opts.blob.type ?? 'application/octet-stream',
+      ...(opts.shareTitle !== undefined ? { title: opts.shareTitle } : {}),
+    });
+    return { cancelled: false, path };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // UnsupportedPlatform = Tauri Linux desktop; fall through to save
+    // dialog. Anything else here means the chooser was already shown —
+    // the Android chooser quirkily rejects with RESULT_CANCELED even on
+    // successful shares, so treat post-launch errors as user cancel
+    // rather than triggering a duplicate save prompt.
+    if (/not[ _]supported/i.test(msg)) return 'unsupported';
+    return { cancelled: true, path: null };
+  }
+}
+
+function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   try {
     const a = document.createElement('a');

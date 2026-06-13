@@ -21,6 +21,7 @@ import {
   isOutputRole,
   maxCablesForConnector,
 } from '../../lib/signalChainWarnings';
+import { isEndpointSource } from '../../lib/externalIo';
 import {
   type CustomFloor,
   customFloorBackgroundStyle,
@@ -140,6 +141,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     'library',
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [chainMode, setChainMode] = useState(false);
   const [armed, setArmed] = useState<Armed | null>(null);
   // Legacy aliases — `armedPort` is the pedal-port view, used by the
@@ -368,7 +370,7 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
       setNotice(portFull);
       return false;
     }
-    const endpointIsSource = ep.kind === 'guitar' || ep.kind === 'amp_fx_send';
+    const endpointIsSource = isEndpointSource(ep.kind);
     // Reject backwards cables (two sources, or two sinks). The picker
     // sheet already disables the matching rows for the endpoint-first
     // flow, but tapping a chip directly while a port is armed skips
@@ -500,6 +502,70 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
     closeActions();
   };
 
+  const handleShare = () => {
+    if (sharing) return;
+    setSharing(true);
+    void (async () => {
+      try {
+        const [{ composeRigSnapshot }, { shareOrSaveBinaryFile }] =
+          await Promise.all([
+            import('../../lib/rigSnapshot'),
+            import('../../lib/fileDownload'),
+          ]);
+        const { blob, mimeType, fileExtension } = await composeRigSnapshot({
+          rig,
+          placed,
+          pedalsById,
+          connections,
+          endpoints,
+          floorStyle,
+          customFloor,
+          chainMode,
+        });
+        const stem =
+          rig.name
+            .trim()
+            .replace(/[/\\:*?"<>|]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'rig';
+        // Include time-of-day (down to ms) in the filename so back-to-back
+        // shares of the same rig produce distinct paths. Receiving apps
+        // (Messages, Gmail, etc.) cache thumbnails keyed by the
+        // FileProvider content URI; reusing `rig-2026-06-12.webp` makes
+        // the second share render a stale preview from the first even
+        // though the file content is fresh. Use locale-consistent date +
+        // time components (don't mix `toISOString` UTC date with
+        // `toTimeString` local clock — they disagree near midnight).
+        const now = new Date();
+        const pad2 = (n: number) => String(n).padStart(2, '0');
+        const date = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+        const time = `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}${String(now.getMilliseconds()).padStart(3, '0')}`;
+        const result = await shareOrSaveBinaryFile({
+          suggestedFilename: `${stem}-${date}-${time}.${fileExtension}`,
+          blob,
+          mimeType,
+          shareTitle: rig.name,
+          shareText: `${rig.name} — from Rig Planner`,
+          filters: [
+            {
+              name: `${fileExtension.toUpperCase()} image`,
+              extensions: [fileExtension],
+            },
+          ],
+        });
+        if (!result.cancelled) setNotice('Rig image ready to share.');
+      } catch (err) {
+        setNotice(
+          err instanceof Error
+            ? `Share failed: ${err.message}`
+            : 'Share failed.',
+        );
+      } finally {
+        setSharing(false);
+      }
+    })();
+  };
+
   const showLoadingOverlay = pedalsStatus === 'loading' || !pedalImagesReady;
 
   return (
@@ -542,6 +608,18 @@ export function RigScreen({ rig, onBack }: RigScreenProps) {
           </button>
         </div>
         <div className={styles.fabTopRight}>
+          <button
+            type="button"
+            className={styles.fab}
+            aria-label="Share rig as image"
+            onClick={handleShare}
+            disabled={sharing}
+          >
+            <i
+              className={sharing ? 'ti ti-loader-2' : 'ti ti-share'}
+              aria-hidden
+            />
+          </button>
           <button
             type="button"
             className={styles.fab}

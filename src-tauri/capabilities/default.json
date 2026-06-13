@@ -19,6 +19,14 @@
       "allow": [{ "path": "**" }]
     },
     {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "**" }]
+    },
+    {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "**" }]
     },
@@ -30,6 +38,8 @@
         { "url": "http://*/*" }
       ]
     },
-    "opener:default"
+    "opener:default",
+    "sharekit:default",
+    "sharekit:allow-share-file"
   ]
 }
