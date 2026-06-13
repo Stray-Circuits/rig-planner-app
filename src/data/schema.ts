@@ -151,8 +151,32 @@ export interface Rig {
    * own physical-spec sizes (longer of the two wins per side).
    */
   jackSize: JackSize;
+  /**
+   * Background that fills the canvas behind the board. Was a global
+   * preference until issue #114; lives on the rig so different rigs can
+   * render against different stages. `customFloor` is only meaningful when
+   * `floorStyle === 'custom'` but is carried regardless so toggling away
+   * from custom and back preserves the user's color/grain.
+   */
+  floorStyle: FloorStyle;
+  customFloor: CustomFloor;
   createdAt: string;
   updatedAt: string;
+}
+
+export type FloorStyle =
+  | 'concrete_grey'
+  | 'stage_black'
+  | 'carpet_beige'
+  | 'wood'
+  | 'sidewalk'
+  | 'custom';
+
+export interface CustomFloor {
+  /** Hex color string in #rrggbb form. */
+  color: string;
+  /** Texture overlay intensity, 0 (solid color) to 1 (full grain). */
+  grain: number;
 }
 
 export interface RigWithContents extends Rig {

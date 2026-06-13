@@ -72,6 +72,9 @@ describe('rigsRepo.createRig', () => {
       'rail',
       null,
       'large',
+      'concrete_grey',
+      '#8a8a8a',
+      0.4,
     ]);
     expect(created.name).toBe('My rig');
   });
@@ -101,6 +104,9 @@ describe('rigsRepo.createRig', () => {
       'rail',
       'pedaltrain-nano',
       'large',
+      'concrete_grey',
+      '#8a8a8a',
+      0.4,
     ]);
     expect(created.presetId).toBe('pedaltrain-nano');
   });

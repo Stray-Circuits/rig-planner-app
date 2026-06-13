@@ -31,6 +31,8 @@ function rig(overrides: Partial<Rig> = {}): Rig {
     style: 'rail',
     presetId: 'classic-pro',
     jackSize: 'large',
+    floorStyle: 'concrete_grey',
+    customFloor: { color: '#8a8a8a', grain: 0.4 },
     createdAt: '',
     updatedAt: '',
     ...overrides,

@@ -30,6 +30,12 @@ pub fn run() {
             sql: include_str!("../migrations/0004_rig_jack_size.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "rigs: per-rig floor style (was a global preference until issue #114)",
+            sql: include_str!("../migrations/0005_rig_floor.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

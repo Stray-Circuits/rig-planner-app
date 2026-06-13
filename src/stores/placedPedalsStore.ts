@@ -156,6 +156,8 @@ export const usePlacedPedalsStore = create<PlacedState>((set, get) => ({
       style: 'plain',
       presetId: null,
       jackSize: 'large',
+      floorStyle: 'concrete_grey',
+      customFloor: { color: '#8a8a8a', grain: 0.4 },
       createdAt: '',
       updatedAt: '',
     };

@@ -1,6 +1,18 @@
 import { getDb } from './db';
-import type { BoardStyle, JackSize, Rig } from './schema';
+import type {
+  BoardStyle,
+  CustomFloor,
+  FloorStyle,
+  JackSize,
+  Rig,
+} from './schema';
 import { newId } from '../lib/ids';
+import {
+  DEFAULT_CUSTOM_FLOOR,
+  DEFAULT_FLOOR_STYLE,
+  isFloorStyle,
+  isValidHexColor,
+} from '../lib/floorStyle';
 
 interface RigRow {
   id: string;
@@ -10,6 +22,9 @@ interface RigRow {
   style: string;
   preset_id: string | null | undefined;
   jack_size: string | null | undefined;
+  floor_style: string | null | undefined;
+  custom_floor_color: string | null | undefined;
+  custom_floor_grain: number | null | undefined;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +42,16 @@ function isJackSize(s: unknown): s is JackSize {
   );
 }
 
+function readCustomFloor(color: unknown, grain: unknown): CustomFloor {
+  return {
+    color: isValidHexColor(color) ? color : DEFAULT_CUSTOM_FLOOR.color,
+    grain:
+      typeof grain === 'number' && grain >= 0 && grain <= 1
+        ? grain
+        : DEFAULT_CUSTOM_FLOOR.grain,
+  };
+}
+
 function fromRow(r: RigRow): Rig {
   if (!isStyle(r.style)) {
     throw new Error(`Unknown board style "${r.style}" for rig ${r.id}`);
@@ -39,6 +64,10 @@ function fromRow(r: RigRow): Rig {
     style: r.style,
     presetId: r.preset_id ?? null,
     jackSize: isJackSize(r.jack_size) ? r.jack_size : 'large',
+    floorStyle: isFloorStyle(r.floor_style)
+      ? r.floor_style
+      : DEFAULT_FLOOR_STYLE,
+    customFloor: readCustomFloor(r.custom_floor_color, r.custom_floor_grain),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -51,6 +80,8 @@ export interface CreateRigInput {
   style: BoardStyle;
   presetId?: string | null;
   jackSize?: JackSize;
+  floorStyle?: FloorStyle;
+  customFloor?: CustomFloor;
 }
 
 export async function listRigs(): Promise<Rig[]> {
@@ -76,9 +107,11 @@ export async function createRig(input: CreateRigInput): Promise<Rig> {
   }
   const id = newId();
   const db = await getDb();
+  const floorStyle = input.floorStyle ?? DEFAULT_FLOOR_STYLE;
+  const customFloor = input.customFloor ?? DEFAULT_CUSTOM_FLOOR;
   await db.execute(
-    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size, floor_style, custom_floor_color, custom_floor_grain)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       name,
@@ -87,6 +120,9 @@ export async function createRig(input: CreateRigInput): Promise<Rig> {
       input.style,
       input.presetId ?? null,
       input.jackSize ?? 'large',
+      floorStyle,
+      customFloor.color,
+      customFloor.grain,
     ],
   );
   const created = await getRig(id);
@@ -141,6 +177,28 @@ export async function updateRigJackSize(
   );
 }
 
+export async function updateRigFloorStyle(
+  id: string,
+  floorStyle: FloorStyle,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE rigs SET floor_style = ?, updated_at = datetime('now') WHERE id = ?`,
+    [floorStyle, id],
+  );
+}
+
+export async function updateRigCustomFloor(
+  id: string,
+  customFloor: CustomFloor,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE rigs SET custom_floor_color = ?, custom_floor_grain = ?, updated_at = datetime('now') WHERE id = ?`,
+    [customFloor.color, customFloor.grain, id],
+  );
+}
+
 /** Atomically swap board dimensions + style + preset. Used when "changing the board" via the picker. */
 export async function updateRigBoard(
   id: string,
@@ -165,8 +223,8 @@ export async function duplicateRig(id: string): Promise<Rig> {
   const newRigId = newId();
   const db = await getDb();
   await db.execute(
-    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO rigs (id, name, width_in, depth_in, style, preset_id, jack_size, floor_style, custom_floor_color, custom_floor_grain)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       newRigId,
       `${source.name} (copy)`,
@@ -175,6 +233,9 @@ export async function duplicateRig(id: string): Promise<Rig> {
       source.style,
       source.presetId,
       source.jackSize,
+      source.floorStyle,
+      source.customFloor.color,
+      source.customFloor.grain,
     ],
   );
   // Copy placed pedals, external endpoints, connections. IDs are remapped
