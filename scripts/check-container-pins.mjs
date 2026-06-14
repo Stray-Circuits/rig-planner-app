@@ -64,6 +64,15 @@ const baseImageSdk = (() => {
 
 const containerNode = arg('NODE_VERSION');
 const containerRust = arg('RUST_VERSION');
+const containerNdk = arg('ANDROID_NDK_VERSION');
+
+// NDK floor. r27 is Google's current LTS and the version we've verified the
+// 16 KB ELF alignment flow against (build.rs emits -Wl,-z,max-page-size=16384
+// for Android targets). r28+ would let us retire that build.rs hack, since
+// 16 KB alignment becomes the linker default on arm64-v8a / x86_64 — when
+// someone bumps past r27 they should also drop the rustc-link-arg line in
+// src-tauri/build.rs.
+const NDK_MIN = '27.0.0';
 
 const viteEngines = JSON.parse(read('node_modules/vite/package.json')).engines
   ?.node;
@@ -99,6 +108,15 @@ if (!satisfies(containerRust, `>=${cargoRustMin}`)) {
   );
 }
 
+if (!satisfies(containerNdk, `>=${NDK_MIN}`)) {
+  errors.push(
+    `Dockerfile ANDROID_NDK_VERSION=${containerNdk} is below the project floor of ${NDK_MIN}. ` +
+      `r27 is the current Google LTS and the version the 16 KB alignment flow is verified ` +
+      `against. Bump ANDROID_NDK_VERSION in scripts/android/Dockerfile, or update NDK_MIN ` +
+      `here if you've intentionally relaxed the floor.`,
+  );
+}
+
 if (baseImageSdk < compileSdk) {
   errors.push(
     `Dockerfile base image ships Android SDK ${baseImageSdk}, but compileSdk in ` +
@@ -121,4 +139,5 @@ console.log(
 console.log(
   `  RUST_VERSION=${containerRust} satisfies Cargo.toml rust-version=${cargoRustMin}`,
 );
+console.log(`  ANDROID_NDK_VERSION=${containerNdk} >= floor ${NDK_MIN}`);
 console.log(`  Base image SDK ${baseImageSdk} >= app compileSdk ${compileSdk}`);
