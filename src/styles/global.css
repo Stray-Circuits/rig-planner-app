@@ -15,10 +15,10 @@
   --muted: #888888;
   --muted-soft: #aaaaaa;
 
-  --primary: #378add;
-  --primary-strong: #2a6fb5;
-  --primary-bg: #e6f1fb;
-  --primary-fg: #185fa5;
+  --primary: #198266;
+  --primary-strong: #11664f;
+  --primary-bg: #d6e9e1;
+  --primary-fg: #0d4838;
 
   --success: #1d9e75;
   --success-bg: #e1f5ee;
@@ -64,6 +64,9 @@
      preferred scheme — picks up automatically with the dark overrides
      below. */
   color-scheme: light dark;
+  /* Tints checkboxes/radios + the default focus ring to match our brand
+     primary, so the UA's default blue glow on buttons goes away. */
+  accent-color: var(--primary);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -73,20 +76,24 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1014;
-    --surface: #1c1d22;
-    --surface-alt: #262830;
-    --surface-floating: rgba(36, 38, 46, 0.94);
-    --border: #2c2e36;
-    --border-strong: #3d404a;
-    --fg: #e8e9ed;
-    --muted: #9298a3;
-    --muted-soft: #5d6068;
+    /* Lifted one notch from near-black + warmed off the blue-leaning hue
+       so the app reads as charcoal-grey rather than pitch dark. The
+       lighter --surface-alt also lets dark Pedaltrain PNGs in the board
+       picker read against it (issue #115). */
+    --bg: #161616;
+    --surface: #262626;
+    --surface-alt: #363636;
+    --surface-floating: rgba(38, 38, 38, 0.94);
+    --border: #424242;
+    --border-strong: #555555;
+    --fg: #e8e8e8;
+    --muted: #9a9a9a;
+    --muted-soft: #6a6a6a;
 
-    --primary: #5aa5e8;
-    --primary-strong: #7ebaf0;
-    --primary-bg: rgba(90, 165, 232, 0.16);
-    --primary-fg: #a3c8f0;
+    --primary: #198266;
+    --primary-strong: #4ea791;
+    --primary-bg: rgba(25, 130, 102, 0.22);
+    --primary-fg: #82cbb6;
 
     --success: #3bbf91;
     --success-bg: rgba(59, 191, 145, 0.16);
@@ -147,4 +154,11 @@ button {
 
 button:disabled {
   cursor: not-allowed;
+}
+
+/* Override the UA default focus-ring (system blue on macOS) so the
+   keyboard-focus glow reads as brand-green instead. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }

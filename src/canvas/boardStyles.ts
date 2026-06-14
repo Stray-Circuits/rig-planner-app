@@ -134,8 +134,23 @@ export function drawHoles({
     const pxPerInch = width / widthIn;
     sp = TEMPLE_HOLE_SPACING_IN * pxPerInch;
     r = (TEMPLE_HOLE_DIAM_IN / 2) * pxPerInch;
+    // At picker-thumb sizes the physical hole goes sub-pixel and the
+    // pattern would skip below. Scale BOTH radius and spacing by the
+    // same factor so per-inch density stays physically accurate — a
+    // Trio 43 still shows ~2.5× the hole columns of a Solo 18, just
+    // with each hole drawn at min legible size. Caller must use a
+    // uniform pxPerInch across thumbs for cross-board comparison to
+    // work (see UNIFORM_THUMB_PX_PER_INCH in BoardPicker). minR = 0.5
+    // lets the arcs render as anti-aliased sub-pixel dots, packing
+    // ~3× more cols than minR = 1 while staying visible.
+    const minR = 0.5;
+    if (r < minR) {
+      const k = minR / r;
+      r = minR;
+      sp = sp * k;
+    }
   } else {
-    // Thumbnail / no-context fallback — legibility over realism.
+    // No board-dim context — legibility-only heuristic.
     sp = scale >= 0.5 ? 16 : 6;
     r = scale >= 0.5 ? 5.5 : 2;
   }

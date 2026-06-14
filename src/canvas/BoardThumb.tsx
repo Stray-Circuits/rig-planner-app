@@ -10,6 +10,13 @@ interface BoardThumbProps {
   /** Tuning param for detail density; defaults to width-derived. */
   scale?: number;
   /**
+   * Real-world board width in inches. When provided to drawHoles, lets it
+   * size hole density to the board (so a Temple Trio 43 shows more holes
+   * than a Solo 18 in the picker thumbs) rather than using a fixed
+   * scale-derived pattern.
+   */
+  widthIn?: number;
+  /**
    * When set, the thumb renders this bundled image instead of the procedural
    * drawer for `style`. Caller is responsible for picking the right preset
    * image (see resolveBoardImageSrc).
@@ -24,6 +31,7 @@ export function BoardThumb({
   width,
   height,
   scale,
+  widthIn,
   imageSrc,
   className,
   title,
@@ -60,6 +68,7 @@ export function BoardThumb({
         width,
         height,
         scale: scale ?? width / 500,
+        ...(widthIn !== undefined ? { widthIn } : {}),
       });
     };
 
@@ -85,7 +94,7 @@ export function BoardThumb({
     return () => {
       cancelled = true;
     };
-  }, [style, width, height, scale, imageSrc, dpr]);
+  }, [style, width, height, scale, widthIn, imageSrc, dpr]);
 
   return (
     <canvas

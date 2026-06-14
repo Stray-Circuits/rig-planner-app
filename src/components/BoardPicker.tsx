@@ -392,7 +392,17 @@ interface PresetCardProps {
   onClick: () => void;
 }
 
+// Every preset thumb renders at the same px-per-inch so cross-board
+// comparison reflects real size — a Trio 43 looks ~2.5× the width of a
+// Solo 18, and (via the matching scaling in drawHoles) carries ~2.5× the
+// hole columns. The wrapper (.presetThumb) is fixed-size at 68×40 with
+// 4px padding → 60×32 usable; 1.4 px/in keeps the widest preset
+// (Pedaltrain Terra 42, 42″) inside that envelope.
+const UNIFORM_THUMB_PX_PER_INCH = 1.4;
+
 function PresetCard({ preset, selected, onClick }: PresetCardProps) {
+  const thumbW = preset.widthIn * UNIFORM_THUMB_PX_PER_INCH;
+  const thumbH = preset.depthIn * UNIFORM_THUMB_PX_PER_INCH;
   return (
     <button
       type="button"
@@ -401,14 +411,17 @@ function PresetCard({ preset, selected, onClick }: PresetCardProps) {
         .join(' ')}
       onClick={onClick}
     >
-      <BoardThumb
-        style={preset.style}
-        width={52}
-        height={30}
-        scale={0.2}
-        {...(preset.image !== undefined ? { imageSrc: preset.image } : {})}
-        title={`${preset.brand} ${preset.name}`}
-      />
+      <div className={styles.presetThumb}>
+        <BoardThumb
+          style={preset.style}
+          width={Math.round(thumbW)}
+          height={Math.round(thumbH)}
+          scale={0.2}
+          widthIn={preset.widthIn}
+          {...(preset.image !== undefined ? { imageSrc: preset.image } : {})}
+          title={`${preset.brand} ${preset.name}`}
+        />
+      </div>
       <div className={styles.presetInfo}>
         <div className={styles.presetName}>{preset.name}</div>
         <div className={styles.presetDims}>
