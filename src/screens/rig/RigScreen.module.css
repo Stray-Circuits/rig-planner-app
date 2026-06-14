@@ -180,7 +180,7 @@
   color: #fff;
   border-color: var(--primary);
   box-shadow:
-    0 8px 20px rgba(37, 99, 235, 0.32),
+    0 8px 20px rgba(25, 130, 102, 0.32),
     0 3px 6px rgba(0, 0, 0, 0.16);
 }
 
@@ -195,16 +195,16 @@
 .fabChain {
   width: 64px;
   height: 64px;
-  background: #14b8a6;
+  background: #54afbc;
   color: #fff;
-  border-color: #14b8a6;
+  border-color: #54afbc;
   box-shadow:
-    0 8px 20px rgba(20, 184, 166, 0.32),
+    0 8px 20px rgba(84, 175, 188, 0.32),
     0 3px 6px rgba(0, 0, 0, 0.16);
 }
 
 .fabChain:hover {
-  background: #0d9488;
+  background: #3a8e9b;
 }
 
 .fabChain i {
@@ -320,12 +320,12 @@
 .chainStatusPill {
   position: fixed;
   left: 50%;
-  /* Bottom-center — clears the endpoint chip strip and the top-of-board
-     cable lanes (where multiple cables run when the chain is busy).
-     Sits above the bottom-right action cluster vertically but is offset
-     horizontally so it doesn't overlap. Passive status, so reachability
-     isn't a concern. */
-  bottom: calc(28px + env(safe-area-inset-bottom));
+  /* Bottom-center, lifted above the bottom-right FAB cluster (24px bottom +
+     64px FAB height + 12px gap) so the pill clears the routing/add
+     buttons on narrow viewports where the centered pill would otherwise
+     overlap the right-edge FABs. Passive status, so reachability isn't a
+     concern. */
+  bottom: calc(100px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   background: var(--warning-bg);
   color: var(--warning-fg);
