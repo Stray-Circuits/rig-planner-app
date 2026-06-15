@@ -1,7 +1,7 @@
 {
   "name": "rig-planner-app",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0",
   "type": "module",
   "description": "Pedalboard planning app with signal-path overlay — desktop + mobile",
   "author": "Stray Circuits",
