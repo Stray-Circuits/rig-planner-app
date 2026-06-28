@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { __resetDbForTests } from '../src/data/db';
 import { __clearMemoryAdapterStorage } from '../src/data/memoryAdapter';
-import { createPedal, getPedal, listPedals } from '../src/data/pedalsRepo';
+import {
+  createPedal,
+  getPedal,
+  listPedals,
+  updatePedal,
+} from '../src/data/pedalsRepo';
 import type { JackSides } from '../src/data/schema';
 
 const blankJacks: JackSides = {
@@ -111,5 +116,145 @@ describe('pedalsRepo', () => {
       ],
     );
     await expect(listPedals()).rejects.toThrow(/Unknown side/);
+  });
+
+  // Issue #124: a pedal can carry more than one FX loop (two fx_send +
+  // two fx_return ports). The pairs share identical labels, so reconciling
+  // edited ports by (role, label) collapses each duplicate to one row and
+  // deletes the rest. Editing the pedal must preserve every loop.
+  it('preserves multiple identically-labeled FX loops across an edit (#124)', async () => {
+    const created = await createPedal({
+      brand: 'Strymon',
+      name: 'Looper',
+      widthIn: 4,
+      depthIn: 5,
+      jackSides: { ...blankJacks, top: true },
+      ports: [
+        {
+          label: 'In',
+          role: 'input',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 0,
+          optional: false,
+        },
+        {
+          label: 'Out',
+          role: 'output',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 1,
+          optional: false,
+        },
+        {
+          label: 'FX Send',
+          role: 'fx_send',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 2,
+          optional: true,
+        },
+        {
+          label: 'FX Return',
+          role: 'fx_return',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 3,
+          optional: true,
+        },
+        {
+          label: 'FX Send',
+          role: 'fx_send',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 4,
+          optional: true,
+        },
+        {
+          label: 'FX Return',
+          role: 'fx_return',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 5,
+          optional: true,
+        },
+      ],
+    });
+    expect(created.ports.filter((p) => p.role === 'fx_send')).toHaveLength(2);
+    expect(created.ports.filter((p) => p.role === 'fx_return')).toHaveLength(2);
+
+    // Simulate an edit that passes the same ports back (e.g. a rename),
+    // matching the shape the wizard sends today (id + pedalId stripped).
+    const { pedal } = await updatePedal(created.id, {
+      brand: created.brand,
+      name: 'Looper MkII',
+      widthIn: created.widthIn,
+      depthIn: created.depthIn,
+      jackSides: { ...blankJacks, top: true },
+      ports: created.ports.map(
+        ({ id: _id, pedalId: _pedalId, ...rest }) => rest,
+      ),
+    });
+
+    expect(pedal.ports.filter((p) => p.role === 'fx_send')).toHaveLength(2);
+    expect(pedal.ports.filter((p) => p.role === 'fx_return')).toHaveLength(2);
+  });
+
+  // When the wizard passes port ids back (its real behavior), reconciliation
+  // keeps each port's identity — including a renamed one — so connections
+  // referencing those ports survive the edit.
+  it('preserves port identity (and renames) when ids are passed through (#124)', async () => {
+    const created = await createPedal({
+      brand: 'EHX',
+      name: 'POG',
+      widthIn: 4,
+      depthIn: 5,
+      jackSides: { ...blankJacks, top: true },
+      ports: [
+        {
+          label: 'In',
+          role: 'input',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 0,
+          optional: false,
+        },
+        {
+          label: 'Out',
+          role: 'output',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 1,
+          optional: false,
+        },
+      ],
+    });
+    const originalIds = created.ports.map((p) => p.id).sort();
+
+    // Rename "Out" but keep its id, mirroring the wizard payload.
+    const { pedal } = await updatePedal(created.id, {
+      brand: created.brand,
+      name: created.name,
+      widthIn: created.widthIn,
+      depthIn: created.depthIn,
+      jackSides: { ...blankJacks, top: true },
+      ports: created.ports.map(({ pedalId: _pedalId, ...rest }) => ({
+        ...rest,
+        label: rest.role === 'output' ? 'Output' : rest.label,
+      })),
+    });
+
+    expect(pedal.ports.map((p) => p.id).sort()).toEqual(originalIds);
+    const out = pedal.ports.find((p) => p.role === 'output');
+    expect(out?.label).toBe('Output');
+    expect(out?.id).toBe(created.ports.find((p) => p.role === 'output')?.id);
   });
 });
