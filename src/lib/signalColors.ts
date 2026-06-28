@@ -51,6 +51,27 @@ export function colorForSignal(type: SignalType): string {
   return SIGNAL_COLORS[type];
 }
 
+/**
+ * Distinct tones for numbered FX loops so the two ports of one loop read
+ * as a pair and different loops read as different pairs (#124). A blue-green
+ * family kept clear of the warm signal-type colors (orange/pink/yellow) and
+ * picked to stay separable under common color-vision deficiencies. Loop 1
+ * (and any single, unnumbered loop) keeps the instrument green.
+ */
+const FX_LOOP_COLORS: readonly string[] = [
+  AUDIO_DEFAULT, // 1 — instrument green
+  '#56b4e9', // 2 — sky blue
+  '#0072b2', // 3 — blue
+  '#cc79a7', // 4 — reddish purple
+];
+
+/** Loop color from a label like "FX Send 2"; bare labels are loop 1. */
+function colorForFxLoop(label: string): string {
+  const m = /\s(\d+)\s*$/.exec(label);
+  const n = m ? Number.parseInt(m[1]!, 10) : 1;
+  return FX_LOOP_COLORS[(n - 1) % FX_LOOP_COLORS.length]!;
+}
+
 /** True iff this role indicates an explicit right channel. */
 function isRightChannelRole(role: PortRole): boolean {
   return role === 'input_r' || role === 'output_r';
@@ -70,8 +91,13 @@ function isLeftChannelRole(role: PortRole): boolean {
  * (true TRS↔TRS) or as a single strand colored by the other end's
  * channel (Y-split into mono TS).
  */
-export function colorForPort(port: Pick<Port, 'role' | 'signalType'>): string {
+export function colorForPort(
+  port: Pick<Port, 'role' | 'signalType' | 'label'>,
+): string {
   if (isRightChannelRole(port.role)) return AUDIO_R;
   if (isLeftChannelRole(port.role)) return AUDIO_DEFAULT;
+  if (port.role === 'fx_send' || port.role === 'fx_return') {
+    return colorForFxLoop(port.label);
+  }
   return colorForSignal(port.signalType);
 }
