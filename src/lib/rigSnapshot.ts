@@ -12,7 +12,9 @@
  * This deliberately approximates the live view rather than reproducing it
  * pixel-perfect — no stereo-strand splits, no dashed pattern for external
  * cables, no L/R channel coloring. Cables draw as solid lines colored by
- * the from-port's signal type. Issue #109 calls that out as acceptable.
+ * the from-port's signal type (except FX-loop cables, which take the
+ * loop's color so send + return pair up — see #124). Issue #109 calls the
+ * approximation out as acceptable.
  */
 import type {
   Connection,
@@ -489,6 +491,7 @@ function drawCables(
     side: Side;
     color: string;
     isPedal: boolean;
+    isFxLoop: boolean;
   }
   const metas: {
     id: string;
@@ -570,11 +573,16 @@ function drawCables(
     // port instead of always rendering as the endpoint's instrument
     // default. Matches the live overlay's per-port coloring more
     // closely.
-    ctx.strokeStyle = m.from.isPedal
-      ? m.from.color
-      : m.to.isPedal
+    // An FX-loop port's cable carries that loop's color so send + return
+    // read as a pair (#124); otherwise prefer the pedal-side color.
+    ctx.strokeStyle =
+      m.to.isFxLoop && !m.from.isFxLoop
         ? m.to.color
-        : m.from.color;
+        : m.from.isPedal
+          ? m.from.color
+          : m.to.isPedal
+            ? m.to.color
+            : m.from.color;
     ctx.beginPath();
     for (let i = 0; i < path.length; i += 1) {
       const pt = path[i]!;
@@ -622,6 +630,7 @@ function resolveEnd(
   side: Side;
   color: string;
   isPedal: boolean;
+  isFxLoop: boolean;
 } | null {
   if (kind === 'pedal') {
     if (!portId) return null;
@@ -633,6 +642,8 @@ function resolveEnd(
       side: resolved.visualSide,
       color: colorForPort(resolved.port),
       isPedal: true,
+      isFxLoop:
+        resolved.port.role === 'fx_send' || resolved.port.role === 'fx_return',
     };
   }
   const ep = endpointById.get(nodeId);
@@ -649,6 +660,7 @@ function resolveEnd(
       side: 'bottom',
       color: colorForSignal('instrument'),
       isPedal: false,
+      isFxLoop: false,
     };
   }
   // Fallback if chip rendering was skipped — matches the live overlay's
@@ -660,6 +672,7 @@ function resolveEnd(
     side: 'bottom',
     color: colorForSignal('instrument'),
     isPedal: false,
+    isFxLoop: false,
   };
 }
 

@@ -444,12 +444,22 @@ export function ChainOverlay({
       c.fromNodeKind === 'external' || c.toNodeKind === 'external';
     const channel = cableChannel.get(c.id) ?? null;
     const isStereo = channel === 'stereo';
+    // A cable touching an FX-loop port carries that loop's color so the
+    // loop's send + return cables read as a pair (#124). Cables are
+    // otherwise colored by their source end (fromColor); fx_return is a
+    // sink, so without this its cable would inherit the source's color.
+    const fromIsFxLoop =
+      from.port?.role === 'fx_send' || from.port?.role === 'fx_return';
+    const toIsFxLoop =
+      to.port?.role === 'fx_send' || to.port?.role === 'fx_return';
     const cableColor =
       channel === 'R'
         ? STEREO_STRAND_COLORS[1]
         : channel === 'L'
           ? STEREO_STRAND_COLORS[0]
-          : fromColor;
+          : toIsFxLoop && !fromIsFxLoop
+            ? toColor
+            : fromColor;
     cableMetas.push({
       c,
       from,
@@ -652,9 +662,9 @@ export function ChainOverlay({
                     cy={fromCy}
                     r={4}
                     fill={
-                      from.port?.signalType === 'stereo'
-                        ? fromColor
-                        : channelColor
+                      channel === 'L' || channel === 'R'
+                        ? channelColor
+                        : fromColor
                     }
                     stroke="rgba(255,255,255,0.9)"
                     strokeWidth={1}
@@ -666,7 +676,9 @@ export function ChainOverlay({
                     cy={toCy}
                     r={4}
                     fill={
-                      to.port?.signalType === 'stereo' ? toColor : channelColor
+                      channel === 'L' || channel === 'R'
+                        ? channelColor
+                        : toColor
                     }
                     stroke="rgba(255,255,255,0.9)"
                     strokeWidth={1}
