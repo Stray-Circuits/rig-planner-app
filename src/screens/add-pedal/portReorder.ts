@@ -1,5 +1,5 @@
 import { arrayMove } from '@dnd-kit/sortable';
-import type { Port } from '../../data/schema';
+import type { Port, PortRole } from '../../data/schema';
 
 type DraftPortFields = Omit<Port, 'id' | 'pedalId'>;
 
@@ -17,6 +17,36 @@ let __draftPortIdSeq = 0;
 export function newDraftPortId(): string {
   __draftPortIdSeq += 1;
   return `dp-${__draftPortIdSeq}`;
+}
+
+/** Canonical base labels for the FX-loop roles that get auto-numbered. */
+const FX_LOOP_BASE_LABELS: Partial<Record<PortRole, string>> = {
+  fx_send: 'FX Send',
+  fx_return: 'FX Return',
+};
+
+/**
+ * Number the FX-loop ports so multiple loops on one pedal are tellable
+ * apart: "FX Send 1 / FX Return 1", "FX Send 2 / FX Return 2", … by
+ * occurrence order, per role. A lone loop keeps its bare label ("FX Send").
+ * Other roles are left untouched. Re-run after any add/remove so the
+ * numbering stays contiguous (#124).
+ */
+export function renumberFxLoops(ports: DraftPort[]): DraftPort[] {
+  const totals: Partial<Record<PortRole, number>> = {};
+  for (const p of ports) {
+    if (p.role in FX_LOOP_BASE_LABELS) {
+      totals[p.role] = (totals[p.role] ?? 0) + 1;
+    }
+  }
+  const seen: Partial<Record<PortRole, number>> = {};
+  return ports.map((p) => {
+    const base = FX_LOOP_BASE_LABELS[p.role];
+    if (!base) return p;
+    const n = (seen[p.role] = (seen[p.role] ?? 0) + 1);
+    const label = (totals[p.role] ?? 0) > 1 ? `${base} ${n}` : base;
+    return p.label === label ? p : { ...p, label };
+  });
 }
 
 /**

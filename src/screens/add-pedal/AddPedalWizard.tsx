@@ -82,6 +82,7 @@ interface AddPedalWizardProps {
 import {
   applySameSideMove,
   newDraftPortId,
+  renumberFxLoops,
   type DraftPort,
 } from './portReorder';
 
@@ -187,10 +188,12 @@ function draftFromPedal(pedal: Pedal): WizardDraft {
     widthIn: String(pedal.widthIn),
     depthIn: String(pedal.depthIn),
     powerSide: pedal.powerSide,
-    ports: pedal.ports.map(({ pedalId: _pedalId, ...rest }) => ({
-      ...rest,
-      _draftId: newDraftPortId(),
-    })),
+    ports: renumberFxLoops(
+      pedal.ports.map(({ pedalId: _pedalId, ...rest }) => ({
+        ...rest,
+        _draftId: newDraftPortId(),
+      })),
+    ),
   };
 }
 
@@ -2139,12 +2142,14 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
     const built = preset.build();
     setDraft((d) => ({
       ...d,
-      ports: preset.replaces
-        ? built
-        : [
-            ...d.ports.filter((p) => !built.some((b) => b.role === p.role)),
-            ...built,
-          ],
+      ports: renumberFxLoops(
+        preset.replaces
+          ? built
+          : [
+              ...d.ports.filter((p) => !built.some((b) => b.role === p.role)),
+              ...built,
+            ],
+      ),
     }));
     // Whichever port the editor was open on may have been replaced.
     setEditingId(null);
@@ -2153,7 +2158,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
   const removePortById = (id: string) =>
     setDraft((d) => ({
       ...d,
-      ports: d.ports.filter((p) => p._draftId !== id),
+      ports: renumberFxLoops(d.ports.filter((p) => p._draftId !== id)),
     }));
 
   // Same-side reorder via drag handle. dnd-kit drives the JSX; sideOrder
@@ -2196,7 +2201,7 @@ function ConnectionsStep({ draft, setDraft }: StepProps) {
         optional: true,
         _draftId: newDraftPortId(),
       };
-      return { ...d, ports: [...d.ports, nextPort] };
+      return { ...d, ports: renumberFxLoops([...d.ports, nextPort]) };
     });
     setPickerStep('closed');
     setPickedRole(null);
