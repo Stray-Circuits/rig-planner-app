@@ -6,10 +6,12 @@ type DraftPortFields = Omit<Port, 'id' | 'pedalId'>;
 /**
  * Draft-only port shape. `_draftId` is a stable identifier used by the
  * sortable port list (dnd-kit) so reorders keep tracking the same logical
- * row across array shuffles. It's stripped before the draft is written
- * to the DB.
+ * row across array shuffles; it's stripped before the draft is written to
+ * the DB. `id` is the persistent port id — present when editing an existing
+ * port, absent for ports added in the wizard. It rides through to
+ * updatePedal so reconciliation can match ports by identity (#124).
  */
-export type DraftPort = DraftPortFields & { _draftId: string };
+export type DraftPort = DraftPortFields & { _draftId: string; id?: string };
 
 let __draftPortIdSeq = 0;
 export function newDraftPortId(): string {

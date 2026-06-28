@@ -205,4 +205,56 @@ describe('pedalsRepo', () => {
     expect(pedal.ports.filter((p) => p.role === 'fx_send')).toHaveLength(2);
     expect(pedal.ports.filter((p) => p.role === 'fx_return')).toHaveLength(2);
   });
+
+  // When the wizard passes port ids back (its real behavior), reconciliation
+  // keeps each port's identity — including a renamed one — so connections
+  // referencing those ports survive the edit.
+  it('preserves port identity (and renames) when ids are passed through (#124)', async () => {
+    const created = await createPedal({
+      brand: 'EHX',
+      name: 'POG',
+      widthIn: 4,
+      depthIn: 5,
+      jackSides: { ...blankJacks, top: true },
+      ports: [
+        {
+          label: 'In',
+          role: 'input',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 0,
+          optional: false,
+        },
+        {
+          label: 'Out',
+          role: 'output',
+          signalType: 'instrument',
+          connector: 'ts',
+          side: 'top',
+          sideOrder: 1,
+          optional: false,
+        },
+      ],
+    });
+    const originalIds = created.ports.map((p) => p.id).sort();
+
+    // Rename "Out" but keep its id, mirroring the wizard payload.
+    const { pedal } = await updatePedal(created.id, {
+      brand: created.brand,
+      name: created.name,
+      widthIn: created.widthIn,
+      depthIn: created.depthIn,
+      jackSides: { ...blankJacks, top: true },
+      ports: created.ports.map(({ pedalId: _pedalId, ...rest }) => ({
+        ...rest,
+        label: rest.role === 'output' ? 'Output' : rest.label,
+      })),
+    });
+
+    expect(pedal.ports.map((p) => p.id).sort()).toEqual(originalIds);
+    const out = pedal.ports.find((p) => p.role === 'output');
+    expect(out?.label).toBe('Output');
+    expect(out?.id).toBe(created.ports.find((p) => p.role === 'output')?.id);
+  });
 });

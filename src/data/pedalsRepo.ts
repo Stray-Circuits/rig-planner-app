@@ -165,7 +165,10 @@ export interface CreatePedalInput {
   imageSourceUrl?: string | null;
   jackSides: JackSides;
   powerSide?: Side | null;
-  ports: Omit<Port, 'id' | 'pedalId'>[];
+  // `id` is optional: present for ports that already exist (so an edit can
+  // reconcile them by identity), absent for ports being added for the first
+  // time (createPedal / updatePedal generate one).
+  ports: (Omit<Port, 'id' | 'pedalId'> & { id?: string })[];
 }
 
 export async function listPedals(): Promise<Pedal[]> {
@@ -244,7 +247,7 @@ export async function createPedal(input: CreatePedalInput): Promise<Pedal> {
         id, pedal_id, label, role, signal_type, connector, side, side_order, optional
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        newId(),
+        port.id ?? newId(),
         id,
         port.label,
         port.role,
@@ -305,27 +308,31 @@ export async function updatePedal(
     ],
   );
 
-  // Pull existing ports and match by (role, label). Anything left over
-  // on the OLD side is deleted; anything new on the INPUT side is
-  // inserted.
+  // Pull existing ports and match by stable port id. A port carrying an id
+  // that still exists is updated in place (preserving its cables); a port
+  // with no id — or an id that's gone — is inserted as new. Anything left
+  // over on the OLD side is deleted. Matching by id (not by role+label) lets
+  // a pedal keep multiple same-labeled ports (e.g. two FX loops) and keeps a
+  // renamed port's identity, so its cables survive (#124).
   const existingRows = await db.select<PortRow>(
     'SELECT * FROM ports WHERE pedal_id = ?',
     [id],
   );
-  const oldByKey = new Map<string, PortRow>();
+  const oldById = new Map<string, PortRow>();
   for (const row of existingRows) {
-    oldByKey.set(`${row.role}|${row.label}`, row);
+    oldById.set(row.id, row);
   }
 
   const matchedIds = new Set<string>();
   for (const port of input.ports) {
-    const key = `${port.role}|${port.label}`;
-    const existing = oldByKey.get(key);
+    const existing = port.id ? oldById.get(port.id) : undefined;
     if (existing) {
       await db.execute(
-        `UPDATE ports SET signal_type = ?, connector = ?, side = ?, side_order = ?, optional = ?
+        `UPDATE ports SET label = ?, role = ?, signal_type = ?, connector = ?, side = ?, side_order = ?, optional = ?
          WHERE id = ?`,
         [
+          port.label,
+          port.role,
           port.signalType,
           port.connector,
           port.side,
@@ -341,7 +348,7 @@ export async function updatePedal(
           id, pedal_id, label, role, signal_type, connector, side, side_order, optional
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          newId(),
+          port.id ?? newId(),
           id,
           port.label,
           port.role,

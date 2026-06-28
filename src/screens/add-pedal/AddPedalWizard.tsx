@@ -187,7 +187,7 @@ function draftFromPedal(pedal: Pedal): WizardDraft {
     widthIn: String(pedal.widthIn),
     depthIn: String(pedal.depthIn),
     powerSide: pedal.powerSide,
-    ports: pedal.ports.map(({ id: _id, pedalId: _pedalId, ...rest }) => ({
+    ports: pedal.ports.map(({ pedalId: _pedalId, ...rest }) => ({
       ...rest,
       _draftId: newDraftPortId(),
     })),
