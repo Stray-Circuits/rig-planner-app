@@ -27,7 +27,20 @@ unmaintained = "workspace"
 # Add advisory IDs here only after reading the advisory and recording why
 # the project is not affected. Example:
 #   { id = "RUSTSEC-2024-0001", reason = "not exercised; <link to analysis>" }
-ignore = []
+ignore = [
+  # quick-xml 0.39.4 DoS advisories (both untrusted-XML denial-of-service):
+  # 0194 = O(N^2) duplicate-attribute check, 0195 = unbounded namespace-decl
+  # allocation in NsReader. quick-xml is pulled in ONLY transitively via
+  # plist (tauri -> plist -> quick-xml ^0.39.2), which Tauri uses at BUILD
+  # TIME to generate our own Info.plist on Apple platforms. We never parse
+  # untrusted XML at runtime, so there is no attack surface. No upstream fix
+  # path exists: plist 1.9.0 (latest, Apr 2026) still pins quick-xml ^0.39.2,
+  # so quick-xml cannot move to the patched >=0.41.0 until plist (then tauri)
+  # release updates. Re-run `cargo tree -i quick-xml` when bumping Tauri and
+  # drop these once quick-xml resolves to >=0.41.0.
+  { id = "RUSTSEC-2026-0194", reason = "quick-xml DoS; build-time-only via plist, untrusted XML never parsed at runtime; no upstream fix path (plist 1.9.0 pins quick-xml ^0.39.2). https://rustsec.org/advisories/RUSTSEC-2026-0194" },
+  { id = "RUSTSEC-2026-0195", reason = "quick-xml DoS; build-time-only via plist, untrusted XML never parsed at runtime; no upstream fix path (plist 1.9.0 pins quick-xml ^0.39.2). https://rustsec.org/advisories/RUSTSEC-2026-0195" },
+]
 
 # ---------------------------------------------------------------------------
 # Licenses. The project ships as AGPL-3.0-or-later, so dependency licenses
