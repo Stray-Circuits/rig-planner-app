@@ -52,11 +52,7 @@ export type BoardStyle = 'rail' | 'plain' | 'wood' | 'holes';
 export type JackSize = 'small' | 'medium' | 'large';
 
 export type ExternalEndpointKind =
-  | 'guitar'
-  | 'amp_in'
-  | 'amp_fx_send'
-  | 'amp_fx_return'
-  | 'custom';
+  'guitar' | 'amp_in' | 'amp_fx_send' | 'amp_fx_return' | 'custom';
 
 export type NodeKind = 'pedal' | 'external';
 
