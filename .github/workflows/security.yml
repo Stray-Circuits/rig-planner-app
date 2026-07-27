@@ -26,7 +26,10 @@ jobs:
 
       - uses: pnpm/action-setup@v6
         with:
-          version: 11
+          # Pinned (not floating `11`): pnpm 11.12.0's self-installer crashed
+          # in CI ("Cannot use 'in' operator to search for 'integrity'").
+          # Bump deliberately after confirming a release is good.
+          version: 11.13.0
           run_install: false
 
       - uses: actions/setup-node@v7
