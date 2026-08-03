@@ -146,17 +146,22 @@ exec_in_container() {
     docker run "${args[@]}" "${IMAGE_NAME}" "$@"
 }
 
-# --ignore-workspace tells pnpm to treat /workspace as a standalone project.
-# This repo has a `pnpm-workspace.yaml` that exists only to carry host-side
-# config (storeDir points at a macOS path) — there's no actual workspace.
-# Without this flag, container pnpm rejects the file with "packages field
-# missing or empty" and we'd also miss our mounted /opt/pnpm/store volume.
+# In-container pnpm reads the mounted container-pnpm-workspace.yaml: `packages: []`
+# makes /workspace a standalone project, `storeDir` is omitted so PNPM_STORE_DIR
+# (the mounted /opt/pnpm/store volume) wins, and it carries `verifyDepsBeforeRun:
+# false` plus the `overrides` map the lockfile pins.
+#
+# We deliberately do NOT pass --ignore-workspace: that flag makes pnpm skip the
+# yaml, which would (a) hide the `overrides` from --frozen-lockfile and trip
+# ERR_PNPM_LOCKFILE_CONFIG_MISMATCH, and (b) re-enable pnpm 11's implicit
+# pre-script install (verifyDepsBeforeRun default) against the bind-mounted tree,
+# which — seeing no overrides — would rewrite the host lockfile.
 cmd_init() {
     echo ">> Installing JS deps + running 'tauri android init'"
     exec_in_container bash -lc '
         set -euo pipefail
-        pnpm install --frozen-lockfile --ignore-workspace
-        pnpm --ignore-workspace tauri android init
+        pnpm install --frozen-lockfile
+        pnpm tauri android init
     '
 }
 
@@ -196,8 +201,8 @@ cmd_build() {
     echo ">> Building Android (${label})"
     exec_in_container bash -lc "
         set -euo pipefail
-        pnpm install --frozen-lockfile --ignore-workspace
-        pnpm --ignore-workspace tauri android build ${mode} ${outputs}
+        pnpm install --frozen-lockfile
+        pnpm tauri android build ${mode} ${outputs}
         echo
         echo '>> Build outputs:'
         find src-tauri/gen/android/app/build/outputs \\( -name '*.apk' -o -name '*.aab' \\) -print
