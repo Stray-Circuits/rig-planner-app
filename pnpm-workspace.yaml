@@ -11,3 +11,15 @@ storeDir: ~/Library/pnpm/store
 # pnpm 11 otherwise runs `pnpm install` before every script. We trust the
 # lockfile + node_modules here.
 verifyDepsBeforeRun: false
+# Pin transitive dev-only deps to patched versions to clear Dependabot alerts.
+# These are all dev/test/tooling deps (undici via jsdom, js-yaml + brace-expansion
+# via eslint) — not shipped, not gated by `pnpm audit --prod`. Overrides live here
+# (pnpm 11's home for them; the package.json `pnpm.overrides` field is ignored).
+# The Android container reads the same block from container-pnpm-workspace.yaml,
+# so both must stay in sync. brace-expansion is scoped to the 1.x tree (the 5.x
+# instance is already past the patched 5.0.7). Remove an entry once the direct
+# parent (jsdom/eslint) ships a release pulling the patched version on its own.
+overrides:
+  undici@>=7.23.0 <7.28.0: ^7.28.0
+  js-yaml@4: ^4.3.0
+  brace-expansion@1: ^1.1.16

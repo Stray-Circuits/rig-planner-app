@@ -15,8 +15,8 @@
 
 FROM ghcr.io/cirruslabs/android-sdk:36
 
-ARG NODE_VERSION=22.12.0
-ARG PNPM_VERSION=9.15.0
+ARG NODE_VERSION=22.20.0
+ARG PNPM_VERSION=11.17.0
 ARG ANDROID_NDK_VERSION=27.2.12479018
 ARG RUST_VERSION=1.88.0
 
@@ -36,6 +36,14 @@ RUN apt-get update \
 # --- Node + pnpm -------------------------------------------------------------
 # Install Node from the official tarball so we don't depend on NodeSource's
 # apt repo signing key. Pick the right arch for the build host.
+#
+# pnpm is installed directly via `npm install -g`, NOT corepack: the corepack
+# bundled in a Node tarball ships a fixed set of pnpm signing keys, and pnpm
+# releases newer than that Node's cut fail to verify with "Cannot find matching
+# keyid" (hit bumping the pin 9.15.0 -> 11.17.0 — the newer pnpm is signed with
+# a key the bundled corepack didn't know). Installing from npm sidesteps
+# corepack's key list entirely and keeps the pin reproducible. NODE_VERSION must
+# also stay at/above pnpm's own engine floor (11.17.0 needs Node >= 22.13).
 RUN set -eux; \
     case "$(uname -m)" in \
       aarch64) NODE_ARCH=arm64 ;; \
@@ -46,8 +54,7 @@ RUN set -eux; \
     tar -xJf "node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -C /usr/local --strip-components=1; \
     rm "node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"; \
     node --version; \
-    corepack enable; \
-    corepack prepare "pnpm@${PNPM_VERSION}" --activate; \
+    npm install -g "pnpm@${PNPM_VERSION}"; \
     pnpm --version
 
 # --- Android NDK -------------------------------------------------------------

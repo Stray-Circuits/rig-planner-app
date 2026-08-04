@@ -9,4 +9,22 @@
 #      path that doesn't make sense inside Linux containers — by omitting
 #      it here we let PNPM_STORE_DIR (set in the Dockerfile to
 #      /opt/pnpm/store) win, so the mounted pnpm cache volume is used.
+#   3. `overrides` must be mirrored from the host pnpm-workspace.yaml: the
+#      lockfile records the override map and `--frozen-lockfile` re-checks it,
+#      so the container has to resolve the identical map. Keep this in sync
+#      with the host file.
+#   4. `verifyDepsBeforeRun: false` mirrors the host — pnpm 11 otherwise runs
+#      an implicit `pnpm install` before every script (e.g. Tauri's
+#      `beforeBuildCommand`), which we don't want against the bind-mounted tree.
+#   5. `allowBuilds` mirrors the host — pnpm 10+ skips dependency build scripts
+#      unless allow-listed, so without this the container would ignore esbuild's
+#      build step.
 packages: []
+verifyDepsBeforeRun: false
+allowBuilds:
+  esbuild: true
+  protobufjs: false
+overrides:
+  undici@>=7.23.0 <7.28.0: ^7.28.0
+  js-yaml@4: ^4.3.0
+  brace-expansion@1: ^1.1.16
