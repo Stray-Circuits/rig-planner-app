@@ -845,7 +845,7 @@ function parseDimensionString(raw: string): number | null {
 
   // Number + optional unit. The unit, if present, must be one of our
   // recognized suffixes; an unknown unit returns null rather than guessing.
-  const match = /^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z"”″'']*)\s*$/.exec(trimmed);
+  const match = /^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z"”″'’]*)\s*$/.exec(trimmed);
   if (!match) return null;
   const value = Number(match[1]);
   if (!Number.isFinite(value)) return null;
