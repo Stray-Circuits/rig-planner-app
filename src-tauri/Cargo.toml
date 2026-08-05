@@ -1,6 +1,6 @@
 [package]
 name = "rig-planner-app"
-version = "1.0.1"
+version = "1.0.2"
 description = "Pedalboard planning app with signal-path overlay"
 authors = ["Stray Circuits"]
 edition = "2021"
